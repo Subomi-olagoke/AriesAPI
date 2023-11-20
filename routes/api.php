@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuthManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ForgotPasswordManager;
@@ -15,10 +16,17 @@ use App\Http\Controllers\ForgotPasswordManager;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
-});
+// Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+//     return $request->user();
+// });
+//Authentication routes
+Route::post('Register', [AuthManager::class, 'register'])->name('register.post');
+Route::post('login', [AuthManager::class, 'login']);
 
-Route::post('/forgot-Password', [ForgotPasswordManager::class, 'forgotPassword'])->name('forgot.password.post');
-Route::post('/reset-password', [ForgotPasswordManager::class, 'resetPassword'])->name('reset.password.post');
+//forgotPass/resetpass routes
+Route::post('forgot-Password', [ForgotPasswordManager::class, 'forgotPassword'])->name('forgot.password.post');
+Route::post('reset-password/{token}', [ForgotPasswordManager::class, 'resetPassword'])->name('reset.password');
+Route::post('reset-passwordPost', [ForgotPasswordManager::class, 'resetPasswordPost'])->name('reset.password.post');
 
+//navigation
+//Route::post('/', [AuthManager::class, "showCorrecthomepage"])->name('login');
