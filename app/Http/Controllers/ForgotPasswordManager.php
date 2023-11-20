@@ -22,24 +22,51 @@ class ForgotPasswordManager extends Controller
 
         $token = Str::random(64);
 
-        DB::table('password_resets')->insert([
+        DB::table('password_reset_tokens')->insert([
             'email' => $request->email,
             'token' => $token,
             'created_at' => Carbon::now()
         ]);
 
+        Mail::send('email', ['token'=>$token], function ($message) use ($request) {
+            $message->to($request->email);
+            $message->subject("Reset Password");
+        });
+        return redirect()->to(route('forgot.password'))
+        ->with('succes', "We have sent you an email to reset your password.");
+
 
 
     }
+    function resetPassword($token) {
+        return route('reset-password', compact('token'));
 
-    public function resetPassword(Request $request) {
+    }
+
+    public function resetPasswordPost(Request $request) {
         $request->validate([
-            'token' => 'required',
             'email' => 'required|email',
             'password' => 'required|min:8|confirmed',
+            'password_confirmation' => 'required'
         ]);
 
-        $status = Password::reset(
+        $updatePassword = DB::table('password_resets')
+        ->where([
+            'email' => $request->email,
+            'token' => $request->token
+        ])->first();
+
+        if(!$updatePassword) {
+            return redirect()->to(route('reset.password'))->with('error', 'invalid');
+        }
+
+        User::where('email', $request->email)->update(['password'=> Hash::make($request->password)]);
+
+        DB::table('password_resets')->where(['email'=> $request->email])->delete();
+
+        return redirect()->to(route('login'))->with('success', 'Your password has been reset');
+
+      }  /*$status = Password::reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function(User $user, string $password) {
                 $user->forcefill([
@@ -58,5 +85,5 @@ class ForgotPasswordManager extends Controller
         ? redirect()->route('login')->with('status', __($status))
         : back()->withErrors(['email' => [__($status)]])->middleware('guest')->name('password.update');
 
-    }
+    } */
 }
