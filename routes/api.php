@@ -1,7 +1,9 @@
 <?php
 
-use App\Http\Controllers\AuthManager;
+
+use App\Http\Controllers\EducatorsController;
 use Illuminate\Http\Request;
+use App\Http\Controllers\AuthManager;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ForgotPasswordManager;
 
@@ -21,6 +23,8 @@ use App\Http\Controllers\ForgotPasswordManager;
 // });
 //Authentication routes
 Route::post('Register', [AuthManager::class, 'register'])->name('register.post');
+Route::any('Educator.reg', [EducatorsController::class, 'register'])->name('Educator.reg');
+Route::post('EducatorLogin', [AuthManager::class, 'login']);
 Route::post('login', [AuthManager::class, 'login']);
 
 //forgotPass/resetpass routes
