@@ -1,11 +1,13 @@
 <?php
 
 
-use App\Http\Controllers\EducatorsController;
+use App\Http\Controllers\ResetPasswordController;
 use Illuminate\Http\Request;
 use App\Http\Controllers\AuthManager;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\EducatorsController;
 use App\Http\Controllers\ForgotPasswordManager;
+use App\Http\Controllers\PasswordResetController;
 
 /*
 |--------------------------------------------------------------------------
@@ -27,10 +29,11 @@ Route::any('Educator.reg', [EducatorsController::class, 'register'])->name('Educ
 Route::post('EducatorLogin', [AuthManager::class, 'login']);
 Route::post('login', [AuthManager::class, 'login']);
 
+
+
 //forgotPass/resetpass routes
 Route::post('forgot-Password', [ForgotPasswordManager::class, 'forgotPassword'])->name('forgot.password.post');
-Route::post('reset-password/{token}', [ForgotPasswordManager::class, 'resetPassword'])->name('reset.password');
-Route::post('reset-passwordPost', [ForgotPasswordManager::class, 'resetPasswordPost'])->name('reset.password.post');
+Route::post('resetPassword', [ResetPasswordController::class, 'resetPassword'])->name('reset.password');
 
 //navigation
 //Route::post('/', [AuthManager::class, "showCorrecthomepage"])->name('login');
