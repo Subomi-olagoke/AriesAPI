@@ -1,13 +1,15 @@
 <?php
 
 
-use App\Http\Controllers\ResetPasswordController;
 use Illuminate\Http\Request;
 use App\Http\Controllers\AuthManager;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\EducatorsController;
 use App\Http\Controllers\ForgotPasswordManager;
 use App\Http\Controllers\PasswordResetController;
+use App\Http\Controllers\ResetPasswordController;
 
 /*
 |--------------------------------------------------------------------------
@@ -37,3 +39,7 @@ Route::post('resetPassword', [ResetPasswordController::class, 'resetPassword'])-
 
 //navigation
 //Route::post('/', [AuthManager::class, "showCorrecthomepage"])->name('login');
+
+//Profile related routes
+Route::get('/profile/{profile}', [ProfileController::class, 'showProfile']);
+
