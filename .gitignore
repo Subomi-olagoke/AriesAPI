@@ -18,3 +18,7 @@ yarn-error.log
 /.idea
 /.vscode
 migrations
+/vendor
+
+go.mod
+go.sum
