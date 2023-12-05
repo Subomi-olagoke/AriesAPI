@@ -17,4 +17,8 @@ class CheckAuth
     {
         return $next($request);
     }
+    if(auth()->check()) {
+        return $next($request);
+    }
+    return redirect('/')->with('You must be logged in');
 }
