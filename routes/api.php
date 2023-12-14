@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Route;
 // Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 //     return $request->user();
 // });
+
 //Authentication routes
 Route::post('Register', [AuthManager::class, 'register'])->name('register.post');
 Route::any('Educator.reg', [EducatorsController::class, 'register'])->name('Educator.reg');
@@ -37,12 +38,16 @@ Route::post('resetPassword', [ResetPasswordController::class, 'resetPassword'])-
 //Route::post('/', [AuthManager::class, "showCorrecthomepage"])->name('login');
 
 //Profile related routes
-Route::get('/profile/{profile:username}', [ProfileController::class, 'showProfile'])->middleware('checkAuth');
+Route::get('/profile/{user:username}', [ProfileController::class, 'showProfile']); //->middleware('checkAuth');
 Route::get('/eduProfile/{educator:username}', [EducatorsController::class, 'EducatorProfile']);
 
 //follow related routes
 Route::post('/create-follow/{user:username}', [FollowController::class, 'createFollow'])->middleware('mustBeLoggedIn');
 Route::post('/unfollow/{user:username}', [FollowController::class, 'unFollow'])->middleware('mustBeLoggedIn');
+
+// Blog post related routes
+Route::post('/create-post', [PostController::class, 'storeNewPost'])->middleware('mustBeLoggedIn');
+Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
 
 //livestream
 Route::get('/test', [livestreamController::class, 'someAction']);
