@@ -39,7 +39,6 @@ Route::post('resetPassword', [ResetPasswordController::class, 'resetPassword'])-
 
 //Profile related routes
 Route::get('/profile/{user:username}', [ProfileController::class, 'showProfile']); //->middleware('checkAuth');
-Route::get('/eduProfile/{educator:username}', [EducatorsController::class, 'EducatorProfile']);
 
 //follow related routes
 Route::post('/create-follow/{user:username}', [FollowController::class, 'createFollow'])->middleware('mustBeLoggedIn');
@@ -48,6 +47,12 @@ Route::post('/unfollow/{user:username}', [FollowController::class, 'unFollow'])-
 // Blog post related routes
 Route::post('/create-post', [PostController::class, 'storeNewPost'])->middleware('mustBeLoggedIn');
 Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
+
+
+//courses
+Route::post('/Upload', [EducatorsController::class, 'upload'])->middleware('mustBeLoggedIn');
+Route::post('/download{file}', [EducatorsController::class, 'download'])->middleware('mustBeLoggedIn');
+Route::get('/show', [EducatorsController::class, 'show'])
 
 //livestream
 Route::get('/test', [livestreamController::class, 'someAction']);
