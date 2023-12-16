@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Symfony\Component\Process\Process;
 
 class NgrokCommand extends Command {
 	protected $signature = 'ngrok';
@@ -14,7 +15,14 @@ class NgrokCommand extends Command {
 
 		$ngrokAuthToken = config('app.ngrok_auth_token');
 
-		$process = new Process(["ngrok", "http", "-authtoken={$ngrokAuthToken}", "http://localhost:8000"]);
+		// $process = new Process(["ngrok", "http", "-authtoken={$ngrokAuthToken}", "http://localhost:8000"]);
+		$process = new Process([
+			'ngrok',
+			'http',
+			'-authtoken=' . $ngrokAuthToken,
+			'8080',
+		]);
+
 		$process->setTimeout(0);
 		$process->start();
 
