@@ -48,11 +48,10 @@ Route::post('/unfollow/{user:username}', [FollowController::class, 'unFollow'])-
 Route::post('/create-post', [PostController::class, 'storeNewPost'])->middleware('mustBeLoggedIn');
 Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
 
-
 //courses
 Route::post('/Upload', [EducatorsController::class, 'upload'])->middleware('mustBeLoggedIn');
 Route::post('/download{file}', [EducatorsController::class, 'download'])->middleware('mustBeLoggedIn');
-Route::get('/show', [EducatorsController::class, 'show'])
+Route::get('/show', [EducatorsController::class, 'show']);
 
 //livestream
 Route::get('/test', [livestreamController::class, 'someAction']);
