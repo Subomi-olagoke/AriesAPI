@@ -2,64 +2,90 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\StoreCoursesRequest;
-use App\Http\Requests\UpdateCoursesRequest;
 use App\Models\Courses;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
-class CoursesController extends Controller
-{
-    /**
-     * Display a listing of the resource.
-     */
-    public function PostCourse() {
-        return;
-    }
+class CoursesController extends Controller {
+	/**
+	 * Display a listing of the resource.
+	 */
+	public function PostCourse(Request $request) {
+		$this->validate($request, [
+			'video' => 'required|mimes:mp4,mov,avi|max:102400',
+		]);
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
+		$video = $request->file('video');
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(StoreCoursesRequest $request)
-    {
-        //
-    }
+		$filename = 'course_video_' . time() . '.' . $video->getClientOriginalExtension();
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(Courses $courses)
-    {
-        //
-    }
+		// store in 'course_videos' directory on S3
+		Storage::disk('s3')->put('course_videos/' . $filename, file_get_contents($video));
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Courses $courses)
-    {
-        //
-    }
+		// Save the file path (URL) in the database
+		$videoUrl = config('filesystems.disks.s3.url') . '/course_videos/' . $filename;
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(UpdateCoursesRequest $request, Courses $courses)
-    {
-        //
-    }
+		$course = Courses::create([
+			'title' => $request->input('title'),
+			'description' => $request->input('description'),
+			'price' => $request->input('price'),
+			'video_url' => $videoUrl,
+		]);
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Courses $courses)
-    {
-        //
-    }
+		return response()->json(['message' => 'Video uploaded and course created successfully', 'course' => $course]);
+	}
+
+	public function updateCourse(Request $request, $id) {
+		$course = Courses::findOrFail($id);
+
+		$this->validate($request, [
+			'title' => 'required|string',
+			'description' => 'required|string',
+			'price' => 'required|numeric',
+			'video' => 'sometimes|mimes:mp4,mov,avi|max:102400',
+		]);
+
+		$course->update([
+			'title' => $request->input('title'),
+			'description' => $request->input('description'),
+			'price' => $request->input('price'),
+		]);
+
+		// Check if a new video is provided for update
+		if ($request->hasFile('video')) {
+			$video = $request->file('video');
+
+			$filename = 'course_video_' . time() . '.' . $video->getClientOriginalExtension();
+
+			Storage::disk('s3')->put('course_videos/' . $filename, file_get_contents($video));
+
+			if ($course->video_url) {
+				Storage::disk('s3')->delete('course_videos/' . basename($course->video_url));
+			}
+
+			// Update the 'video_url' in the database
+			$course->update(['video_url' => config('filesystems.disks.s3.url') . '/course_videos/' . $filename]);
+		}
+
+		return response()->json(['message' => 'Course updated successfully', 'course' => $course]);
+	}
+
+	public function showCourse($id) {
+		$course = Courses::findOrFail($id);
+
+		return response()->json(['course' => $course]);
+	}
+
+	public function deleteCourse($id) {
+		$course = Courses::findOrFail($id);
+
+		if ($course->video_url) {
+			Storage::disk('s3')->delete('course_videos/' . basename($course->video_url));
+		}
+
+		$course->delete();
+
+		return response()->json(['message' => 'Course deleted successfully']);
+	}
+
 }
