@@ -39,6 +39,7 @@ Route::post('resetPassword', [ResetPasswordController::class, 'resetPassword'])-
 
 //Profile related routes
 Route::get('/profile/{user:username}', [ProfileController::class, 'showProfile']); //->middleware('checkAuth');
+Route::post('/manage-avatar', [ProfileController::class, 'manage-avatar'])->middleware('mustBeLoggedIn');
 
 //follow related routes
 Route::post('/create-follow/{user:username}', [FollowController::class, 'createFollow'])->middleware('mustBeLoggedIn');
@@ -49,9 +50,23 @@ Route::post('/create-post', [PostController::class, 'storeNewPost'])->middleware
 Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
 
 //courses
-Route::post('/Upload', [EducatorsController::class, 'upload'])->middleware('mustBeLoggedIn');
+//post a course
+Route::post('/PostCourse', [CoursesController::class, 'PostCourse'])->middleware->('mustBeLoggedIn');
+// Show a specific course
+Route::get('/courses/{id}', [CoursesController::class, 'showCourse']);
+//update course
+Route::post('/updateCourse', [CoursesController::class, 'updateCourse'])->middleware->('mustBeLoggedIn');
+
+// Delete a specific course
+Route::delete('/courses/{id}', [CoursesController::class, 'deleteCourse'])->middleware->('mustBeLoggedIn');
+
+
+
+
+/*Route::post('/Upload', [EducatorsController::class, 'upload'])->middleware('mustBeLoggedIn');
 Route::post('/download{file}', [EducatorsController::class, 'download'])->middleware('mustBeLoggedIn');
 Route::get('/show', [EducatorsController::class, 'show']);
+*/
 
 //livestream
 Route::get('/test', [livestreamController::class, 'someAction']);
