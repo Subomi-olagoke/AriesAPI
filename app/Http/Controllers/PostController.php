@@ -14,17 +14,26 @@ class PostController extends Controller {
 	}
 
 	public function storeNewPost(Request $request) {
+		// Validate incoming request parameters
 		$incomingFields = $request->validate([
 			'title' => 'required',
 			'body' => 'required',
 		]);
 
+		// Sanitize user input
 		$incomingFields['title'] = strip_tags($incomingFields['title']);
 		$incomingFields['body'] = strip_tags($incomingFields['body']);
-		$incomingFields['user_id'] = auth()->id();
 
+		// Access user id from the authenticated user
+		$incomingFields['user_id'] = auth()->user()->id;
+
+		// Create a new post
 		$newPost = Post::create($incomingFields);
 
-		return redirect("/post/{$newPost->id}")->with('success', 'New post successfully created.');
+		// Return a JSON response
+		return response()->json([
+			'message' => 'New post created successfully',
+			'post' => $newPost,
+		], 201);
 	}
 }
