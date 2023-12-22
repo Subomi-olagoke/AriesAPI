@@ -24,17 +24,17 @@ class AuthManager extends Controller {
 			'username' => ['required', 'min:3', 'max:20', Rule::unique('users', 'username')],
 			'email' => ['required', 'email', Rule::unique('users', 'email')],
 			'password' => ['required', 'min:8', 'max:20', 'confirmed'],
-			'role' => ['required', Rule::in(['educator', 'student', 'Admin'])],
+			//'role' => ['required', Rule::in(['educator', 'student', 'Admin'])],
 		]);
 		/*
 			       if ($incomingFields['role'] == 'educator') {
 			            return redirect()->route('Educator.reg');
 		*/
-		if ($incomingFields['role'] == 'educator') {
-			$response['next_step'] = 'educator_registration';
-		}
+		// if ($incomingFields['role'] == 'educator') {
+		// 	$response['next_step'] = 'educator_registration';
+		// }
 
-		return response()->json($response, 201);
+		// return response()->json($response, 201);
 
 		$incomingFields['password'] = bcrypt($incomingFields['password']);
 
@@ -46,14 +46,24 @@ class AuthManager extends Controller {
 
 	//login
 	function login(Request $request, Response $response) {
-		$incomingFields = $request->validate([
-			'email' => 'required',
+		$credentials = $request->validate([
+			'email' => 'required|email',
 			'password' => 'required',
 		]);
-		if (auth()->attempt(['email' => $incomingFields['email'], 'password' => $incomingFields['password']])) {
-			return response()->json($response);
 
+		if (auth()->attempt($credentials)) {
+			// Authentication passed
+			$user = auth()->user();
+
+			return response()->json([
+				'message' => 'Login successful',
+				'user' => $user,
+				'token' => $user->createToken('authToken')->accessToken,
+			], 200);
 		}
+
+		// Authentication failed
+		return response()->json(['message' => 'Invalid credentials'], 401);
 
 	}
 
@@ -81,3 +91,17 @@ class AuthManager extends Controller {
 	}
 
 }
+
+/*
+function login(Request $request, Response $response) {
+$incomingFields = $request->validate([
+'email' => 'required',
+'password' => 'required',
+]);
+if (auth()->attempt(['email' => $incomingFields['email'], 'password' => $incomingFields['password']])) {
+return response()->json($response);
+
+}
+
+}
+ */
