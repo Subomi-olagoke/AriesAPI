@@ -60,7 +60,7 @@ class ProfileController extends Controller {
 			return response()->json(['message' => 'Avatar uploaded and saved successfully']);
 		}
 
-		return response()->json(['message' => 'No avatar provided'], 400);
+		return response()->json(['message' => 'No avatar provided'], 422);
 
 	}
 
