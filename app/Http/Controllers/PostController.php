@@ -16,9 +16,13 @@ class PostController extends Controller {
 	public function storeNewPost(Request $request) {
 		// Validate incoming request parameters
 		$incomingFields = $request->validate([
+			'media_type' => 'required|string|in:image,video',
+			'media_thumbnail' => 'required_if:media_type,video',
+			'visibility' => 'required|in:public,followers'
 			'title' => 'required',
 			'body' => 'required',
 		]);
+
 
 		// Sanitize user input
 		$incomingFields['title'] = strip_tags($incomingFields['title']);
@@ -30,7 +34,41 @@ class PostController extends Controller {
 		// Create a new post
 		$newPost = Post::create($incomingFields);
 
-		// Return a JSON response
+		if ($request->hasFile('media_link')) {
+			if ($request->media_type == 'image') {
+				$request->validate([
+				'media_link' => 'image|mimes:jpg,jpeg,png,gif|max:5120'
+			]);
+			} else {
+				$request->validate([
+					'media_link' => 'mimetypes:video/avi,video/mpeg,video/quicktime|max:5120']);
+
+				if ($request->file('media_thumbnail')) {
+					$request->validate([
+						'media_thumbnail' => 'image|mimes:jpg,jpeg,png,gif|max:5120'
+					]);
+
+					$newPost->media_thumbnail = $request->file('media_thumbnail')->store('media_link');
+
+				}
+
+			}
+			$newPost->media_link = $request->file('media_link')->store('media_link');
+		}
+
+		$newPost->user_id = $request->user()->id;
+		$newPost->media_type = $request->media_type;
+		$newPost->visibility = $request->visibility;
+		$newPost->body = $request->body;
+
+		if($newPost->save()) {
+			return response()->json($newPost, 200);
+		} else {
+			return response()->json(['message'=> 'some error occured, please try again'
+				], 500);
+		}
+
+		
 		return response()->json([
 			'message' => 'New post created successfully',
 			'post' => $newPost,
