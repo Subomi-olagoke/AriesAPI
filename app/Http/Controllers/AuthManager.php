@@ -26,6 +26,8 @@ class AuthManager extends Controller {
 			'password' => ['required', 'min:8', 'max:20', 'confirmed'],
 			//'role' => ['required', Rule::in(['educator', 'student', 'Admin'])],
 		]);
+		$incomingFields['password'] = bcrypt($incomingFields['password']);
+
 		/*
 			       if ($incomingFields['role'] == 'educator') {
 			            return redirect()->route('Educator.reg');
@@ -36,12 +38,20 @@ class AuthManager extends Controller {
 
 		// return response()->json($response, 201);
 
-		$incomingFields['password'] = bcrypt($incomingFields['password']);
+		$user = User::where('username', $username)
+			->orWhere('email', $email)
+			->first();
 
-		$user = User::create($incomingFields);
-		auth()->login($user);
-		return response()->json($response);
-		// return redirect('/');
+		if ($user) {
+			return response()->json([
+				'message' => 'user already exists']);
+		} else {
+			$newUser = User::create($incomingFields);
+			auth()->login($newUser);
+			return response()->json(['message' => 'account created successfully']);
+			// return redirect('/');
+		}
+
 	}
 
 	//login
