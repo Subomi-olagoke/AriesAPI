@@ -24,34 +24,28 @@ class AuthManager extends Controller {
 			'username' => ['required', 'min:3', 'max:20', Rule::unique('users', 'username')],
 			'email' => ['required', 'email', Rule::unique('users', 'email')],
 			'password' => ['required', 'min:8', 'max:20', 'confirmed'],
-			//'role' => ['required', Rule::in(['educator', 'student', 'Admin'])],
+
 		]);
 		$incomingFields['password'] = bcrypt($incomingFields['password']);
 
-		/*
-			       if ($incomingFields['role'] == 'educator') {
-			            return redirect()->route('Educator.reg');
-		*/
-		// if ($incomingFields['role'] == 'educator') {
-		// 	$response['next_step'] = 'educator_registration';
-		// }
+		$user = new User();
+		$user->username = $request->username;
+		$user->firstName = $request->firstName;
+		$user->LastName = $request->LastName;
+		$user->email = $request->email;
+		$user->password = bcrypt($request->password);
+		$user->role = 'user';
 
-		// return response()->json($response, 201);
-
-		$user = User::where('username', $username)
-			->orWhere('email', $email)
-			->first();
-
-		if ($user) {
+		if ($user->save()) {
 			return response()->json([
-				'message' => 'user already exists']);
+				'message' => 'Registration successful',
+			], 200);
+			auth()->login($user);
 		} else {
-			$newUser = User::create($incomingFields);
-			auth()->login($newUser);
-			return response()->json(['message' => 'account created successfully']);
-			// return redirect('/');
+			return response()->json([
+				'message' => 'Some error occured, please try again',
+			], 500);
 		}
-
 	}
 
 	//login
@@ -61,19 +55,30 @@ class AuthManager extends Controller {
 			'password' => 'required',
 		]);
 
-		if (auth()->attempt($credentials)) {
-			// Authentication passed
-			$user = auth()->user();
+		if (!auth()->attempt($credentials)) {
 
+			// Authentication failed
 			return response()->json([
-				'message' => 'Login successful',
-				'user' => $user,
-				'token' => $user->createToken('authToken')->accessToken,
-			], 200);
+				'message' => 'Invalid credentials',
+			], 401);
 		}
 
-		// Authentication failed
-		return response()->json(['message' => 'Invalid credentials'], 401);
+		$user = $request->user();
+
+		$user->tokens()->delete();
+
+		if ($user->role == 'admin') {
+			$token = $user->createToken('Personal Access Token', ['admin']);
+		} else {
+			$token = $user->createToken('Personal Access Token', ['user']);
+		}
+
+		return response()->json([
+			'user' => $user,
+			'access_token' => $token->accessToken->token,
+			'token_type' => 'Bearer',
+			'abilities' => $token->accessToken->abilities,
+		], 200, );
 
 	}
 
