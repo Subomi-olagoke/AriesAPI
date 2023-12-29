@@ -2,10 +2,8 @@
 
 use App\Http\Controllers\AuthManager;
 use App\Http\Controllers\CommentController;
-use App\Http\Controllers\EducatorsController;
 use App\Http\Controllers\FollowController;
 use App\Http\Controllers\ForgotPasswordManager;
-use App\Http\Controllers\livestreamController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ResetPasswordController;
@@ -26,11 +24,29 @@ use Illuminate\Support\Facades\Route;
 //     return $request->user();
 // });
 
-//Authentication routes
-Route::post('Register', [AuthManager::class, 'register'])->name('register.post');
-Route::any('Educator.reg', [EducatorsController::class, 'register'])->name('Educator.reg');
-Route::post('EducatorLogin', [AuthManager::class, 'login']);
-Route::post('login', [AuthManager::class, 'login']);
+//tidying up
+
+Route::group(['prefix' => 'auth'], function () {
+	Route::post('register', [AuthManager::class, 'register']);
+	Route::post('login', [AuthManager::class, 'login']);
+	Route::post('resetPassword', 'ForgotPasswordManager@resetPassword');
+	Route::post('forgot-Password', 'ForgotPasswordManager@forgotPassword');
+
+	Route::group(['middleware' => 'auth:sanctum'], function () {
+		Route::get('/profile/{user:username}', 'ProfileController@showProfile');
+		Route::get('change-password', 'ForgotPasswordManager@changePassword');
+		Route::post('update-profile', 'ProfileController@update');
+		Route::post('uploadAvatar', 'ProfileController@UploadAvatar');
+		Route::post('/create-follow/{user:username}', 'FollowController@createFollow');
+		Route::post('/unfollow/{user:username}', 'FollowController@unfollow');
+		Route::post('/PostCourse', 'CoursesController@PostCourse');
+		Route::get('/courses/{id}', 'CoursesController@showCourse');
+		Route::post('/updateCourse', 'CoursesController@updateCourse');
+		Route::delete('/courses/{id}', 'CoursesController@deleteCourse');
+		Route::post('/comment', 'CommentController@postComment');
+
+	});
+});
 
 //forgotPass/resetpass routes
 Route::post('forgot-Password', [ForgotPasswordManager::class, 'forgotPassword'])->name('forgot.password.post');
@@ -48,7 +64,7 @@ Route::post('/create-follow/{user:username}', [FollowController::class, 'createF
 Route::post('/unfollow/{user:username}', [FollowController::class, 'unFollow'])->middleware('mustBeLoggedIn');
 
 // Blog post related routes
-Route::post('/storeNewPost', [PostController::class, 'storeNewPost'])->middleware('mustBeLoggedIn');
+Route::post('/storeNewPost', [PostController::class, 'storeNewPost']);
 Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
 
 //courses
@@ -69,6 +85,3 @@ Route::post('/comment', [CommentController::class, 'postComment']);
 Route::post('/download{file}', [EducatorsController::class, 'download'])->middleware('mustBeLoggedIn');
 Route::get('/show', [EducatorsController::class, 'show']);
  */
-
-//livestream
-Route::get('/test', [livestreamController::class, 'someAction']);
