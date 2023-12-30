@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Route;
 Route::group(['prefix' => 'auth'], function () {
 	Route::post('register', [AuthManager::class, 'register']);
 	Route::post('login', [AuthManager::class, 'login']);
+	Route::post('resetPassReq', [AuthManager::class, 'resetPasswordRequest']);
 	Route::post('resetPassword', 'ForgotPasswordManager@resetPassword');
 	Route::post('forgot-Password', 'ForgotPasswordManager@forgotPassword');
 
