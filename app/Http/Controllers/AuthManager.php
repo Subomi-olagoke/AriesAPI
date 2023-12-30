@@ -82,6 +82,43 @@ class AuthManager extends Controller {
 
 	}
 
+	public function resetPasswordRequest(Request $request) {
+		$request->validate([
+			'email' => 'required|string|email',
+		]);
+
+		$user = User::where('email', $request->email)->first();
+
+		if (!$user) {
+			return response()->json([
+				'message' => 'The provided email is not registered in our system.',
+			], 404);
+		}
+
+		$code = rand(111111, 999999);
+		$user->verification_code = $code;
+
+		if ($user->save()) {
+			//todo send the email
+			$emailData = array(
+				'heading' => 'Reset Password Request',
+				'name' => $user->name,
+				'email' => $user->email,
+				'code' => $user->code,
+			);
+
+			Mail::to($emailData['email'])->queue(new MailResetPasswordRequest($emailData));
+
+			return response()->json([
+				'message' => 'we have sent a verification code to your email',
+			], 200);
+		} else {
+			return response()->json([
+				'message' => 'Sorry, an error occurred, please try again',
+			], 500);
+		}
+	}
+
 	//logout
 	public function destroy(Request $request): RedirectResponse {
 		Auth::guard('web')->logout();
