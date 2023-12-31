@@ -6,6 +6,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\MailResetPasswordRequest;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Auth\Events\Verified;
@@ -13,6 +14,7 @@ use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Response;
 
