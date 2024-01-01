@@ -8,7 +8,7 @@
 </head>
 <body>
     <h1>{{$data['heading']}}</h1>
-    <strong>Dear {{$data[name]}}</strong>
+    <strong>Dear {{$data['username']}}</strong>
     <p>Here is your verification code for password reset <strong>{{$data['code']}}</strong></p>
     <br><br>
 
