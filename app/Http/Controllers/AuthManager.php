@@ -104,9 +104,9 @@ class AuthManager extends Controller {
 			//todo send the email
 			$emailData = array(
 				'heading' => 'Reset Password Request',
-				'name' => $user->name,
+				'username' => $user->username,
 				'email' => $user->email,
-				'code' => $user->code,
+				'code' => $user->verification_code,
 			);
 
 			Mail::to($emailData['email'])->queue(new MailResetPasswordRequest($emailData));
