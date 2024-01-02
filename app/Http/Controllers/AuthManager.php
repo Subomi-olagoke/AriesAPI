@@ -121,6 +121,44 @@ class AuthManager extends Controller {
 		}
 	}
 
+	public function resetPassword(Request $request) {
+		$request->validate([
+			'email' => 'required|string|email',
+			'verification_code' => 'required|integer',
+			'new_password' => [
+				'required',
+				'confirmed',
+				Password::min(8)
+					->letters()
+					->mixedCase()
+					->numbers()
+					->symbols()
+					->uncompromised(),
+			],
+		]);
+
+		$user = User::where('email', $request->email)->where('verification_code', $request->verifiation_code)->first();
+
+		if(!$user) {
+			return response()->json([
+				'message' => 'user not found/invalid code'
+			], 404);
+		} else {
+			return response()-> json([
+				'message' => 'Some error occurred, please try again'
+			], 500);
+		}
+
+		$user->password = bcrypt($request->new_password);
+		$user->verification_code = NULL;
+
+		id ($user->save()) {
+			return response()->json([
+				'message' => 'Password updated successfully'
+			], 200);
+		}
+	}
+
 	//logout
 	public function destroy(Request $request): RedirectResponse {
 		Auth::guard('web')->logout();
