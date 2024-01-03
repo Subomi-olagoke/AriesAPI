@@ -15,7 +15,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Response;
 
 class AuthManager extends Controller {
@@ -39,10 +39,11 @@ class AuthManager extends Controller {
 		$user->role = 'user';
 
 		if ($user->save()) {
+			auth()->login($user);
 			return response()->json([
 				'message' => 'Registration successful',
 			], 200);
-			auth()->login($user);
+
 		} else {
 			return response()->json([
 				'message' => 'Some error occured, please try again',
@@ -139,22 +140,22 @@ class AuthManager extends Controller {
 
 		$user = User::where('email', $request->email)->where('verification_code', $request->verifiation_code)->first();
 
-		if(!$user) {
+		if (!$user) {
 			return response()->json([
-				'message' => 'user not found/invalid code'
+				'message' => 'user not found/invalid code',
 			], 404);
 		} else {
-			return response()-> json([
-				'message' => 'Some error occurred, please try again'
+			return response()->json([
+				'message' => 'Some error occurred, please try again',
 			], 500);
 		}
 
 		$user->password = bcrypt($request->new_password);
 		$user->verification_code = NULL;
 
-		id ($user->save()) {
+		if ($user->save()) {
 			return response()->json([
-				'message' => 'Password updated successfully'
+				'message' => 'Password updated successfully',
 			], 200);
 		}
 	}
