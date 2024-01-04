@@ -161,14 +161,25 @@ class AuthManager extends Controller {
 	}
 
 	//logout
-	public function destroy(Request $request): RedirectResponse {
-		Auth::guard('web')->logout();
+	public function logout(Request $request): RedirectResponse {
+		/*Auth::guard('web')->logout();
 
-		$request->session()->invalidate();
+			$request->session()->invalidate();
 
-		$request->session()->regenerateToken();
+			$request->session()->regenerateToken();
 
-		return redirect('Homefeed');
+			return redirect('Homefeed');
+		*/
+
+		if ($request->user()->tokens()->delete()) {
+			return response()->json([
+				'message' => 'Logout successful',
+			], 200);
+		} else {
+			return response()->json([
+				'message' => 'Some error occurred, please try again',
+			], 500);
+		}
 	}
 
 	public function __invoke(EmailVerificationRequest $request): RedirectResponse {
