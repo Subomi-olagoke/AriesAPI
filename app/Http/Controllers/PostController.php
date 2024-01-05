@@ -21,17 +21,6 @@ class PostController extends Controller {
 			'media_thumbnail' => 'required_if:media_type,video',
 			'visibility' => 'required|in:public,followers',
 		]);
-
-		// Sanitize user input
-		// $incomingFields['title'] = strip_tags($incomingFields['title']);
-		// $incomingFields['body'] = strip_tags($incomingFields['body']);
-
-		// Access user id from the authenticated user
-		//$incomingFields['user_id'] = auth()->user()->id;
-
-		// Create a new post
-		//$newPost = Post::create($incomingFields);
-
 		$newPost = new Post();
 
 		if ($request->hasFile('media_link')) {
@@ -56,7 +45,7 @@ class PostController extends Controller {
 			$newPost->media_link = $request->file('media_link')->store('media_link');
 		}
 
-		$newPost->user_id = auth()->user()->id;
+		$newPost->user_id = $request->user()->id;
 		$newPost->media_type = $request->media_type;
 		$newPost->visibility = $request->visibility;
 		$newPost->body = $request->body;
