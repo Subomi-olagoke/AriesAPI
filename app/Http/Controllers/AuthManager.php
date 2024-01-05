@@ -78,7 +78,7 @@ class AuthManager extends Controller {
 
 		return response()->json([
 			'user' => $user,
-			'access_token' => $token->accessToken->token,
+			'access_token' => $token->plainTextToken,
 			'token_type' => 'Bearer',
 			'abilities' => $token->accessToken->abilities,
 		], 200, );
@@ -138,16 +138,12 @@ class AuthManager extends Controller {
 			],
 		]);
 
-		$user = User::where('email', $request->email)->where('verification_code', $request->verifiation_code)->first();
+		$user = User::where('email', $request->email)->where('verification_code', $request->verification_code)->first();
 
 		if (!$user) {
 			return response()->json([
 				'message' => 'user not found/invalid code',
 			], 404);
-		} else {
-			return response()->json([
-				'message' => 'Some error occurred, please try again',
-			], 500);
 		}
 
 		$user->password = bcrypt($request->new_password);
@@ -157,6 +153,10 @@ class AuthManager extends Controller {
 			return response()->json([
 				'message' => 'Password updated successfully',
 			], 200);
+		} else {
+			return response()->json([
+				'message' => 'some error occurred, please try again later',
+			], 500);
 		}
 	}
 
