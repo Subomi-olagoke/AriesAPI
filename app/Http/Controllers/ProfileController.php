@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-//use App\Models\Access\User\User;
 use App\Models\Profile;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -10,17 +9,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
 class ProfileController extends Controller {
-
-	public function profile(Request $request) {
-		$user = $request->User();
-		if ($user) {
-			return response()->json($user, 200);
-		} else {
-			return response()->json([
-				'message' => 'user not found',
-			], 404);
-		}
-	}
 
 	public function alphaProfile(User $user) {
 		$data = [
