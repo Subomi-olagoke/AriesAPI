@@ -15,6 +15,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Response;
 
@@ -58,7 +59,7 @@ class AuthManager extends Controller {
 			'password' => 'required',
 		]);
 
-		if (!auth()->attempt($credentials)) {
+		if (!Auth::attempt($credentials)) {
 
 			// Authentication failed
 			return response()->json([
@@ -81,8 +82,22 @@ class AuthManager extends Controller {
 			'access_token' => $token->plainTextToken,
 			'token_type' => 'Bearer',
 			'abilities' => $token->accessToken->abilities,
-		], 200, );
+		], 200);
 
+	}
+
+	public function profile(Request $request) {
+
+		$user = $request->user();
+		if ($user) {
+			return response()->json([
+				'profile' => $user,
+			], 200);
+		} else {
+			return response()->json([
+				'message' => 'User not found',
+			], 404);
+		}
 	}
 
 	public function resetPasswordRequest(Request $request) {
