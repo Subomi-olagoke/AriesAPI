@@ -56,6 +56,7 @@ class Kernel extends HttpKernel {
 	 */
 	protected $middlewareAliases = [
 		'mustBeLoggedIn' => \App\Http\Middleware\MustBeLoggedIn::class,
+        'tokenCheck' => \App\Http\Middleware\tokenCheck::class,
 		'checkAuth' => \App\Http\Middleware\checkAuth::class,
 		'auth' => \App\Http\Middleware\Authenticate::class,
 		'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
@@ -68,8 +69,6 @@ class Kernel extends HttpKernel {
 		'signed' => \App\Http\Middleware\ValidateSignature::class,
 		'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
 		'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
-		'abilities' => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,
-		'ability' => \Laravel\Sanctum\Http\Middleware\CheckForAnyAbility::class,
 	];
 
 	protected $routeMiddleware = [

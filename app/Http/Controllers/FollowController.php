@@ -9,7 +9,7 @@ class FollowController extends Controller {
 	public function createFollow(User $user) {
 		// cannot follow self
         if($user->id == auth()->user()->id) {
-            return back()->with('failure', 'You cannot follow yourself')
+            return back()->with('failure', 'You cannot follow yourself');
 
         }
 		//cannot follow already followed user

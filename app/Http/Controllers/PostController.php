@@ -51,15 +51,15 @@ class PostController extends Controller {
 		$newPost->body = $request->body;
 
 		if ($newPost->save()) {
-			return response()->json($newPost, 200);
+		 return response()->json([
+                'message' => 'New post created successfully',
+                'post' => $newPost,
+            ], 200);
 		} else {
-			return response()->json(['message' => 'some error occured, please try again',
+			return response()->json(['message' => 'some error occurred, please try again',
 			], 500);
 		}
 
-		return response()->json([
-			'message' => 'New post created successfully',
-			'post' => $newPost,
-		], 200);
+
 	}
 }

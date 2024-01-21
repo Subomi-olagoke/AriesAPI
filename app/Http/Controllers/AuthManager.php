@@ -7,6 +7,7 @@
 namespace App\Http\Controllers;
 
 use App\Mail\MailResetPasswordRequest;
+use App\Models\Profile;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Auth\Events\Verified;
@@ -89,6 +90,7 @@ class AuthManager extends Controller {
 	public function profile(Request $request) {
 
 		$user = $request->user();
+
 		if ($user) {
 			return response()->json([
 				'profile' => $user,
