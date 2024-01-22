@@ -79,7 +79,7 @@ return [
 			'model' => App\Models\User::class,
 		],
 
-		'user' => [
+		'database' => [
 			'driver' => 'database',
 			'table' => 'users',
 		],

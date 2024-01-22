@@ -11,15 +11,16 @@ class CheckAuth
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response) $next
      */
     public function handle(Request $request, Closure $next): Response
     {
-        return $next($request);
-
-        if(auth()->check()) {
+        if (auth()->check()) {
+            // User is authenticated, proceed with the request
             return $next($request);
         }
-    }
 
+        // User is not authenticated, handle the unauthorized access as needed
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
 }

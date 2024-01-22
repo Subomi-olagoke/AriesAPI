@@ -34,21 +34,21 @@ Route::group(['prefix' => 'auth'], function () {
 	Route::group(['middleware' => 'auth:sanctum'], function () {
 		Route::get('/profile', [AuthManager::class, 'profile'])->middleware(['auth:sanctum']);
 
-		Route::group(['middleware' => 'ability:user,admin'], function () {
+	// 	Route::group(['middleware' => 'ability:user,admin'], function () {
 
-			Route::get('change-password', 'ForgotPasswordManager@changePassword');
-			Route::post('update-profile', 'ProfileController@update');
-			Route::post('uploadAvatar', 'ProfileController@UploadAvatar');
-			Route::post('/create-follow/{user:username}', 'FollowController@createFollow');
-			Route::post('/unfollow/{user:username}', 'FollowController@unfollow');
-			Route::post('/PostCourse', 'CoursesController@PostCourse');
-			Route::get('/courses/{id}', 'CoursesController@showCourse');
-			Route::post('/updateCourse', 'CoursesController@updateCourse');
-			Route::delete('/courses/{id}', 'CoursesController@deleteCourse');
-			Route::post('/comment', 'CommentController@postComment');
+	// 		Route::get('change-password', 'ForgotPasswordManager@changePassword');
+	// 		Route::post('update-profile', 'ProfileController@update');
+	// 		Route::post('uploadAvatar', 'ProfileController@UploadAvatar');
+	// 		Route::post('/create-follow/{user:username}', 'FollowController@createFollow');
+	// 		Route::post('/unfollow/{user:username}', 'FollowController@unfollow');
+	// 		Route::post('/PostCourse', 'CoursesController@PostCourse');
+	// 		Route::get('/courses/{id}', 'CoursesController@showCourse');
+	// 		Route::post('/updateCourse', 'CoursesController@updateCourse');
+	// 		Route::delete('/courses/{id}', 'CoursesController@deleteCourse');
+	// 		Route::post('/comment', 'CommentController@postComment');
 
-		});
-	});
+	// 	});
+	 });
 });
 
 Route::group(['prefix' => 'post'], function () {
@@ -58,28 +58,3 @@ Route::group(['prefix' => 'post'], function () {
 	});
 });
 
-//navigation
-//Route::post('/', [AuthManager::class, "showCorrecthomepage"])->name('login');
-
-//Profile related routes
-//Route::get('/profile/{user:username}', [ProfileController::class, 'showProfile']); //->middleware('checkAuth');
-Route::post('/uploadAvatar', [ProfileController::class, 'UploadAvatar'])->middleware('mustBeLoggedIn');
-
-//follow related routes
-Route::post('/create-follow/{user:username}', [FollowController::class, 'createFollow'])->middleware('mustBeLoggedIn');
-Route::post('/unfollow/{user:username}', [FollowController::class, 'unFollow'])->middleware('mustBeLoggedIn');
-
-// Blog post related routes
-Route::post('/storeNewPost', [PostController::class, 'storeNewPost']);
-Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
-
-//courses
-//post a course
-
-//Commenting on posts
-Route::post('/comment', [CommentController::class, 'postComment']);
-
-/*Route::post('/Upload', [EducatorsController::class, 'upload'])->middleware('mustBeLoggedIn');
-Route::post('/download{file}', [EducatorsController::class, 'download'])->middleware('mustBeLoggedIn');
-Route::get('/show', [EducatorsController::class, 'show']);
- */

@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Registeration and login class
+ * Registration and login class
  */
 
 namespace App\Http\Controllers;
