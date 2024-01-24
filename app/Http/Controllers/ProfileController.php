@@ -61,7 +61,7 @@ class ProfileController extends Controller {
 
 }
 
-/*public function showProfile(User $user) {
+/*kpooopublic function showProfile(User $user) {
 //$user = Auth::user();
 $profile = Profile::where('user_id', $user->id)->first();
 return response()->json(['profile' => $profile]);

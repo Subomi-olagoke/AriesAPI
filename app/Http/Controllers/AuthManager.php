@@ -87,19 +87,12 @@ class AuthManager extends Controller {
 
 	}
 
-	public function profile(Request $request) {
-
-		$user = $request->user();
-
-		if ($user) {
-			return response()->json([
-				'profile' => $user,
-			], 200);
-		} else {
-			return response()->json([
-				'message' => 'User not found',
-			], 404);
-		}
+	public function profile(User $user) {
+         $posts = $user->posts()->get();
+        return response()->json([
+            'posts' => $posts,
+            'username'=> $user->username,
+        ]);
 	}
 
 	public function resetPasswordRequest(Request $request) {

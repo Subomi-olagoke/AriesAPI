@@ -1,12 +1,8 @@
 <?php
 
 use App\Http\Controllers\AuthManager;
-use App\Http\Controllers\CommentController;
-use App\Http\Controllers\FollowController;
 use App\Http\Controllers\PostController;
-use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Auth;
 
 /*
 |--------------------------------------------------------------------------
@@ -25,14 +21,16 @@ use Illuminate\Support\Facades\Auth;
 
 //tidying up
 
+Route::get('/profile/{user:username}', [AuthManager::class, 'profile']);
+
 Route::group(['prefix' => 'auth'], function () {
 	Route::post('register', [AuthManager::class, 'register']);
 	Route::post('login', [AuthManager::class, 'login']);
 	Route::post('resetPassReq', [AuthManager::class, 'resetPasswordRequest']);
 	Route::post('resetPassword', [AuthManager::class, 'resetPassword']);
 
-	Route::group(['middleware' => 'auth:sanctum'], function () {
-		Route::get('/profile', [AuthManager::class, 'profile'])->middleware(['auth:sanctum']);
+	// Route::group(['middleware' => 'auth:sanctum'], function () {
+	// 	Route::get('/profile', [AuthManager::class, 'profile'])->middleware(['auth:sanctum']);
 
 	// 	Route::group(['middleware' => 'ability:user,admin'], function () {
 
@@ -48,7 +46,6 @@ Route::group(['prefix' => 'auth'], function () {
 	// 		Route::post('/comment', 'CommentController@postComment');
 
 	// 	});
-	 });
 });
 
 Route::group(['prefix' => 'post'], function () {
@@ -57,4 +54,3 @@ Route::group(['prefix' => 'post'], function () {
 
 	});
 });
-
