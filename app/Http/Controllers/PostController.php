@@ -45,8 +45,8 @@ class PostController extends Controller {
 			$newPost->media_link = $request->file('media_link')->store('media_link');
 		}
 
-		$newPost->user_id = $request->$post->user_id;
-		$newPost->media_type = $request->media_type;
+		$newPost->user_id = $request->user_id;
+        $newPost->media_type = $request->media_type;
 		$newPost->visibility = $request->visibility;
 		$newPost->body = $request->body;
 
