@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthManager;
 use App\Http\Controllers\PostController;
+use App\Http\Middleware\MustBeLoggedIn;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -21,15 +22,19 @@ use Illuminate\Support\Facades\Route;
 
 //tidying up
 
-Route::get('/profile/{user:username}', [AuthManager::class, 'profile']);
+
 
 Route::group(['prefix' => 'auth'], function () {
 	Route::post('register', [AuthManager::class, 'register']);
 	Route::post('login', [AuthManager::class, 'login']);
 	Route::post('resetPassReq', [AuthManager::class, 'resetPasswordRequest']);
 	Route::post('resetPassword', [AuthManager::class, 'resetPassword']);
+    Route::get('/profile/{user:username}', [AuthManager::class, 'profile']);
+    Route::post('/post', [PostController::class, 'storePost'])->middleware('auth');
 
-	// Route::group(['middleware' => 'auth:sanctum'], function () {
+
+	//Route::group(['middleware' => 'auth:sanctum'], function () {
+
 	// 	Route::get('/profile', [AuthManager::class, 'profile'])->middleware(['auth:sanctum']);
 
 	// 	Route::group(['middleware' => 'ability:user,admin'], function () {
