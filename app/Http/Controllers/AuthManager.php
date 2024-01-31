@@ -82,7 +82,6 @@ class AuthManager extends Controller {
 			'user' => $user,
 			'access_token' => $token->plainTextToken,
 			'token_type' => 'Bearer',
-			'abilities' => $token->accessToken->abilities,
 		], 200);
 
 	}

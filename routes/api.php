@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\Route;
 
 
 	Route::post('register', [AuthManager::class, 'register']);
-	Route::post('login', [AuthManager::class, 'login']);
+	Route::post('login', [AuthManager::class, 'login'])->name('login');
 	Route::post('resetPassReq', [AuthManager::class, 'resetPasswordRequest']);
 	Route::post('resetPassword', [AuthManager::class, 'resetPassword']);
     Route::get('/profile/{user:username}', [AuthManager::class, 'profile']);
