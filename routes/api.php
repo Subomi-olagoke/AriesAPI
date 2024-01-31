@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Route;
 
 
 
-Route::group(['prefix' => 'auth'], function () {
+
 	Route::post('register', [AuthManager::class, 'register']);
 	Route::post('login', [AuthManager::class, 'login']);
 	Route::post('resetPassReq', [AuthManager::class, 'resetPasswordRequest']);
@@ -51,7 +51,7 @@ Route::group(['prefix' => 'auth'], function () {
 	// 		Route::post('/comment', 'CommentController@postComment');
 
 	// 	});
-});
+
 
 Route::group(['prefix' => 'post'], function () {
 	Route::group(['middleware' => 'ability:user,admin'], function () {
