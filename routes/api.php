@@ -2,8 +2,9 @@
 
 use App\Http\Controllers\AuthManager;
 use App\Http\Controllers\PostController;
-use App\Http\Middleware\MustBeLoggedIn;
 use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
+use Laravel\Sanctum\Sanctum;
 
 /*
 |--------------------------------------------------------------------------
@@ -30,8 +31,9 @@ use Illuminate\Support\Facades\Route;
 	Route::post('resetPassReq', [AuthManager::class, 'resetPasswordRequest']);
 	Route::post('resetPassword', [AuthManager::class, 'resetPassword']);
     Route::get('/profile/{user:username}', [AuthManager::class, 'profile']);
-    Route::post('/post', [PostController::class, 'storePost'])->middleware('auth');
-
+    Route::middleware('auth:sanctum')->group(function() {
+        Route::post('/post', [PostController::class, 'storePost'])->middleware('auth:sanctum');
+    });
 
 	//Route::group(['middleware' => 'auth:sanctum'], function () {
 
@@ -51,11 +53,3 @@ use Illuminate\Support\Facades\Route;
 	// 		Route::post('/comment', 'CommentController@postComment');
 
 	// 	});
-
-
-Route::group(['prefix' => 'post'], function () {
-	Route::group(['middleware' => 'ability:user,admin'], function () {
-		Route::post('/createPost', [PostController::class, 'storeNewPost']);
-
-	});
-});

@@ -70,19 +70,41 @@ class AuthManager extends Controller {
 
 		$user = $request->user();
 
-		$user->tokens()->delete();
+		//$user->tokens()->delete();
 
-		if ($user->role == 'admin') {
-			$token = $user->createToken('Personal Access Token', ['admin']);
-		} else {
-			$token = $user->createToken('Personal Access Token', ['user']);
-		}
+
+
+        $token = $user->createToken('authToken', ['user']);
+
+        if (!$token) {
+            // Token creation failed
+            return response()->json([
+                'message' => 'Failed to create token',
+            ], 500);
+        }
+
+
+         // Check if the token object is null
+    if (!$token->accessToken) {
+        // Token object is null, unable to set expires_at property
+        return response()->json([
+            'message' => 'Token object is null',
+        ], 500);
+    }
+
+
+
+        $token->accessToken->expires_at = now()->addHours(24);
+        $token->accessToken->save();
 
 		return response()->json([
 			'user' => $user,
 			'access_token' => $token->plainTextToken,
 			'token_type' => 'Bearer',
-		], 200);
+		], 200)->cookie(
+            'access_token', $token->plainTextToken, null, null, false, true // Set HttpOnly to true
+        );
+
 
 	}
 
@@ -218,3 +240,10 @@ return response()->json($response);
 
 }
  */
+
+
+ /*if ($user->role == 'admin') {
+			$token = $user->createToken('Personal Access Token', ['admin']);
+		} else {
+			$token = $user->createToken('Personal Access Token', ['user']);
+		}*/
