@@ -1,10 +1,11 @@
 <?php
 
-use App\Http\Controllers\AuthManager;
-use App\Http\Controllers\PostController;
-use Illuminate\Support\Facades\Route;
-use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Laravel\Sanctum\Sanctum;
+use App\Http\Controllers\AuthManager;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\PostController;
+use App\Http\Controllers\CommentController;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,9 +18,9 @@ use Laravel\Sanctum\Sanctum;
 |
  */
 
-// Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-//     return $request->user();
-// });
+Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+    return $request->user();
+});
 
 //tidying up
 
@@ -33,6 +34,7 @@ use Laravel\Sanctum\Sanctum;
     Route::get('/profile/{user:username}', [AuthManager::class, 'profile']);
     Route::middleware('auth:sanctum')->group(function() {
         Route::post('/post', [PostController::class, 'storePost'])->middleware('auth:sanctum');
+        Route::post('/comment', [CommentController::class, 'postComment']);
     });
 
 	//Route::group(['middleware' => 'auth:sanctum'], function () {

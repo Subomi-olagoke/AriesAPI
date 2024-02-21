@@ -15,12 +15,12 @@ class CommentController extends Controller {
 
 		//checking if user is authenticated
 		$user = $request->user();
-		// if (!$user) {
-		// 	return response()->json([
-		// 		'message' => 'User is not authenticated',
-		// 	],
-		// 		401);
-		// }
+		if (!$user) {
+			return response()->json([
+				'message' => 'User is not authenticated',
+			],
+				401);
+		}
 
 		$comment = new comments();
 		$comment->post_id = $request->post_id;

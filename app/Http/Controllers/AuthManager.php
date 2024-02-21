@@ -74,7 +74,7 @@ class AuthManager extends Controller {
 
 
 
-        $token = $user->createToken('authToken', ['user']);
+        $token = $user->createToken('authToken');
 
         if (!$token) {
             // Token creation failed
