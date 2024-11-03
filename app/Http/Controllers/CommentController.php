@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\comments;
 use App\Models\User;
+use App\Models\comments;
 use Illuminate\Http\Request;
 
 class CommentController extends Controller {
@@ -42,4 +42,18 @@ class CommentController extends Controller {
 		}
 
 	}
+
+    public function deleteComment($commentId) {
+        $deleted = comments::where(['user_id', '=', auth()->user()->id],
+        ['id', '=', $commentId])->delete();
+
+        if($deleted) {
+            return response()->json([
+                'message' => 'comment deleted'
+            ], 204);
+        }
+            return response()->json([
+                'message' => 'error deleting comment'
+            ], 500);
+    }
 }
