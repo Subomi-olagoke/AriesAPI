@@ -3,63 +3,80 @@
 namespace App\Http\Controllers;
 
 use App\Models\Like;
+use App\Models\Post;
+use App\Models\comments;
 use Illuminate\Http\Request;
 
 class LikeController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
-    {
-        //
+    public function statCheckPost(Post $post) {
+        return Like::where([['user_id', '=', auth()->user()->id],
+        ['post_id', '=', $post->id]])->count();
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
+    public function statCheckComment(comments $comment) {
+        return Like::where([['user_id', '=', auth()->user()->id],
+        ['comment_id', '=', $comment->id]])->count();
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        //
+    public function LikePost(Post $post, comments $comment) {
+        $CheckPost = $this->statCheckPost($post);
+
+        if(!$CheckPost) {
+            $newLike = new Like();
+            $newLike->user_id = auth()->user()->id;
+            $newLike->post_id = $post->id;
+            $newLike->save();
+
+            return response()->json([
+                'message' => 'successful'
+            ], 201);
+        }
+
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(Like $like)
-    {
-        //
+    public function likeComment(comments $comment) {
+        $CheckComment = $this->statCheckComment($comment);
+
+        if(!$CheckComment) {
+            $newLike = new Like();
+            $newLike->user_id = auth()->user()->id;
+            $newLike->comment_id = $comment->id;
+            $newLike->save();
+
+            return response()->json([
+                'message' => 'successful'
+            ], 201);
+        }
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Like $like)
-    {
-        //
+    public function removeLikePost(Post $post) {
+        $removed = Like::where([['user_id', '=', auth()->user()->id],
+        ['post_id', '=', $post->id]])->delete();
+
+        if($removed) {
+            return response()->json([
+                'message' => 'success'
+            ], 200);
+        }
+        return response()->json([
+            'message' => 'Like not found'
+        ], 404);
+
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Like $like)
-    {
-        //
-    }
+    public function removeLikeComment(comments $comment) {
+        $removed = Like::where([['user_id', '=', auth()->user()->id],
+        ['comment_id', '=', $comment->id]])->delete();
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Like $like)
-    {
-        //
+        if($removed) {
+            return response()->json([
+                'message' => 'success'
+            ], 200);
+        }
+        return response()->json([
+            'message' => 'Like not found'
+        ], 404);
+
     }
 }
