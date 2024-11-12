@@ -79,4 +79,11 @@ class LikeController extends Controller
         ], 404);
 
     }
+
+    public function displayLikes() {
+        return Like::with('likeable')
+                    ->where('user_id', auth()->user()->id)
+                    ->get();
+    }
+
 }

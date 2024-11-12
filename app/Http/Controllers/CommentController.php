@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Post;
 use App\Models\User;
 use App\Models\comments;
 use Illuminate\Http\Request;
@@ -55,5 +56,17 @@ class CommentController extends Controller {
             return response()->json([
                 'message' => 'error deleting comment'
             ], 500);
+    }
+
+    public function displayComments(Post $post) {
+        $comments = comments::where('post_id', '=', $post->id)->get();
+        if($comments->isEmpty) {
+            return response()->json([
+                'message' => 'no comments for this post yet'
+            ], 404);
+        }
+        return response()->json(
+            $comments, 200
+        );
     }
 }
