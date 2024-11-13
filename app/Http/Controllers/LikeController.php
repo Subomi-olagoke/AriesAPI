@@ -10,8 +10,10 @@ use Illuminate\Http\Request;
 class LikeController extends Controller
 {
     public function statCheckPost(Post $post) {
-        return Like::where([['user_id', '=', auth()->user()->id],
-        ['post_id', '=', $post->id]])->count();
+        $check = Like::where([['user_id', '=', auth()->user()->id],
+        ['likeable_id', '=', $post->id], 'likeable_type', '=', Post::class])->exists();
+
+        return $check;
     }
 
     public function statCheckComment(comments $comment) {
@@ -19,21 +21,39 @@ class LikeController extends Controller
         ['comment_id', '=', $comment->id]])->count();
     }
 
-    public function LikePost(Post $post, comments $comment) {
-        $CheckPost = $this->statCheckPost($post);
+    $request->input('likeable_type')
 
-        if(!$CheckPost) {
-            $newLike = new Like();
-            $newLike->user_id = auth()->user()->id;
-            $newLike->post_id = $post->id;
-            $newLike->save();
+    public function likePost(Request $request, $likeable_id)
+{
+    $user = auth()->user();
+    $likeable_type = $request->input('likeable_type');
+    $likeable =  $likeable_type::find($likeable_id);
 
-            return response()->json([
-                'message' => 'successful'
-            ], 201);
-        }
-
+    if(!$likeable) {
+        return response()->json(['message' => 'Likeable entity not found.'], 404);
     }
+
+    //checking if like already exists
+    $exists = $user->likes()->where([
+        ['likeable_id', '=', $likeable_id],
+        ['likeable_type', '=', $likeable_type]
+    ])->exists();
+
+    if ($exists) {
+        return response()->json(['message' => 'Already liked'], 200);
+    }
+
+    //create like if it doesn’t exist
+    $like = $user->likes()->create([
+        'user_id' => $user->id,
+        'likeable_id' => $likeable_id,
+        'likeable_type' => $likeable_type
+    ]);
+    $like->save();
+
+    return response()->json(['message' => 'successful'], 201);
+}
+
 
     public function likeComment(comments $comment) {
         $CheckComment = $this->statCheckComment($comment);
@@ -41,6 +61,7 @@ class LikeController extends Controller
         if(!$CheckComment) {
             $newLike = new Like();
             $newLike->user_id = auth()->user()->id;
+            $newLike->post_id = $comment->post_id;
             $newLike->comment_id = $comment->id;
             $newLike->save();
 
