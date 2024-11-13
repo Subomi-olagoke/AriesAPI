@@ -21,7 +21,7 @@ class LikeController extends Controller
         ['comment_id', '=', $comment->id]])->count();
     }
 
-    $request->input('likeable_type')
+
 
     public function likePost(Request $request, $likeable_id)
 {
