@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ProfileController;
 use Illuminate\Http\Request;
 use App\Http\Controllers\AuthManager;
 use Illuminate\Support\Facades\Route;
@@ -19,22 +20,13 @@ use App\Http\Controllers\CommentController;
 */
 
 // Public routes
-Route::post('register', [AuthManager::class, 'register']);
+Route::post('register', [AuthManager::class, 'register'])->name('register');
 Route::post('login', [AuthManager::class, 'login'])->name('login');
 Route::post('resetPassReq', [AuthManager::class, 'resetPasswordRequest']);
 Route::post('resetPassword', [AuthManager::class, 'resetPassword']);
-//Route::get('/profile/{user:username}', [AuthManager::class, 'profile']);
+
 
 // Protected routes
-Route::middleware(['auth:sanctum'])->group(function() {
-    Route::post('/post', [PostController::class, 'storePost']);
-    Route::post('/comment', [CommentController::class, 'postComment']);
-    Route::post('/like', [LikeController::class, 'likePost']);
-    Route::post('/like', [LikeController::class, 'likeComment']);
-    Route::delete('/like', [LikeController::class, 'removeLikeComment']);
-    Route::delete('/like', [LikeController::class, 'removeLikePost']);
-    Route::get('/like', [LikeController::class, 'displayLikes']);
-    Route::get('/user', function (Request $request) {
-        return $request->user();
-    });
+Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
+    Route::get('profile/{user:username}', [ProfileController::class, 'viewProfile'])->name('profile.view');
 });
