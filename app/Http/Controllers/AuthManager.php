@@ -17,22 +17,28 @@ use Illuminate\Validation\Rules\Password;
 class AuthManager extends Controller {
     public function register(Request $request) {
         $incomingFields = $request->validate([
-            'firstName' => ['required'],
-            'LastName' => ['required'],
+            'first_name' => ['required'],
+            'last_name' => ['required'],
             'username' => ['required', 'min:3', 'max:20', Rule::unique('users', 'username')],
             'email' => ['required', 'email', Rule::unique('users', 'email')],
-            'password' => ['required', 'min:8', 'max:20', 'confirmed'],
+            'password' => ['required','min:8','max:20',Password::min(8)
+            ->letters()
+            ->mixedCase()
+            ->numbers()
+            ->symbols()
+            ->uncompromised(),
+            'confirmed'
+            ],
         ]);
 
         $incomingFields['password'] = bcrypt($incomingFields['password']);
 
         $user = new User();
         $user->username = $request->username;
-        $user->firstName = $request->firstName;
-        $user->LastName = $request->LastName;
+        $user->first_name = $request->first_name;
+        $user->last_name = $request->last_name;
         $user->email = $request->email;
         $user->password = $incomingFields['password'];
-        $user->role = 'user';
 
         if ($user->save()) {
             Auth::login($user);
@@ -79,16 +85,20 @@ class AuthManager extends Controller {
             'access_token' => $token->plainTextToken,
             'token_type' => 'Bearer',
         ], 200)->cookie(
-            'access_token', $token->plainTextToken, 1440, null, null, false, true // 1440 minutes = 24 hours, Set HttpOnly to true
+            'access_token', $token->plainTextToken, 1440, null, null, false, true // 1440 minutes = 24 hours
         );
     }
 
-    public function profile(User $user) {
-        $posts = $user->posts()->get();
-        return response()->json([
-            'posts' => $posts,
-            'username' => $user->username,
-        ]);
+    public function logout(Request $request) {
+        if ($request->user()->tokens()->delete()) {
+            return response()->json([
+                'message' => 'Logout successful',
+            ], 200);
+        } else {
+            return response()->json([
+                'message' => 'Some error occurred, please try again',
+            ], 500);
+        }
     }
 
     public function resetPasswordRequest(Request $request) {
@@ -162,18 +172,6 @@ class AuthManager extends Controller {
         } else {
             return response()->json([
                 'message' => 'Some error occurred, please try again later',
-            ], 500);
-        }
-    }
-
-    public function logout(Request $request) {
-        if ($request->user()->tokens()->delete()) {
-            return response()->json([
-                'message' => 'Logout successful',
-            ], 200);
-        } else {
-            return response()->json([
-                'message' => 'Some error occurred, please try again',
             ], 500);
         }
     }
