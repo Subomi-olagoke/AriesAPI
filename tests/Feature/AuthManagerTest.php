@@ -1,10 +1,11 @@
 <?php
 
 namespace Tests\Feature;
-use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
 use Tests\TestCase;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Foundation\Testing\WithFaker;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 
 
 class AuthManagerTest extends TestCase
@@ -38,8 +39,37 @@ class AuthManagerTest extends TestCase
          ]);
     }
 
+      /**
+ * @test
+    */
     public function loginTest() {
+        $rawPassword = 'ValidPassword123!';
+        $user = User::factory()->create([
+            'password' => Hash::make($rawPassword)
+        ]);
 
+        $data = [
+            'username' => $user->username,
+            'password' => $rawPassword
+        ];
+
+        $response = $this->postJson(route('login'), $data);
+
+
+        $response->assertStatus(200)
+                 ->assertJsonStructure([
+                     'user' => [
+                         'id',
+                         'username',
+                         'email',
+                         'first_name',
+                         'last_name',
+                     ],
+                     'access_token',
+                     'token_type',
+                 ]);
+
+         $response->assertCookie('access_token');
     }
 
 
