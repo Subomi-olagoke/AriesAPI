@@ -23,7 +23,7 @@ use App\Http\Controllers\CommentController;
 Route::post('register', [AuthManager::class, 'register'])->name('register');
 Route::post('login', [AuthManager::class, 'login'])->name('login');
 Route::post('resetPassReq', [AuthManager::class, 'resetPasswordRequest'])->name('resetPassReq');
-Route::post('resetPassword', [AuthManager::class, 'resetPassword']);
+Route::post('resetPassword', [AuthManager::class, 'resetPassword'])->name('resetPassword');
 
 
 // Protected routes
