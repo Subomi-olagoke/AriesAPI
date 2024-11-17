@@ -6,11 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Profile extends Model {
 	protected $fillable = ['bio', 'avatar'];
-	public function user() {
-		return $this->belongsTo(User::class, 'user_id');
+	public function User() {
+		return $this->belongsTo(User::class, 'user_id', 'id');
 	}
-
-	// public function posts() {
-	// 	return $this->hasMany(Courses::class, 'user_id');
-	// }
 }

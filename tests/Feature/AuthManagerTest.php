@@ -72,6 +72,95 @@ class AuthManagerTest extends TestCase
          $response->assertCookie('access_token');
     }
 
+    /**
+ * @test
+    */
+    public function logoutTest() {
+        $rawPassword = 'ValidPassword123!';
+        $user = User::factory()->create([
+            'password' => Hash::make($rawPassword)
+        ]);
 
+        $loginData = [
+            'username' => $user->username,
+            'password' => $rawPassword
+        ];
+
+        $loginResponse = $this->postJson(route('login'), $loginData);
+        $loginResponse->assertStatus(200)
+                 ->assertJsonStructure([
+                     'user' => [
+                         'id',
+                         'username',
+                         'email',
+                         'first_name',
+                         'last_name',
+                     ],
+                     'access_token',
+                     'token_type',
+                 ]);
+
+         $loginResponse->assertCookie('access_token');
+
+         $token = $loginResponse->json('access_token');
+
+         //dd($loginResponse->json('access_token'));
+
+
+         // Send logout request with the Authorization header
+         $logoutResponse = $this->withHeaders([
+             'Authorization' => 'Bearer ' . $token,
+         ])->postJson(route('logout'));
+
+         $logoutResponse->assertStatus(200)
+             ->assertJson([
+                 'message' => 'Logged out successfully',
+             ]);
+             //expect($this->user->fresh()->tokens)->toBeEmpty();
+
+             $this->refreshApplication();
+             $this->refreshDatabase();
+
+
+
+         // Verify that the token is no longer valid
+         $this->withHeaders([
+             'Authorization' => 'Bearer ' . $token,
+         ])->getJson(route('profile.view', ['user' => $user->username]))
+             ->assertStatus(401); // Token should be invalid after logout
+
+    }
+
+      /**
+ * @test
+    */
+    public function resetPasswordRequestTest() {
+    $user = User::factory()->create([
+            'email' => 'fring@gmail.com'
+        ]);
+
+       $this->assertDatabaseHas('users', [
+            'email' => $user['email'],
+        ]);
+        $data = [
+           'email' => $user->email
+        ];
+
+        $resetPassReq = $this->postJson(route('resetPassReq'), $data);
+
+        $resetPassReq->assertOk();
+
+        $bad = [
+            'email' => 'younger@gmail.com'
+        ];
+
+        $badReq = $this->postJson(route('resetPassReq'), $bad);
+        $badReq->assertStatus(404);
+
+    }
+
+    public function resetPasswordTest() {
+
+    }
 
 }

@@ -10,16 +10,21 @@ use Illuminate\Support\Facades\Storage;
 
 class ProfileController extends Controller {
 
-	public function alphaProfile(User $user) {
-		$data = [
-			'username' => $user->username,
-			'posts' => $user->posts()->latest()->get(),
-			'postCount' => $user->posts()->count(),
+	public function viewProfile(User $user) {
+        $user = User::with('profile')->find($user->id);
 
-		];
+        $posts = $user->posts()->get();
+        $likes = '';
+        $followers = '';
+        $following = '';
+        $avatar = $user->profile ? $user->profile->avatar : null;
 
-		return response()->json(['data' => $data]);
-	}
+        return response()->json([
+            'posts' => $posts,
+            'username' => $user->username,
+            'avatar' => $avatar,
+        ]);
+    }
 
 	public function update(Request $request) {
 		$user = Auth::user();
@@ -61,8 +66,3 @@ class ProfileController extends Controller {
 
 }
 
-/*kpooopublic function showProfile(User $user) {
-//$user = Auth::user();
-$profile = Profile::where('user_id', $user->id)->first();
-return response()->json(['profile' => $profile]);
-}*/

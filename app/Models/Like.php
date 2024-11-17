@@ -18,13 +18,4 @@ class Like extends Model
     public function user() {
 		return $this->belongsTo(User::class, 'user_id');
 	}
-
-    // public function post() {
-    //     return $this->belongsTo(Post::class, 'likeable_id');
-    // }
-
-    // public function comments() {
-    //     return $this->belongsTo(comments::class, 'comment_id');
-    // }
-
 }

@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Post;
 use App\Models\User;
-use App\Models\comments;
+use App\Models\Comment;
 use Illuminate\Http\Request;
 
 class CommentController extends Controller {
@@ -23,7 +23,7 @@ class CommentController extends Controller {
 				401);
 		}
 
-		$comment = new comments();
+		$comment = new Comment();
 		$comment->post_id = $request->post_id;
 		$comment->user_id = $user->id;
 		$comment->content = $request->content;
@@ -45,7 +45,7 @@ class CommentController extends Controller {
 	}
 
     public function deleteComment($commentId) {
-        $deleted = comments::where(['user_id', '=', auth()->user()->id],
+        $deleted = Comment::where(['user_id', '=', auth()->user()->id],
         ['id', '=', $commentId])->delete();
 
         if($deleted) {
@@ -59,7 +59,7 @@ class CommentController extends Controller {
     }
 
     public function displayComments(Post $post) {
-        $comments = comments::where('post_id', '=', $post->id)->get();
+        $comments = Comment::where('post_id', '=', $post->id)->get();
         if($comments->isEmpty) {
             return response()->json([
                 'message' => 'no comments for this post yet'

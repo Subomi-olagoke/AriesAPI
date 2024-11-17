@@ -22,11 +22,13 @@ use App\Http\Controllers\CommentController;
 // Public routes
 Route::post('register', [AuthManager::class, 'register'])->name('register');
 Route::post('login', [AuthManager::class, 'login'])->name('login');
-Route::post('resetPassReq', [AuthManager::class, 'resetPasswordRequest']);
+Route::post('resetPassReq', [AuthManager::class, 'resetPasswordRequest'])->name('resetPassReq');
 Route::post('resetPassword', [AuthManager::class, 'resetPassword']);
 
 
 // Protected routes
 Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
+    Route::post('logout', [AuthManager::class, 'logout'])->name('logout');
+    Route::post('logoutProd', [AuthManager::class, 'logoutProd'])->name('logoutProd');
     Route::get('profile/{user:username}', [ProfileController::class, 'viewProfile'])->name('profile.view');
 });

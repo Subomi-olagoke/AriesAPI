@@ -9,7 +9,7 @@ class Courses extends Model {
 	protected $fillable = [
 		'title',
 		'description',
-		'video_url', // Add this line
+		'video_url',
 		'price',
 	];
 

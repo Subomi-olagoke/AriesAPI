@@ -8,14 +8,14 @@ use Illuminate\Database\Eloquent\Model;
 class Educators extends Model {
 	use HasFactory;
 
-	protected $fillable = ['bio', 'avatar', 'courses', 'posts']; // Add more fields as needed
+	protected $fillable = ['bio', 'avatar', 'courses', 'posts'];
 
 	public function educator() {
-		return $this->belongsTo(Educators::class);
+		return $this->belongsTo(User::class);
 	}
 
 	public function courses() {
-		return $this->hasMany(Courses::class, 'user_id');
+		return $this->hasMany(User::class, 'user_id');
 	}
 
 }

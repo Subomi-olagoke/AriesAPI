@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
-class AuthManager extends Controller {
+    class AuthManager extends Controller {
     public function register(Request $request) {
         $incomingFields = $request->validate([
             'first_name' => ['required'],
@@ -71,7 +71,7 @@ class AuthManager extends Controller {
         $user->tokens()->delete();
 
         // Create a new token
-        $token = $user->createToken('authToken');
+        $token = $user->createToken('authToken')->plainTextToken;
 
         if (!$token) {
             // Token creation failed
@@ -82,24 +82,41 @@ class AuthManager extends Controller {
 
         return response()->json([
             'user' => $user,
-            'access_token' => $token->plainTextToken,
+            'access_token' => $token,
             'token_type' => 'Bearer',
         ], 200)->cookie(
-            'access_token', $token->plainTextToken, 1440, null, null, false, true // 1440 minutes = 24 hours
+            'access_token', $token, 1440, null, null, false, true // 1440 minutes = 24 hours
         );
     }
 
     public function logout(Request $request) {
-        if ($request->user()->tokens()->delete()) {
-            return response()->json([
-                'message' => 'Logout successful',
-            ], 200);
-        } else {
-            return response()->json([
-                'message' => 'Some error occurred, please try again',
-            ], 500);
-        }
+        Auth::guard('sanctum')->forgetUser();
+        return response()->json([
+            'message' => 'Logged out successfully',
+        ], 200);
+
     }
+
+    public function logoutProd(Request $request) {
+        $request->session()->invalidate();  //Invalidate session
+        $request->session()->regenerateToken();
+
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(
+                ['error' => 'Unauthorized'], 401);
+        }
+
+          $token = $user ? $user->currentAccessToken() : null;
+            if($token) {
+                $token->delete();
+                return response()->json([
+                    'message' => 'Logged out successfully',
+                    ], 200);
+            }
+            return response()->json(['error' => 'Token not found'], 404);
+    }
+
 
     public function resetPasswordRequest(Request $request) {
         $request->validate([
@@ -118,7 +135,6 @@ class AuthManager extends Controller {
         $user->verification_code = $code;
 
         if ($user->save()) {
-            // Send the email
             $emailData = array(
                 'heading' => 'Reset Password Request',
                 'username' => $user->username,

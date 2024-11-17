@@ -2,13 +2,27 @@
 
 namespace App\Models;
 
+use Illuminate\Support\Str;
+use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable {
     use HasApiTokens, HasFactory, Notifiable;
+
+    public $incrementing = false; // Disable auto-incrementing
+    protected $keyType = 'string'; // Use string type for the primary key
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Automatically generate a UUID when creating a new user
+        static::creating(function ($model) {
+            $model->id = (string) Str::uuid();
+        });
+    }
 
     /**
      * The attributes that are mass assignable.
@@ -19,9 +33,8 @@ class User extends Authenticatable {
         'username',
         'email',
         'password',
-        'firstName',
-        'LastName',
-        'role'
+        'first_name',
+        'last_name',
     ];
 
     /**
@@ -57,14 +70,11 @@ class User extends Authenticatable {
     }
 
     public function profile() {
-        return $this->belongsTo(Profile::class, 'user_id');
+        return $this->hasOne(Profile::class, 'user_id');
     }
 
-    public function likes() {
-        return $this->belongsTo(Like::class, 'user_id');
+    public function comments() {
+        return $this->hasMany(Comment::class, 'user_id');
     }
 
-
-
-    // Remove the tokens method
 }
