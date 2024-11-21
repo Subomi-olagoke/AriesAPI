@@ -11,6 +11,11 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 class User extends Authenticatable {
     use HasApiTokens, HasFactory, Notifiable;
 
+
+    const ROLE_EDUCATOR = 'educator';
+    const ROLE_LEARNER = 'learner';
+    const ROLE_EXPLORER = 'explorer';
+
     public $incrementing = false; // Disable auto-incrementing
     protected $keyType = 'string'; // Use string type for the primary key
 
@@ -35,6 +40,7 @@ class User extends Authenticatable {
         'password',
         'first_name',
         'last_name',
+        'role',
     ];
 
     /**

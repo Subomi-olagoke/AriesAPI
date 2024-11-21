@@ -14,4 +14,12 @@ class Courses extends Model {
 	];
 
 	use HasFactory;
+
+    public function user(){
+        return $this->hasMany(User::class, 'user_id', 'id');
+    }
+
+    public function educator() {
+        return $this->hasMany(Educators::class, 'educator_id');
+    }
 }

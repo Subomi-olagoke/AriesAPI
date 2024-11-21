@@ -2,88 +2,49 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use App\Models\Courses;
 use App\Models\Educators;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Auth;
 
 class EducatorsController extends Controller {
 
-	public function storeAvatar(Request $request) {
-		$request->file('avatar')->store();
-	}
-
-	public function register(Request $request, Response $response) {
-		$incomingFields = $request->validate([
-			'firstName' => ['required'],
-			'LastName' => ['required'],
-			'username' => ['required', 'min:3', 'max:20', Rule::unique('users', 'username')],
-			'password' => ['required', 'min:8', 'max:20', 'confirmed'],
-			'field' => ['required', Rule::in(['Business', 'Advertising', 'Copy-writing', 'Story Writing', 'Mathematics', 'Computer Science', 'Programming', 'Architecture', 'Engineering', 'others'])],
-
-		]);
-
-		$incomingFields['password'] = bcrypt($incomingFields['password']);
-
-		$Educators = Educators::create($incomingFields);
-		auth()->login($Educators);
-		return response()->json($response);
-		// return redirect('/');
-
-	}
-
-	function login(Request $request, Response $response) {
-		$incomingFields = $request->validate([
-			'email' => 'required',
-			'password' => 'required',
-		]);
-		if (auth()->attempt(['email' => $incomingFields['email'], 'password' => $incomingFields['password']])) {
-			return response()->json($response);
-		}
-		return response()->json('invalid login');
-
-	}
-
-	/*public function EducatorProfile(Educators $educator) {
-		$user = Auth::user();
-		$profile = Educators::where('user_id', $user->id)->first();
-		return response()->json(['profile' => $profile]);
-	}*/
-
-	/*public function update(Request $request) {
-		$user = Auth::user();
-		$profile = Educators::where('user_id', $user->id)->first();
-
-		if (!$profile) {
-			$profile = new Educators(['user_id' => $user->id]);
-		}
-
-		$profile->fill($request->all());
-		$profile->save();
-
-		return response()->json(['profile' => $profile]);
-	}*/
 
 	//post courses
 	public function storeCourse(Request $request) {
+        $user = $request->auth()->user();
+        if($user->role != User::ROLE_EDUCATOR) {
+            return response()->json([
+                'message' => 'you are not allowed to use this'
+            ], 403);
+        }
 
-		$data = new Courses();
-		$file = $request->file;
+		$request->validate([
+        'name' => 'required|string|max:255',
+        'description' => 'required|string',
+        'file' => 'required|file|mimes:mp4,avi,mkv,pdf,docx|max:1048576',
+    	]);
 
+		$file = $request->file('file');
 		$filename = time() . '.' . $file->getClientOriginalExtension();
+		$filePath = $file->storeAs('courses', $filename, 'public');
 
-		$request->file->move('assets', $filename);
+		$course = new Courses();
+		$course->user_id = $user->id;
+		$course->name = $request->name;
+		$course->description = $request->description;
+		$course->file = $filePath;
+		$saved = $course->save();
 
-		$data->file = $filename;
+		if($saved) {
+			return response()->json([
+				'message' => 'Course uploaded successfully'
+			], 200);
+		}
 
-		$data->name = $request->name;
-
-		$data->description = $request->description;
-
-		$data->save();
-		return redirect()->back();
 	}
 
 	public function show() {
