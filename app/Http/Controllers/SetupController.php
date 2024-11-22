@@ -21,8 +21,8 @@ class SetupController extends Controller
         ]);
     }
 
-    public function Preferences(Request $request){
-        $topics =  $topics = Topic::all();
+    public function createPreferences(){
+        $topics = Topic::all();
 
         return response()->json([
             'topics' => $topics->map(function ($topic) {
@@ -40,10 +40,6 @@ class SetupController extends Controller
         $request->validate([
             'selected_topic_ids' => 'required|array',
             'selected_topic_ids.*' => 'exists:topics,id'
-        ]);
-
-        $request->validate([
-            'selected_topic_ids' => 'required|array',
         ]);
 
         $user = $request->user();
