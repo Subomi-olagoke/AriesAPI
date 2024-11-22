@@ -14,7 +14,7 @@ class EducatorsController extends Controller {
 
 
 	//post courses
-	public function storeCourse(Request $request) {
+	public function createCourse(Request $request) {
         $user = $request->auth()->user();
         if($user->role != User::ROLE_EDUCATOR) {
             return response()->json([
@@ -61,7 +61,10 @@ class EducatorsController extends Controller {
 	public function view($id) {
 		$data = Courses::find($id);
 
-		return response()->json(['data' => $data]);
+        if (!$data) {
+            return response()->json(['error' => 'Course not found'], 404);
+        }
+        return response()->json(['data' => $data]);
 	}
 
 }
