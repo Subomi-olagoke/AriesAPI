@@ -1,14 +1,16 @@
 <?php
 
-use App\Http\Controllers\CoursesController;
 use Illuminate\Http\Request;
 use App\Http\Controllers\AuthManager;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\FeedController;
 use App\Http\Controllers\LikeController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\CommentController;
+use App\Http\Controllers\CoursesController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\EducatorsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -37,9 +39,19 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     //profile routes
     Route::get('profile/{user:username}', [ProfileController::class, 'viewProfile'])->name('profile.view');
 
+    //user preferences route
+    Route::post('/createPref', [SetupController::class, 'createPref'])->name('createPref');
+    Route::post('/savePref', [SetupController::class, 'savePreferences'])->name('createPref');
+
+
+
     //account setup route
     Route::post('setup', [SetupController::class, 'setup'])->name('setup');
 
     //Courses route
-    Route::post('create-course', [CoursesController::class, 'postCourse'])->name('postCourse');
+    Route::post('create-course', [EducatorsController::class, 'createCourse'])->name('postCourse');
+    Route::get('/course/{id}', [EducatorsController::class, 'view'])->name('view');
+
+    //feed route
+    Route::get('/feed', [FeedController::class, 'feed'])->name('feed');
 });
