@@ -42,12 +42,32 @@ class SetupController extends Controller
             'selected_topic_ids.*' => 'exists:topics,id'
         ]);
 
-        $user = $request->user();
+        $user = $request->auth()->user();
         $user->topics()->sync($request->input('selected_topic_ids'));
 
         return response()->json([
             'message' => 'Preferences saved successfully',
+            'preferences' => $user->topics()->pluck('id'),
         ], 200);
+    }
+
+    public function followOptions(Request $request) {
+        $user = $request->auth()->user();
+        $preferredTopicIds = $user->topics()->pluck('id');
+
+        $educators = User::where('role', User::ROLE_EDUCATOR)
+        ->whereHas('topics', fn($query) => $query->whereIn('id', $preferredTopicIds))
+        ->get();
+
+        return response()->json([
+            'educators' => $educators->map(fn($educator) => [
+                'id' => $educator->id,
+                'name' => $educator->name,
+                'bio' => $educator->bio ?? '',
+                'profile_image' => $educator->profile_image ?? '',
+            ]),
+        ]);
+
     }
 
 }
