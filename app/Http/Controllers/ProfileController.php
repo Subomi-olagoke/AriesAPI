@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Profile;
 use App\Models\User;
+use App\Models\Profile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Intervention\Image\Encoders\JpegEncoder;
+use Intervention\Image\Laravel\Facades\Image;
 
 class ProfileController extends Controller {
 
@@ -14,15 +16,18 @@ class ProfileController extends Controller {
         $user = User::with('profile')->find($user->id);
 
         $posts = $user->posts()->get();
-        $likes = '';
-        $followers = '';
-        $following = '';
+        $likes = $user->likes()->get();
+        $followers = $user->followers()->count();
+        $following = $user->following()->count();
         $avatar = $user->profile ? $user->profile->avatar : null;
 
         return response()->json([
             'posts' => $posts,
             'username' => $user->username,
             'avatar' => $avatar,
+            'followers' => $followers,
+            'following' => $following,
+            'likes' => $likes
         ]);
     }
 
@@ -31,7 +36,10 @@ class ProfileController extends Controller {
 		$profile = Profile::where('user_id', $user->id)->first();
 
 		if (!$profile) {
-			$profile = new Profile(['user_id' => $user->id]);
+			//$profile = new Profile(['user_id' => $user->id]);
+            return response()->json([
+                'message' => 'you are not allowed to do that'
+            ], 403);
 		}
 
 		$profile->fill($request->all());
@@ -41,26 +49,35 @@ class ProfileController extends Controller {
 	}
 
 	public function UploadAvatar(Request $request) {
-		$user = auth()->user();
+        $request->validate([
+            'avatar' => 'required|image|max:3000'
+           ]);
 
-		$this->validate($request, [
-			'avatar' => 'image|mimes:jpeg,png,jpg,gif|max:2048',
-		]);
+           $user = auth()->user();
 
-		if ($request->hasFile('avatar')) {
-			$avatar = $request->file('avatar');
+           $filename = $user->id . '_' . uniqid() . '.jpg';
 
-			$filename = 'avatar_' . time() . '.' . $avatar->getClientOriginalExtension();
+         $imgData = Image::read($request->file('avatar'));
+         $imgData->resize(120,120);
+         $jpegEncoder = new JpegEncoder();
+         $encodedImage = $imgData->encode($jpegEncoder);
 
-			Storage::disk('s3')->put('avatars/' . $filename, file_get_contents($avatar));
 
-			$user->avatar = $filename;
-			$user->save();
+         Storage::put('public/avatars/' . $filename, (string) $encodedImage);
 
-			return response()->json(['message' => 'Avatar uploaded and saved successfully']);
-		}
+         $oldAvatar = $user->avatar;
 
-		return response()->json(['message' => 'No avatar provided'], 422);
+
+         $user->avatar = $filename;
+         $user->save();
+
+         if($oldAvatar != "/fallback-avatar.jpg") {
+            Storage::delete(str_replace("/storage/", "public/", $oldAvatar));
+         }
+
+         return response()->json([
+            'message' => 'avatar changed successfully'
+         ], 200);
 
 	}
 
