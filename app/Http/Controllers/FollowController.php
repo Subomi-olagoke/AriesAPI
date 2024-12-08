@@ -18,7 +18,7 @@ class FollowController extends Controller {
             return back()->with('failure', 'You are already following this user');
         }
 
-		$newFollow = new Follow;
+		$newFollow = new Follow();
 		$newFollow->user_id = auth()->user()->id;
 		$newFollow->followeduser = $user->id;
 		$newFollow->save();
@@ -41,4 +41,12 @@ class FollowController extends Controller {
         }
         return back()->with('failure', 'You are not following this user');
 	}
+
+    public function followerCount(User $user) {
+        return $user->followers()->count();
+    }
+
+    public function followingCount(User $user) {
+        return $user->following()->count();
+    }
 }
