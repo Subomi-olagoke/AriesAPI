@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
-use App\Models\Courses;
+use App\Models\Course;
 use App\Models\Educators;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -29,10 +29,12 @@ class EducatorsController extends Controller {
     	]);
 
 		$file = $request->file('file');
-		$filename = time() . '.' . $file->getClientOriginalExtension();
-		$filePath = $file->storeAs('courses', $filename, 'public');
+        $filename = uniqid() . '.' . $file->getClientOriginalExtension();
+        $filePath = $file->storeAs('courses/' . date('Y-m-d'), $filename, 'public');
+		// $filename = time() . '.' . $file->getClientOriginalExtension();
+		// $filePath = $file->storeAs('courses', $filename, 'public');
 
-		$course = new Courses();
+		$course = new Course();
 		$course->user_id = $user->id;
 		$course->name = $request->name;
 		$course->description = $request->description;
@@ -47,19 +49,22 @@ class EducatorsController extends Controller {
 
 	}
 
-	public function show() {
-		$data = Courses::all();
-		return response()->json(['data' => $data]);
+	public function showEducatorCourses(Request $request) {
+        $user = $request->user();
+		$courses = $user->courses()->get();
+        if($courses) {
+            return response()->json([
+                'courses' => $courses,
+            ], 201);
+        }
 	}
 
 	public function download(Request $request, $file) {
-
-		return response()->download(public_path('assets/' . $file));
-
-	}
+        return response()->download(public_path('assets/' . $file));
+    }
 
 	public function view($id) {
-		$data = Courses::find($id);
+		$data = Course::find($id);
 
         if (!$data) {
             return response()->json(['error' => 'Course not found'], 404);
