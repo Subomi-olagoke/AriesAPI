@@ -6,6 +6,7 @@ use App\Models\Post;
 use App\Models\User;
 use App\Models\Comment;
 use Illuminate\Http\Request;
+use App\Notifications\CommentNotification;
 
 class CommentController extends Controller {
 	public function postComment(Request $request) {
@@ -29,11 +30,17 @@ class CommentController extends Controller {
 		$comment->content = $request->content;
 
 		if ($comment->save()) {
+            $post = Post::find($comment->post_id);
+			if ($post) {
+				$notifiable = $post->user;
+				$notifiable->notify(new CommentNotification($comment, auth()->user()));
+			}
+
 			return response()->json([
 				'message' => 'Comment successful',
 				'comment' => $comment,
-			],
-				201);
+			],201);
+
 		} else {
 			return response()->json([
 				'message' => "Some error occurred, please try again",
@@ -41,6 +48,7 @@ class CommentController extends Controller {
 				500);
 
 		}
+
 
 	}
 
