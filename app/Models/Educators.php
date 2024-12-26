@@ -15,7 +15,11 @@ class Educators extends Model {
 	}
 
 	public function courses() {
-		return $this->hasMany(User::class, 'user_id');
+		return $this->
+        hasMany(User::class, 'user_id', );
 	}
 
+    public function user() {
+
+    }
 }
