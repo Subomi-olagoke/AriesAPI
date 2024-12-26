@@ -14,7 +14,7 @@ class Topic extends Model
         return $this->belongsToMany(User::class, 'user_id', 'id');
     }
 
-    public function course() {
-        return $this->hasMany(Courses::class, 'course_id');
+    public function courses() {
+        return $this->hasMany(Course::class, 'course_id');
     }
 }
