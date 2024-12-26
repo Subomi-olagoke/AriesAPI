@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Courses;
+use App\Models\Course;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -10,7 +10,7 @@ class CoursesController extends Controller {
 	/**
 	 * Display a listing of the resource.
 	 */
-	public function PostCourse(Request $request) {
+	public function postCourse(Request $request) {
 		$this->validate($request, [
 			'video' => 'required|mimes:mp4,mov,avi|max:102400',
 		]);
@@ -25,7 +25,7 @@ class CoursesController extends Controller {
 		// Save the file path (URL) in the database
 		$videoUrl = config('filesystems.disks.s3.url') . '/course_videos/' . $filename;
 
-		$course = Courses::create([
+		$course = Course::create([
 			'title' => $request->input('title'),
 			'description' => $request->input('description'),
 			'price' => $request->input('price'),
@@ -36,7 +36,7 @@ class CoursesController extends Controller {
 	}
 
 	public function updateCourse(Request $request, $id) {
-		$course = Courses::findOrFail($id);
+		$course = Course::findOrFail($id);
 
 		$this->validate($request, [
 			'title' => 'required|string',
@@ -71,21 +71,9 @@ class CoursesController extends Controller {
 	}
 
 	public function showCourse($id) {
-		$course = Courses::findOrFail($id);
+		$course = Course::findOrFail($id);
 
 		return response()->json(['course' => $course]);
-	}
-
-	public function deleteCourse($id) {
-		$course = Courses::findOrFail($id);
-
-		if ($course->video_url) {
-			Storage::disk('s3')->delete('course_videos/' . basename($course->video_url));
-		}
-
-		$course->delete();
-
-		return response()->json(['message' => 'Course deleted successfully']);
 	}
 
 }
