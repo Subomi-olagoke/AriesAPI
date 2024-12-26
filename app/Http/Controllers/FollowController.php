@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Follow;
 use App\Models\User;
+use App\Notifications\followedNotification;
 
 class FollowController extends Controller {
 	public function createFollow(User $user) {
@@ -21,10 +22,16 @@ class FollowController extends Controller {
 		$newFollow = new Follow();
 		$newFollow->user_id = auth()->user()->id;
 		$newFollow->followeduser = $user->id;
-		$newFollow->save();
+		$save = $newFollow->save();
 
-        back()->with('success', 'User successfully followed');
+        if($save) {
+            $notifiable = User::find($newFollow->followeduser);
+            $notifiable->notify(new followedNotification(auth()->user()));
 
+            return response()->json([
+                'message' => 'followed successfully'
+            ], 201);
+        }
 	}
 
     public function followStat(User $user) {
