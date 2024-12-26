@@ -84,11 +84,11 @@ class User extends Authenticatable {
     }
 
     public function topic() {
-        return $this->belongsToMany(Topic::class, 'user_id', 'id');
+        return $this->belongsToMany(Topic::class, 'user_topic', 'user_id', 'topic_id');
     }
 
     public function courses() {
-        return $this->hasMany(Courses::class);
+        return $this->hasMany(Course::class);
     }
 
     public function followers() {
@@ -97,6 +97,10 @@ class User extends Authenticatable {
 
     public function following() {
         return $this->belongsToMany(Follow::class, 'user_id');
+    }
+
+    public function likes() {
+        return $this->belongsTo(Like::class, 'user_id');
     }
 
 }
