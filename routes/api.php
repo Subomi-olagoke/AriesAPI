@@ -64,6 +64,8 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     Route::post('/post', [PostController::class, 'storePost'])->name('post');
     Route::get('/viewPost', [PostController::class, 'viewSinglePost'])->name('viewPost');
 
+
+
     //chat route
     Route::post('/send-chat-message', function(Request $request){
         $formFields = $request->validate([
