@@ -31,6 +31,11 @@ Route::post('/', [AuthManager::class, 'login']);
 Route::post('/resetPassReq', [AuthManager::class, 'resetPasswordRequest'])->name('resetPassReq');
 Route::post('/resetPassword', [AuthManager::class, 'resetPassword'])->name('resetPassword');
 
+//setup routes. Here we setup user preferences
+Route::post('/setup', [SetupController::class, 'setup'])->name('setup');
+Route::post('/createPreferences', [SetupController::class, 'createPreferences'])->name('createPreferences');
+Route::get('/followOptions', [SetupController::class, 'followOptions'])->name('followOptions');
+
 
 // Protected routes
 Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
@@ -48,11 +53,6 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     //follow routes
     Route::post('/createFollow', [FollowController::class, 'createFollow'])->name('createFollow');
     Route::post('/unfollow', [FollowController::class, 'unFollow'])->name('unfollow');
-
-
-
-    //account setup route
-    Route::post('/setup', [SetupController::class, 'setup'])->name('setup');
 
     //Courses route
     Route::post('/create-course', [EducatorsController::class, 'createCourse'])->name('postCourse');
