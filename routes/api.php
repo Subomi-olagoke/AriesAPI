@@ -40,8 +40,8 @@ Route::get('/followOptions', [SetupController::class, 'followOptions'])->name('f
 // Protected routes
 Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     //logout routes
+    //Route::post('/logoutTest', [AuthManager::class, 'logoutTest'])->name('logoutTest');
     Route::post('/logout', [AuthManager::class, 'logout'])->name('logout');
-    Route::post('/logoutProd', [AuthManager::class, 'logoutProd'])->name('logoutProd');
 
     //profile routes
     Route::get('/profile/{user:username}', [ProfileController::class, 'viewProfile'])->name('profile.view');

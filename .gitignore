@@ -17,6 +17,7 @@ yarn-error.log
 /.idea
 /.vscode
 /vendor
-
+.env
 go.mod
 go.sum
+

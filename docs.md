@@ -38,3 +38,19 @@ LOGIN RESPONSE
     "access_token": "1|ehyzr9R8IXZtcMWWxXIH3S5x2lvCI9PrTU8hEMPafda904f5",
     "token_type": "Bearer"
 }
+
+/resetPassReq
+/resetPassword
+/setup
+/createPreferences
+/followOptions
+/logout
+/profile/{user:username}
+/savePref
+/createFollow
+/unfollow
+/create-course
+/course/{id}
+/feed
+/post
+/viewPost

@@ -89,15 +89,15 @@ use Illuminate\Validation\Rules\Password;
         );
     }
 
+    // public function logoutTest(Request $request) {
+    //     Auth::guard('sanctum')->forgetUser();
+    //     return response()->json([
+    //         'message' => 'Logged out successfully',
+    //     ], 200);
+
+    // }
+
     public function logout(Request $request) {
-        Auth::guard('sanctum')->forgetUser();
-        return response()->json([
-            'message' => 'Logged out successfully',
-        ], 200);
-
-    }
-
-    public function logoutProd(Request $request) {
         $request->session()->invalidate();  //Invalidate session
         $request->session()->regenerateToken();
 
