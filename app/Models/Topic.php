@@ -11,10 +11,10 @@ class Topic extends Model
     use HasFactory;
 
     public function user() {
-        return $this->belongsToMany(User::class, 'user_id', 'id');
+        return $this->belongsToMany(User::class, 'user_topic', 'topic_id', 'user_id');
     }
 
     public function courses() {
-        return $this->hasMany(Course::class, 'course_id');
+        return $this->hasMany(Course::class, 'topic_id');
     }
 }
