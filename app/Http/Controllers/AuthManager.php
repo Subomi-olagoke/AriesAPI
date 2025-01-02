@@ -44,7 +44,8 @@ use Illuminate\Validation\Rules\Password;
             Auth::login($user);
             return response()->json([
                 'message' => 'Registration successful',
-            ], 200);
+                'user' => $user,
+            ], 201);
         } else {
             return response()->json([
                 'message' => 'Some error occurred, please try again',
