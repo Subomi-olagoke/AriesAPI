@@ -10,14 +10,14 @@ class Follow extends Model
     use HasFactory;
 
     public function user() {
-        return $this->hasMany(User::class, 'user_id',  'id');
+        return $this->belongsToMany(User::class, 'user_id');
     }
 
     public function userDoingTheFollowing() {
-        return $this->belongsTo(User::class, 'user_id');
+        return $this->belongsToMany(User::class, 'user_id');
     }
 
     public function userBeingFollowed() {
-        return $this->belongsTo(User::class, 'followeduser');
+        return $this->belongsToMany(User::class, 'followeduser');
     }
 }
