@@ -59,8 +59,6 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     Route::post('/create-course', [EducatorsController::class, 'createCourse'])->name('postCourse');
     Route::get('/course/{id}', [EducatorsController::class, 'view'])->name('view');
 
-    //feed route
-    Route::get('/feed', [FeedController::class, 'feed'])->name('feed');
 
     Route::post('/post', [PostController::class, 'storePost'])->name('post');
     Route::get('/viewPost', [PostController::class, 'viewSinglePost'])->name('viewPost');
