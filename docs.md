@@ -39,6 +39,7 @@ LOGIN RESPONSE
     "token_type": "Bearer"
 }
 
+/user{id}
 /resetPassReq
 /resetPassword
 /setup

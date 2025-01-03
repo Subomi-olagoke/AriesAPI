@@ -193,6 +193,15 @@ use Illuminate\Validation\Rules\Password;
         }
     }
 
+    public function fetchUser($id) {
+        $user = User::find($id);
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        return response()->json($user, 200);
+    }
+
     public function __invoke(EmailVerificationRequest $request): RedirectResponse {
         if ($request->user()->hasVerifiedEmail()) {
             return redirect()->intended(RouteServiceProvider::HOME . '?verified=1');

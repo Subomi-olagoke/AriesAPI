@@ -44,6 +44,9 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     Route::post('/logout', [AuthManager::class, 'logout'])->name('logout');
     Route::get('/feed', [FeedController::class, 'feed'])->name('feed');
 
+    Route::get('/user{id}', [AuthManager::class, 'fetchUser'])->name('user');
+
+
     //profile routes
     Route::get('/profile/{user:username}', [ProfileController::class, 'viewProfile'])->name('profile.view');
 
