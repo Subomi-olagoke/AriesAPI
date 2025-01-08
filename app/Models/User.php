@@ -103,4 +103,8 @@ class User extends Authenticatable {
         return $this->belongsTo(Like::class, 'user_id');
     }
 
+    public function hires() {
+        return $this->hasMany(HireInstructor::class, 'user_id');
+    }
+
 }
