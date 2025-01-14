@@ -11,13 +11,24 @@ class SetupController extends Controller
     public function setup(Request $request) {
         $request->validate([
             'role' => ['required', 'in:educator,learner'],
+            'selected_topic_ids' => 'required|array',
+            'selected_topic_ids.*' => 'exists:topics,id'
         ]);
         $user = auth()->user();
-        $user->save();
+        $topics = Topic::select('id', 'name')->get();
+        //$topics = Topic::all();
 
+        $user->topics()->sync($request->input('selected_topic_ids'));
         return response()->json([
             'message' => 'Role updated successfully.',
             'user' => $user,
+            'preferences' => $user->topics()->pluck('id'),
+            'topics' => $topics->map(function ($topic) {
+                return [
+                    'id' => $topic->id,
+                    'name' => $topic->name,
+                ];
+            }),
         ]);
     }
 
