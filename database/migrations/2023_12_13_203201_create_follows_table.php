@@ -12,10 +12,10 @@ return new class extends Migration {
 {
     Schema::create('follows', function (Blueprint $table) {
         $table->id();
-        $table->uuid('user_id'); // User initiating the follow
+        $table->uuid('user_id');
         $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
 
-        $table->uuid('followeduser'); // followed user
+        $table->uuid('followeduser');
         $table->foreign('followeduser')->references('id')->on('users')->onDelete('cascade');
 
         $table->timestamps();

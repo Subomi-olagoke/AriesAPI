@@ -50,7 +50,7 @@ class PostController extends Controller {
                 $newPost->media_link = $request->file('media_link')->store('media_files');
             }
 
-            $newPost->body = $request->body; // Assuming body is used for additional text or description
+            $newPost->body = $request->body;
         }
 
         $newPost->user_id = $request->user_id;

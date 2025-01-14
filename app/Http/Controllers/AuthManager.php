@@ -40,7 +40,10 @@ use Illuminate\Validation\Rules\Password;
         $user->email = $request->email;
         $user->password = $incomingFields['password'];
 
-        if ($user->save()) {
+
+        $save = $user->save();
+
+        if ($save) {
             Auth::login($user);
             return response()->json([
                 'message' => 'Registration successful',
@@ -51,6 +54,7 @@ use Illuminate\Validation\Rules\Password;
                 'message' => 'Some error occurred, please try again',
             ], 500);
         }
+
     }
 
     public function login(Request $request) {
