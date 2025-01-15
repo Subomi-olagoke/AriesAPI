@@ -9,48 +9,39 @@ use Illuminate\Http\Request;
 use App\Notifications\CommentNotification;
 
 class CommentController extends Controller {
-	public function postComment(Request $request) {
-		$request->validate([
-			'post_id' => 'required',
-			'content' => 'required|string|max:255',
-		]);
+	public function postComment(Request $request, $post_id) {
+        $request->validate([
+            'content' => 'required|string|max:255',
+        ]);
 
-		//checking if user is authenticated
-		$user = $request->user();
-		if (!$user) {
-			return response()->json([
-				'message' => 'User is not authenticated',
-			],
-				401);
-		}
+        $user = auth()->user();
 
-		$comment = new Comment();
-		$comment->post_id = $request->post_id;
-		$comment->user_id = $user->id;
-		$comment->content = $request->content;
+        $comment = new Comment();
+        $comment->post_id = $post_id;
+        $comment->user_id = $user->id;
+        $comment->content = $request->content;
 
-		if ($comment->save()) {
+        try {
+            $comment->save();
             $post = Post::find($comment->post_id);
-			if ($post) {
-				$notifiable = $post->user;
-				$notifiable->notify(new CommentNotification($comment, auth()->user()));
-			}
 
-			return response()->json([
-				'message' => 'Comment successful',
-				'comment' => $comment,
-			],201);
+            if ($post) {
+                $notifiable = $post->user;
+                $notifiable->notify(new CommentNotification($comment, $user));
+            }
 
-		} else {
-			return response()->json([
-				'message' => "Some error occurred, please try again",
-			],
-				500);
+            return response()->json([
+                'message' => 'Comment successful',
+                'comment' => $comment,
+            ], 201);
 
-		}
-
-
-	}
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Some error occurred, please try again',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 
     public function deleteComment($commentId) {
         $deleted = Comment::where(['user_id', '=', auth()->user()->id],
