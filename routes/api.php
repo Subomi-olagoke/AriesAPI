@@ -63,9 +63,22 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     Route::post('/create-course', [EducatorsController::class, 'createCourse'])->name('postCourse');
     Route::get('/course/{id}', [EducatorsController::class, 'view'])->name('view');
 
-
+    //post routes
     Route::post('/post', [PostController::class, 'storePost'])->name('post');
     Route::get('/viewPost', [PostController::class, 'viewSinglePost'])->name('viewPost');
+
+    //comment route
+    Route::post('/post/{post}/comment', [CommentController::class, 'postComment'])->name('post.comment');
+
+    //like routes
+    // Like a post
+    Route::post('/post/{post}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.post');
+
+    // Like a comment
+    Route::post('/comment/{comment}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.comment');
+
+    // Like a course
+    Route::post('/course/{course}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.course');
 
 
 
