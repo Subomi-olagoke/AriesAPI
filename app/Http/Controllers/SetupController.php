@@ -18,7 +18,7 @@ class SetupController extends Controller
         $topics = Topic::select('id', 'name')->get();
         //$topics = Topic::all();
 
-        $user->topics()->sync($request->input('selected_topic_ids'));
+        $user->topic()->sync($request->input('selected_topic_ids'));
         return response()->json([
             'message' => 'Role updated successfully.',
             'user' => $user,
