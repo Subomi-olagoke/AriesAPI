@@ -22,7 +22,7 @@ class SetupController extends Controller
         return response()->json([
             'message' => 'Role updated successfully.',
             'user' => $user,
-            'preferences' => $user->topics()->pluck('id'),
+            'preferences' => $user->topic()->pluck('id'),
             'topics' => $topics->map(function ($topic) {
                 return [
                     'id' => $topic->id,
