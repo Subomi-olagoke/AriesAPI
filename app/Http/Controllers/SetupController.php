@@ -10,11 +10,12 @@ class SetupController extends Controller
 {
     public function setup(Request $request) {
         $request->validate([
+            'user_id' => ['required', 'exists:users,id'],
             'role' => ['required', 'in:educator,learner'],
             'selected_topic_ids' => 'required|array',
             'selected_topic_ids.*' => 'exists:topics,id'
         ]);
-        $user = auth()->user();
+        $user =  User::find($request->input('user_id'));
         $topics = Topic::select('id', 'name')->get();
         //$topics = Topic::all();
 
