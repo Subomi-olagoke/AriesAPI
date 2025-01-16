@@ -30,6 +30,9 @@ Route::post('/register', [AuthManager::class, 'register'])->name('register');
 Route::post('/login', [AuthManager::class, 'login'])->name('login');
 Route::post('/resetPassReq', [AuthManager::class, 'resetPasswordRequest'])->name('resetPassReq');
 Route::post('/resetPassword', [AuthManager::class, 'resetPassword'])->name('resetPassword');
+Route::post('/setup', [SetupController::class, 'setup'])->name('setup');
+Route::post('/createPreferences', [SetupController::class, 'createPreferences'])->name('createPreferences');
+Route::get('/followOptions', [SetupController::class, 'followOptions'])->name('followOptions');
 
 
 
@@ -39,9 +42,7 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     //logout routes
     //Route::post('/logoutTest', [AuthManager::class, 'logoutTest'])->name('logoutTest');
     //setup routes. Here we setup user preferences
-    Route::post('/setup', [SetupController::class, 'setup'])->name('setup');
-    Route::post('/createPreferences', [SetupController::class, 'createPreferences'])->name('createPreferences');
-    Route::get('/followOptions', [SetupController::class, 'followOptions'])->name('followOptions');
+
     Route::post('/logout', [AuthManager::class, 'logout'])->name('logout');
     Route::get('/feed', [FeedController::class, 'feed'])->name('feed');
 
