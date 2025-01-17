@@ -8,8 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Post extends Model {
-
-	use HasFactory;
     use Searchable;
 
     public function toSearchableArray()
@@ -20,6 +18,9 @@ class Post extends Model {
             'content' => $this->content,
         ];
     }
+
+	use HasFactory;
+
 
 	protected $fillable = ['title', 'body', 'user_id', 'media_link', 'media_type'];
 
