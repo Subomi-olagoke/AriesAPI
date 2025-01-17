@@ -9,6 +9,7 @@ use App\Http\Controllers\LikeController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\FollowController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\CoursesController;
 use App\Http\Controllers\ProfileController;
@@ -80,6 +81,8 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
 
     // Like a course
     Route::post('/course/{course}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.course');
+
+    Route::get('/search', [SearchController::class, 'search'])->name('search');
 
 
 

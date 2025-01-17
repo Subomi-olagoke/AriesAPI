@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Support\Str;
+use Laravel\Scout\Searchable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,6 +11,18 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 
 class User extends Authenticatable {
     use HasApiTokens, HasFactory, Notifiable;
+    use Searchable;
+
+    /**
+     * Define the searchable data.
+     */
+    public function toSearchableArray()
+    {
+        return [
+            'id' => $this->id,
+            'username' => $this->username,
+        ];
+    }
 
 
     const ROLE_EDUCATOR = 'educator';
