@@ -16,8 +16,15 @@ class SetupController extends Controller
             'selected_topic_ids.*' => 'exists:topics,id'
         ]);
         $user =  User::find($request->input('user_id'));
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        $user->role = $request->role;
+        $user->save();
         $topics = Topic::select('id', 'name')->get();
         //$topics = Topic::all();
+
 
         $user->topic()->sync($request->input('selected_topic_ids'));
         return response()->json([
