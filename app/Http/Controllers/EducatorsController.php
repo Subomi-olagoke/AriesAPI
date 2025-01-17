@@ -15,7 +15,7 @@ class EducatorsController extends Controller {
 
 	//post courses
 	public function createCourse(Request $request) {
-        $user = $request->auth()->user();
+        $user = auth()->user();
         if($user->role != User::ROLE_EDUCATOR) {
             return response()->json([
                 'message' => 'you are not allowed to use this'
