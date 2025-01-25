@@ -15,7 +15,7 @@ class Post extends Model {
         return [
             'id' => $this->id,
             'title' => $this->title,
-            'content' => $this->content,
+            'body' => $this->body,
         ];
     }
 
