@@ -32,15 +32,18 @@ class PostController extends Controller {
                 if ($request->media_type == 'image') {
                     $request->validate([
                         'media_link' => 'image|mimes:jpg,jpeg,png,gif|max:5120',
+                        'text_content' =>  'nullable|string|max:1000'
                     ]);
                 } else if ($request->media_type == 'video') {
                     $request->validate([
                         'media_link' => 'mimetypes:video/avi,video/mpeg,video/quicktime|max:5120',
+                        'text_content' =>  'nullable|string|max:1000'
                     ]);
 
                     if ($request->file('media_thumbnail')) {
                         $request->validate([
                             'media_thumbnail' => 'image|mimes:jpg,jpeg,png,gif|max:5120',
+                            'text_content' =>  'nullable|string|max:1000'
                         ]);
 
                         $newPost->media_thumbnail = $request->file('media_thumbnail')->store('media_thumbnails');
