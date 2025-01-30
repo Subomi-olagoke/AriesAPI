@@ -13,6 +13,11 @@ return new class extends Migration
     {
         Schema::create('hire_requests', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('client_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('tutor_id')->constrained('users')->cascadeOnDelete();
+            $table->enum('status', ['pending', 'accepted', 'declined'])->default('pending');
+            $table->text('message')->nullable();
+            $table->uuid('user_id');
             $table->timestamps();
         });
     }
