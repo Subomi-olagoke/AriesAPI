@@ -120,4 +120,14 @@ class User extends Authenticatable {
         return $this->hasMany(HireInstructor::class, 'user_id');
     }
 
+    public function sentHireRequests()
+    {
+        return $this->hasMany(HireRequest::class, 'client_id');
+    }
+
+    public function receivedHireRequests()
+    {
+        return $this->hasMany(HireRequest::class, 'tutor_id');
+    }
+
 }
