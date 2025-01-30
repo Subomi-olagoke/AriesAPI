@@ -14,6 +14,7 @@ use App\Http\Controllers\CommentController;
 use App\Http\Controllers\CoursesController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\EducatorsController;
+use App\Http\Controllers\HireRequestController;
 
 /*
 |--------------------------------------------------------------------------
@@ -83,6 +84,11 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     Route::post('/course/{course}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.course');
 
     Route::get('/search', [SearchController::class, 'search'])->name('search');
+
+    Route::post('/hire-request', [HireRequestController::class, 'sendRequest']);
+    Route::patch('/hire-request/{id}/accept', [HireRequestController::class, 'acceptRequest']);
+    Route::patch('/hire-request/{id}/decline', [HireRequestController::class, 'declineRequest']);
+    Route::get('/hire-requests', [HireRequestController::class, 'getRequests']);
 
 
 
