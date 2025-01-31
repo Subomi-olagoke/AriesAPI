@@ -54,13 +54,16 @@ class FollowController extends Controller {
 	public function unFollow($id) {
 
         $existCheck = $this->followStat($id);
+
+        $deleted = 0;
+
         if($existCheck) {
         $deleted = Follow::where('user_id', auth()->user()->id)
         ->where('followeduser', $id)
         ->delete();
         }
 
-        if($deleted) {
+        if($deleted >= 1) {
             return response()->json([
                 "message" => "unfollowed user"
             ], 200);
