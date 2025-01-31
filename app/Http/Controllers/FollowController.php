@@ -2,26 +2,38 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Follow;
 use App\Models\User;
+use App\Models\Follow;
+use Illuminate\Http\Request;
 use App\Notifications\followedNotification;
 
 class FollowController extends Controller {
-	public function createFollow(User $user) {
+	public function createFollow(Request $request, $id) {
 		// cannot follow self
-        if($user->id == auth()->user()->id) {
-            return back()->with('failure', 'You cannot follow yourself');
-
+        $user = $request->user();
+        if($id == $user->id) {
+            return response()->json([
+                "message" => "you cannot follow yourself"
+            ], 403);
         }
 		//cannot follow already followed user
-        $existCheck = $this->followStat($user);
+        $existCheck = $this->followStat($id);
         if($existCheck) {
-            return back()->with('failure', 'You are already following this user');
+            return response()->json([
+                "message" => "You are already following this user"
+            ], 409);
         }
 
+         //Check if the user to follow exists
+        $followedUser = User::find($id);
+        if (!$followedUser) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+
 		$newFollow = new Follow();
-		$newFollow->user_id = auth()->user()->id;
-		$newFollow->followeduser = $user->id;
+		$newFollow->user_id = $user->id;
+		$newFollow->followeduser = $id;
 		$save = $newFollow->save();
 
         if($save) {
@@ -34,9 +46,9 @@ class FollowController extends Controller {
         }
 	}
 
-    public function followStat(User $user) {
+    public function followStat($id) {
         return Follow::where([['user_id', '=', auth()->user()->id],
-        ['followeduser', '=', $user->id]])->count();
+        ['followeduser', '=', $id]])->exists();
     }
 
 	public function unFollow(User $user) {
