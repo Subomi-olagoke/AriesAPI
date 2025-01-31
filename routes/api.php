@@ -30,7 +30,7 @@ use App\Http\Controllers\HireRequestController;
 // Public routes
 Route::post('/register', [AuthManager::class, 'register'])->name('register');
 Route::post('/login', [AuthManager::class, 'login'])->name('login');
-Route::post('/resetPassReq', [AuthManager::class, 'resetPasswordRequest'])->name('resetPassReq');
+Route::post('/forgotPassword', [AuthManager::class, 'forgorPassword'])->name('resetPassReq');
 Route::post('/resetPassword', [AuthManager::class, 'resetPassword'])->name('resetPassword');
 Route::post('/setup', [SetupController::class, 'setup'])->name('setup');
 Route::post('/createPreferences', [SetupController::class, 'createPreferences'])->name('createPreferences');
