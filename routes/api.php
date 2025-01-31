@@ -59,8 +59,8 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     Route::post('/savePref', [SetupController::class, 'savePreferences'])->name('createPref');
 
     //follow routes
-    Route::post('/createFollow', [FollowController::class, 'createFollow'])->name('createFollow');
-    Route::post('/unfollow', [FollowController::class, 'unFollow'])->name('unfollow');
+    Route::post('/follow/{id}', [FollowController::class, 'createFollow'])->name('createFollow');
+    Route::post('/unfollow/{id}', [FollowController::class, 'unFollow'])->name('unfollow');
 
     //Courses route
     Route::post('/create-course', [EducatorsController::class, 'createCourse'])->name('postCourse');
