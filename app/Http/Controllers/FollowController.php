@@ -61,7 +61,9 @@ class FollowController extends Controller {
                 "message" => "unfollowed user"
             ], 200);
         }
-        return back()->with('failure', 'You are not following this user');
+        return response()->json([
+            "message" => "error. try again later"
+        ], 500);
 	}
 
     public function followerCount(User $user) {
