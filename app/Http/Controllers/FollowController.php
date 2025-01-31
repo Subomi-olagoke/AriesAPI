@@ -55,6 +55,12 @@ class FollowController extends Controller {
 
         $existCheck = $this->followStat($id);
 
+        if(!$existCheck) {
+            return response()->json([
+                "message" => "You are not following this user"
+            ], 403);
+        }
+
         $deleted = 0;
 
         if($existCheck) {
@@ -69,7 +75,7 @@ class FollowController extends Controller {
             ], 200);
         }
         return response()->json([
-            "message" => "error. try again later, or you are not following this user"
+            "message" => "error. try again later"
         ], 500);
 	}
 
