@@ -52,9 +52,13 @@ class FollowController extends Controller {
     }
 
 	public function unFollow($id) {
+
+        $existCheck = $this->followStat($id);
+        if($existCheck) {
         $deleted = Follow::where('user_id', auth()->user()->id)
         ->where('followeduser', $id)
         ->delete();
+        }
 
         if($deleted) {
             return response()->json([
@@ -62,7 +66,7 @@ class FollowController extends Controller {
             ], 200);
         }
         return response()->json([
-            "message" => "error. try again later"
+            "message" => "error. try again later, or you are not following this user"
         ], 500);
 	}
 
