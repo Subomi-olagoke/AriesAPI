@@ -52,8 +52,9 @@ class FollowController extends Controller {
     }
 
 	public function unFollow($id) {
-        $deleted = Follow::where(['user_id', '=', auth()->user()->id],
-        ['followeduser', '=', $id])->delete();
+        $deleted = Follow::where('user_id', auth()->user()->id)
+        ->where('followeduser', $id)
+        ->delete();
 
         if($deleted) {
             return response()->json([
