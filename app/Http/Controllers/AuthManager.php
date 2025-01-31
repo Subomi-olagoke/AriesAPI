@@ -123,7 +123,7 @@ use Illuminate\Validation\Rules\Password;
     }
 
 
-    public function resetPasswordRequest(Request $request) {
+    public function forgorPassword(Request $request) {
         $request->validate([
             'email' => 'required|string|email',
         ]);
