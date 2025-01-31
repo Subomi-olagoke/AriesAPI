@@ -9,25 +9,25 @@ use App\Notifications\followedNotification;
 
 class FollowController extends Controller {
 	public function createFollow(Request $request, $id) {
-		// cannot follow self
+
         $user = $request->user();
         if($id == $user->id) {
             return response()->json([
                 "message" => "you cannot follow yourself"
             ], 403);
         }
-		//cannot follow already followed user
+
+
+        $followedUser = User::find($id);
+        if (!$followedUser) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
         $existCheck = $this->followStat($id);
         if($existCheck) {
             return response()->json([
                 "message" => "You are already following this user"
             ], 409);
-        }
-
-         //Check if the user to follow exists
-        $followedUser = User::find($id);
-        if (!$followedUser) {
-            return response()->json(['message' => 'User not found'], 404);
         }
 
 
