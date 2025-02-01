@@ -71,19 +71,22 @@ class SetupController extends Controller
     }
 
     public function followOptions(Request $request) {
-        $user = $request->auth()->user();
+        $user = auth()->user();
         $preferredTopicIds = $user->topics()->pluck('id');
 
-        $educators = User::where('role', User::ROLE_EDUCATOR)
-        ->whereHas('topics', fn($query) => $query->whereIn('id', $preferredTopicIds))
+        // $educators = User::where('role', User::ROLE_EDUCATOR)
+        // ->whereHas('topics', fn($query) => $query->whereIn('id', $preferredTopicIds))
+        // ->get();
+
+        $users = User::whereHas('topics', fn($query) => $query->whereIn('topics.id', $preferredTopicIds)) // Fetch users following the same topics
         ->get();
 
         return response()->json([
-            'educators' => $educators->map(fn($educator) => [
-                'id' => $educator->id,
-                'name' => $educator->name,
-                'bio' => $educator->bio ?? '',
-                'profile_image' => $educator->profile_image ?? '',
+            'user' => $user->map(fn($$user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'bio' => $user->bio ?? '',
+                'profile_image' => $user->profile_image ?? '',
             ]),
         ]);
 
