@@ -13,25 +13,61 @@ use Illuminate\Http\Request;
 class FeedController extends Controller
 {
     public function feed() {
-        $user = auth()->user();
-        $topicIds = $user->topic()->pluck('topic_id');
-        $courses = Course::whereIn('topic_id', $topicIds)->get();
 
-        $posts = Post::with('user')
-        ->whereIn('user_id', $user->following()->pluck('id'))
-        ->latest()
-        ->get();
+        public function feed() {
+            $user = auth()->user();
 
-        if($user->role == User::ROLE_LEARNER) {
+
+            $topicIds = $user->topics()->pluck('id');
+
+
+            $courses = Course::whereIn('topic_id', $topicIds)->get();
+
+
+            $followingUserIds = $user->following()->pluck('id');
+            $topicUserIds = User::whereHas('topics', fn($query) => $query->whereIn('topics.id', $topicIds))->pluck('id');
+
+            $userIds = $followingUserIds->merge($topicUserIds)->unique();
+
+
+            $posts = Post::with('user')
+                ->whereIn('user_id', $userIds)
+                ->latest()
+                ->get();
+
+            if($user->role == User::ROLE_LEARNER) {
+                return response()->json([
+                    'posts' => $posts,
+                    'courses' => $courses
+                ]);
+            }
+
             return response()->json([
-                'posts' => $posts,
-                'courses' => $courses
+                'posts' => $posts
             ]);
         }
 
-        return response()->json([
-            'posts' => $posts
-        ]);
+
+
+        // $user = auth()->user();
+        // $topicIds = $user->topic()->pluck('topic_id');
+        // $courses = Course::whereIn('topic_id', $topicIds)->get();
+
+        // $posts = Post::with('user')
+        // ->whereIn('user_id', $user->following()->pluck('id'))
+        // ->latest()
+        // ->get();
+
+        // if($user->role == User::ROLE_LEARNER) {
+        //     return response()->json([
+        //         'posts' => $posts,
+        //         'courses' => $courses
+        //     ]);
+        // }
+
+        // return response()->json([
+        //     'posts' => $posts
+        // ]);
 
     }
 
