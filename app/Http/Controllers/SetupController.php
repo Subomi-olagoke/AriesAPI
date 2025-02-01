@@ -82,7 +82,7 @@ class SetupController extends Controller
         ->get();
 
         return response()->json([
-            'users' => $users->map(fn($$user) => [
+            'users' => $users->map(fn($user) => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'bio' => $user->bio ?? '',
