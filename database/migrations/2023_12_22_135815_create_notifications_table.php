@@ -14,6 +14,7 @@ return new class extends Migration {
             $table->uuid('user_id');
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
 			$table->enum('type', ['followed', 'like', 'comment'])->nullable();
+            $table->json('data');
 
 			$table->tinyInteger('seen')->default(0);
 			$table->timestamps();
