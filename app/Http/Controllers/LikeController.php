@@ -40,18 +40,21 @@ class LikeController {
         // Create a new like
         $newLike = new Like();
         $newLike->user_id = $user->id;
+        $newLike->post_id = $postId ?: null;
+        $newLike->comment_id = $commentId ?: null;
+        $newLike->course_id = $courseId ?: null;
 
-        if ($postId !== null) {
-            $newLike->post_id = $postId;
-        }
+        // if ($postId !== null) {
+        //     $newLike->post_id = $postId;
+        // }
 
-        if ($commentId !== null) {
-            $newLike->comment_id = $commentId;
-        }
+        // if ($commentId !== null) {
+        //     $newLike->comment_id = $commentId;
+        // }
 
-        if ($courseId !== null) {
-            $newLike->course_id = $courseId;
-        }
+        // if ($courseId !== null) {
+        //     $newLike->course_id = $courseId;
+        // }
 
         $save = $newLike->save();
 
