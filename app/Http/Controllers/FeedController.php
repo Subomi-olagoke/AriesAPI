@@ -18,7 +18,7 @@ class FeedController extends Controller
             $user = auth()->user();
 
 
-            $topicIds = $user->topic()->pluck('id');
+            $topicIds = $user->topic()->pluck('topic_id');
 
 
             $courses = Course::whereIn('topic_id', $topicIds)->get();
