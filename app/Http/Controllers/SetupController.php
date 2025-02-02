@@ -29,6 +29,7 @@ class SetupController extends Controller
         $user->topic()->sync($request->input('selected_topic_ids'));
         return response()->json([
             'message' => 'Role updated successfully.',
+            'setup_completed' => $user->setup_completed,
             'user' => $user,
             'preferences' => $user->topic()->pluck('topic_id'),
             'topics' => $topics->map(function ($topic) {
@@ -90,6 +91,18 @@ class SetupController extends Controller
             ]),
         ]);
 
+    }
+
+    public function checkSetupStatus(Request $request) {
+        $user = User::find($request->query('user_id'));
+
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        return response()->json([
+            'setup_completed' => $user->setup_completed ?? false,
+        ]);
     }
 
 }
