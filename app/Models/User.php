@@ -20,7 +20,7 @@ class User extends Authenticatable {
      protected $appends = ['setup_completed'];
 
      public function getSetupCompletedAttribute(): bool {
-        return !empty($this->role) && $this->topics()->exists();
+        return !empty($this->role) && $this->topic()->exists();
     }
     public function toSearchableArray()
     {
