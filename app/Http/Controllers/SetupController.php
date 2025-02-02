@@ -86,7 +86,7 @@ class SetupController extends Controller
         return response()->json([
             'users' => $users->map(fn($user) => [
                 'id' => $user->id,
-                'name' => $user->name,
+                'username' => $user->username,
                 'bio' => $user->bio ?? '',
                 'profile_image' => $user->profile_image ?? '',
                 'topics' => $user->topic->map(fn($topic) => $topic->name),
