@@ -12,20 +12,20 @@ use Illuminate\Http\Request;
 
 class FeedController extends Controller
 {
-    public function feed() {
+
 
         public function feed() {
             $user = auth()->user();
 
 
-            $topicIds = $user->topics()->pluck('id');
+            $topicIds = $user->topic()->pluck('id');
 
 
             $courses = Course::whereIn('topic_id', $topicIds)->get();
 
 
             $followingUserIds = $user->following()->pluck('id');
-            $topicUserIds = User::whereHas('topics', fn($query) => $query->whereIn('topics.id', $topicIds))->pluck('id');
+            $topicUserIds = User::whereHas('topic', fn($query) => $query->whereIn('topics.id', $topicIds))->pluck('id');
 
             $userIds = $followingUserIds->merge($topicUserIds)->unique();
 
@@ -69,7 +69,6 @@ class FeedController extends Controller
         //     'posts' => $posts
         // ]);
 
-    }
 
     public function suggestedCourses() {
         $user = auth()->user();
