@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Course;
 use App\Models\Post;
 use Illuminate\Http\Request;
-use Workbench\App\Models\User;
+use App\Models\User;
 
 class SearchController extends Controller
 {
