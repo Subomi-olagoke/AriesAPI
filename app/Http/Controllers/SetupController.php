@@ -80,6 +80,7 @@ class SetupController extends Controller
         // ->get();
 
         $users = User::whereHas('topic', fn($query) => $query->whereIn('topics.id', $preferredTopicIds))
+        ->with('topics')
         ->get();
 
         return response()->json([
@@ -88,6 +89,7 @@ class SetupController extends Controller
                 'name' => $user->name,
                 'bio' => $user->bio ?? '',
                 'profile_image' => $user->profile_image ?? '',
+                'topics' => $user->topics->map(fn($topic) => $topic->name),
             ]),
         ]);
 
