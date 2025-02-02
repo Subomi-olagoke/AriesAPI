@@ -63,11 +63,11 @@ class SetupController extends Controller
         ]);
 
         $user = $request->auth()->user();
-        $user->topics()->sync($request->input('selected_topic_ids'));
+        $user->topic()->sync($request->input('selected_topic_ids'));
 
         return response()->json([
             'message' => 'Preferences saved successfully',
-            'preferences' => $user->topics()->pluck('id'),
+            'preferences' => $user->topic()->pluck('id'),
         ], 200);
     }
 
