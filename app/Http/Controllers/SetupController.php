@@ -78,7 +78,7 @@ class SetupController extends Controller
         // ->whereHas('topics', fn($query) => $query->whereIn('id', $preferredTopicIds))
         // ->get();
 
-        $users = User::whereHas('topics', fn($query) => $query->whereIn('topics.id', $preferredTopicIds)) // Fetch users following the same topics
+        $users = User::whereHas('topic', fn($query) => $query->whereIn('topics.id', $preferredTopicIds))
         ->get();
 
         return response()->json([
