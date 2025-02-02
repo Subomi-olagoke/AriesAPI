@@ -38,15 +38,15 @@ class LikeNotification extends Notification
     }
 
     public function toDatabase() {
-        $post_id = $this->post->id;
-        $comment_id = $this->comment->id;
-        $course_id = $this->course->id;
+        $post_id = $this->post?->id;
+        $comment_id = $this->comment?->id;
+        $course_id = $this->course?->id;
 
         if($post_id) {
             return [
                 'message' => "{$this->user->name} liked your post.",
                 'avatar' => $this->user->avatar,
-                'post_id' => $this->post->id,
+                'post_id' => $post_id,
                 'liked_by' => $this->user->id,
             ];
         }
@@ -54,7 +54,7 @@ class LikeNotification extends Notification
             return [
                 'message' => "{$this->user->name} liked your comment.",
                 'avatar' => $this->user->avatar,
-                'comment_id' => $this->comment->id,
+                'comment_id' => $comment_id,
                 'liked_by' => $this->user->id,
             ];
         }
@@ -62,7 +62,7 @@ class LikeNotification extends Notification
             return [
                 'message' => "{$this->user->name} liked your course.",
                 'avatar' => $this->user->avatar,
-                'course_id' => $this->course->id,
+                'course_id' => $course_id,
                 'liked_by' => $this->user->id,
             ];
         }
