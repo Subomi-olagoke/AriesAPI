@@ -16,6 +16,12 @@ class User extends Authenticatable {
     /**
      * Define the searchable data.
      */
+
+     protected $appends = ['setup_completed'];
+
+     public function getSetupCompletedAttribute(): bool {
+        return !empty($this->role) && $this->topics()->exists();
+    }
     public function toSearchableArray()
     {
         return [
