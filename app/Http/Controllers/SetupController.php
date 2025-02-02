@@ -71,8 +71,8 @@ class SetupController extends Controller
     }
 
     public function followOptions(Request $request) {
-        $user = auth()->user();
-        $preferredTopicIds = $user->topics()->pluck('id');
+
+        $preferredTopicIds = Topic::pluck('id');
 
         // $educators = User::where('role', User::ROLE_EDUCATOR)
         // ->whereHas('topics', fn($query) => $query->whereIn('id', $preferredTopicIds))
