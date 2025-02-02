@@ -90,6 +90,9 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     Route::patch('/hire-request/{id}/decline', [HireRequestController::class, 'declineRequest']);
     Route::get('/hire-requests', [HireRequestController::class, 'getRequests']);
 
+    //setup status
+    Route::get('/setup_status', [SetupController::class, 'checkSetupStatus']);
+
 
 
     //chat route
