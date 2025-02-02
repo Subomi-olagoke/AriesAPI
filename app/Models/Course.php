@@ -14,7 +14,7 @@ class Course extends Model {
         return [
             'id' => $this->id,
             'title' => $this->title,
-            'content' => $this->content,
+            'description' => $this->description
         ];
     }
 	protected $fillable = [
