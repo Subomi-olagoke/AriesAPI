@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('notifications', function (Blueprint $table) {
-            $table->timestamp('read_at')->nullable();
-        });
+        if (!Schema::hasColumn('notifications', 'data')) {
+            Schema::table('notifications', function (Blueprint $table) {
+                $table->timestamp('read_at')->nullable();
+            });
+        }
     }
 
     /**

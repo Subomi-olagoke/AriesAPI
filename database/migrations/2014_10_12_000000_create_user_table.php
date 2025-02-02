@@ -31,6 +31,14 @@ return new class extends Migration {
 	 * Reverse the migrations.
 	 */
 	public function down(): void {
+        if (Schema::hasTable('user_topic')) {
+            Schema::table('user_topic', function (Blueprint $table) {
+                // Drop the foreign key constraints using the correct table and constraint names
+                $table->dropForeign('user_topic_user_id_foreign');
+                $table->dropForeign('user_topic_topic_id_foreign');
+            });
+        }
+
 		Schema::dropIfExists('users');
 	}
 };
