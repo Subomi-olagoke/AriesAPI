@@ -40,7 +40,7 @@ class followedNotification extends Notification
             'message' => "{$this->follower->name} followed you",
             'avatar' => $this->follower->avatar ?? null,
             'follower_id' => $this->follower->id,
-            'user_id' => $this->followedUser->id
+            'user_id' => $this->followedUser->id,
         ];
     }
 
