@@ -11,18 +11,27 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('notifications', function (Blueprint $table) {
-            $table->uuid('id')->primary()->change();
-        });
-    }
+            Schema::table('notifications', function (Blueprint $table) {
+                // Drop the existing primary key
+                $table->dropPrimary();
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        Schema::table('notifications', function (Blueprint $table) {
-            $table->bigIncrements('id')->change();
-        });
-    }
+                // Change the 'id' column type to UUID (CHAR(36))
+                $table->uuid('id')->primary()->change();
+            });
+        }
+
+        /**
+         * Reverse the migrations.
+         */
+        public function down(): void
+        {
+            Schema::table('notifications', function (Blueprint $table) {
+                // Revert the 'id' column to its original type
+                $table->bigIncrements('id')->change();
+
+                // Add back the original primary key
+                $table->primary('id');
+            });
+        }
+
 };
