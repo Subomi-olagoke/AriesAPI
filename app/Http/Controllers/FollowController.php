@@ -38,7 +38,7 @@ class FollowController extends Controller {
 
         if($save) {
             $notifiable = User::find($newFollow->followeduser);
-            $notifiable->notify(new followedNotification(auth()->user()));
+            $notifiable->notify(new followedNotification($user, $followedUser));
 
             return response()->json([
                 'message' => 'followed successfully'
