@@ -115,7 +115,7 @@ class User extends Authenticatable {
     }
 
     public function following() {
-        return $this->belongsTo(Follow::class,'user_id');
+        return $this->hasMany(Follow::class,'user_id');
     }
 
     public function likes() {

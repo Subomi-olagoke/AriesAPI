@@ -14,10 +14,10 @@ class Follow extends Model
     }
 
     public function userDoingTheFollowing() {
-        return $this->belongsToMany(User::class, 'user_id');
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     public function userBeingFollowed() {
-        return $this->belongsToMany(User::class, 'followeduser');
+        return $this->belongsTo(User::class, 'followeduser');
     }
 }
