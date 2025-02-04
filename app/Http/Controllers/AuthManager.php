@@ -45,9 +45,13 @@ use Illuminate\Validation\Rules\Password;
 
         if ($save) {
             Auth::login($user);
+
+            $token = $user->createToken('auth_token')->plainTextToken;
+
             return response()->json([
                 'message' => 'Registration successful',
                 'user' => $user,
+                'token' => $token
             ], 201);
         } else {
             return response()->json([
