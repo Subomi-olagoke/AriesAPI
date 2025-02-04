@@ -36,9 +36,6 @@ class FollowController extends Controller {
 		$newFollow->followeduser = $id;
 		$save = $newFollow->save();
 
-        dd($user->id, $followedUser->id);
-
-
         if($save) {
             //$notifiable = User::find($newFollow->followeduser);
             $followedUser->notify(new followedNotification($user, $followedUser));
