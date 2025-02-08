@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\User;
 use App\Events\ChatMessage;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use App\Http\Controllers\AuthManager;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FeedController;
@@ -14,17 +16,13 @@ use App\Http\Controllers\CommentController;
 use App\Http\Controllers\CoursesController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\EducatorsController;
+use App\Http\Controllers\LiveClassController;
 use App\Http\Controllers\HireRequestController;
 
 /*
 |--------------------------------------------------------------------------
 | API Routes
 |--------------------------------------------------------------------------
-|
-| Here is where you can register API routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "api" middleware group. Make something great!
-|
 */
 
 // Public routes
@@ -36,20 +34,17 @@ Route::post('/setup', [SetupController::class, 'setup'])->name('setup');
 Route::post('/createPreferences', [SetupController::class, 'createPreferences'])->name('createPreferences');
 Route::get('/followOptions', [SetupController::class, 'followOptions'])->name('followOptions');
 
-
-
-
 // Protected routes
-Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
-    //logout routes
-    //Route::post('/logoutTest', [AuthManager::class, 'logoutTest'])->name('logoutTest');
-    //setup routes. Here we setup user preferences
+Route::middleware(['auth:sanctum'])->group(function() {
+    // Live Class routes
+    Route::post('/live-class', [LiveClassController::class, 'store']);
+    Route::post('/live-class/{id}/join', [LiveClassController::class, 'join']);
+    Route::post('/live-class/{id}/end', [LiveClassController::class, 'end']);
+    Route::get('/live-class/{id}', [LiveClassController::class, 'show']);
 
     Route::post('/logout', [AuthManager::class, 'logout'])->name('logout');
     Route::get('/feed', [FeedController::class, 'feed'])->name('feed');
-
     Route::get('/user{id}', [AuthManager::class, 'fetchUser'])->name('user');
-
 
     //profile routes
     Route::get('/profile/{user:username}', [ProfileController::class, 'viewProfile'])->name('profile');
@@ -74,13 +69,8 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     Route::post('/post/{post}/comment', [CommentController::class, 'postComment'])->name('post.comment');
 
     //like routes
-    // Like a post
     Route::post('/post/{post}/like', [LikeController::class, 'createLike'])->name('like.post');
-
-    // Like a comment
     Route::post('/comment/{comment}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.comment');
-
-    // Like a course
     Route::post('/course/{course}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.course');
 
     Route::get('/search', [SearchController::class, 'search'])->name('search');
@@ -92,8 +82,6 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
 
     //setup status
     Route::get('/setup_status', [SetupController::class, 'checkSetupStatus']);
-
-
 
     //chat route
     Route::post('/send-chat-message', function(Request $request){
@@ -109,5 +97,4 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
             'avatar' => auth()->user()->avatar]))->toOthers();
             return response()->noContent();
     })->middleware(middleware: 'mustBeLoggedIn');
-
 });
