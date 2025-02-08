@@ -9,23 +9,23 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class UserJoinedClass implements ShouldBroadcast
+class ParticipantSettingsUpdated implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public $liveClass;
-    public $user;
-    public $participant;
+    public $classId;
+    public $userId;
+    public $settings;
 
-    public function __construct($liveClass, $user, $participant)
+    public function __construct($classId, $userId, $settings)
     {
-        $this->liveClass = $liveClass;
-        $this->user = $user;
-        $this->participant = $participant;
+        $this->classId = $classId;
+        $this->userId = $userId;
+        $this->settings = $settings;
     }
 
     public function broadcastOn()
     {
-        return new PresenceChannel('live-class.'.$this->liveClass->id);
+        return new PresenceChannel('live-class.'.$this->classId);
     }
 }

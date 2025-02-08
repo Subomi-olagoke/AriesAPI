@@ -9,19 +9,15 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class UserJoinedClass implements ShouldBroadcast
+class StreamStarted implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public $liveClass;
-    public $user;
-    public $participant;
 
-    public function __construct($liveClass, $user, $participant)
+    public function __construct($liveClass)
     {
         $this->liveClass = $liveClass;
-        $this->user = $user;
-        $this->participant = $participant;
     }
 
     public function broadcastOn()

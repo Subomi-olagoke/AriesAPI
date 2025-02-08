@@ -9,23 +9,23 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class UserJoinedClass implements ShouldBroadcast
+class WebRTCSignaling implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public $liveClass;
-    public $user;
-    public $participant;
+    public $signal;
+    public $userId;
+    public $classId;
 
-    public function __construct($liveClass, $user, $participant)
+    public function __construct($classId, $userId, $signal)
     {
-        $this->liveClass = $liveClass;
-        $this->user = $user;
-        $this->participant = $participant;
+        $this->classId = $classId;
+        $this->userId = $userId;
+        $this->signal = $signal;
     }
 
     public function broadcastOn()
     {
-        return new PresenceChannel('live-class.'.$this->liveClass->id);
+        return new PresenceChannel('live-class.'.$this->classId);
     }
 }

@@ -37,10 +37,18 @@ Route::get('/followOptions', [SetupController::class, 'followOptions'])->name('f
 // Protected routes
 Route::middleware(['auth:sanctum'])->group(function() {
     // Live Class routes
-    Route::post('/live-class', [LiveClassController::class, 'store']);
-    Route::post('/live-class/{id}/join', [LiveClassController::class, 'join']);
-    Route::post('/live-class/{id}/end', [LiveClassController::class, 'end']);
-    Route::get('/live-class/{id}', [LiveClassController::class, 'show']);
+    Route::prefix('live-class')->group(function () {
+        Route::post('/', [LiveClassController::class, 'store']);
+        Route::get('/{id}', [LiveClassController::class, 'show']);
+        Route::post('/{id}/join', [LiveClassController::class, 'join']);
+        Route::post('/{id}/end', [LiveClassController::class, 'end']);
+        // WebRTC and Streaming routes
+        Route::post('/{id}/signal', [LiveClassController::class, 'signal']);
+        Route::get('/{id}/participants', [LiveClassController::class, 'getParticipants']);
+        Route::post('/{id}/start-stream', [LiveClassController::class, 'startStream']);
+        Route::post('/{id}/stop-stream', [LiveClassController::class, 'stopStream']);
+        Route::get('/{id}/stream-info', [LiveClassController::class, 'getStreamInfo']);
+    });
 
     Route::post('/logout', [AuthManager::class, 'logout'])->name('logout');
     Route::get('/feed', [FeedController::class, 'feed'])->name('feed');
@@ -97,4 +105,28 @@ Route::middleware(['auth:sanctum'])->group(function() {
             'avatar' => auth()->user()->avatar]))->toOthers();
             return response()->noContent();
     })->middleware(middleware: 'mustBeLoggedIn');
+});
+        Route::post('/{id}/ice-candidate', [LiveClassController::class, 'sendIceCandidate']);
+        Route::get('/{id}/room-status', [LiveClassController::class, 'getRoomStatus']);
+        Route::post('/{id}/participant-settings', [LiveClassController::class, 'updateParticipantSettings']);
+        Route::post('/{id}/connection-quality', [LiveClassController::class, 'reportConnectionQuality']);
+
+// Subscription routes
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('/subscription/initiate', [PaystackController::class, 'initiateSubscription']);
+    Route::get('/subscription/verify/{reference}', [PaystackController::class, 'verifyPayment']);
+});
+
+// Paystack webhook
+Route::post('/paystack/webhook', [PaystackController::class, 'handleWebhook']);
+
+// Subscription status routes
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::prefix('subscription')->group(function () {
+        Route::get('/', [SubscriptionController::class, 'index']);
+        Route::get('/current', [SubscriptionController::class, 'current']);
+        Route::get('/upcoming', [SubscriptionController::class, 'upcoming']);
+        Route::get('/history', [SubscriptionController::class, 'history']);
+    });
+    Route::get('/live-class/subscription-status', [LiveClassController::class, 'checkSubscriptionStatus']);
 });
