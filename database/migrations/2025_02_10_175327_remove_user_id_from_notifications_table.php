@@ -12,6 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('notifications', function (Blueprint $table) {
+
+            $table->dropForeign(['user_id']);
+
             $table->dropColumn('user_id');
         });
     }
@@ -22,7 +25,11 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('notifications', function (Blueprint $table) {
-            //
+
+            $table->char('user_id', 36)->nullable();
+
+
+            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
         });
     }
 };
