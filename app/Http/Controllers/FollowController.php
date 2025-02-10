@@ -18,8 +18,8 @@ class FollowController extends Controller {
         }
 
 
-        $followedUser = User::find($id);
-        if (!$followedUser) {
+        $user2 = User::find($id);
+        if (!$user2) {
             return response()->json(['message' => 'User not found'], 404);
         }
 
@@ -38,7 +38,7 @@ class FollowController extends Controller {
 
         if($save) {
             //$notifiable = User::find($newFollow->followeduser);
-            $followedUser->notify(new followedNotification($user, $user2));
+            $user2->notify(new followedNotification($user, $user2));
 
             return response()->json([
                 'message' => 'followed successfully'
