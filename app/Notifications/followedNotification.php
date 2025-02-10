@@ -11,18 +11,18 @@ class followedNotification extends Notification
 {
     use Queueable;
     protected $follower;
-    protected $followedUser;
+    protected $followed;
 
 
 
     /**
      * Create a new notification instance.
      */
-    public function __construct($follower, $followedUser)
+    public function __construct($follower, $followed)
     {
 
         $this->follower = $follower;
-        $this->followedUser = $followedUser;
+        $this->followed = $followed;
     }
 
     /**
@@ -40,7 +40,7 @@ class followedNotification extends Notification
             'message' => "{$this->follower->name} followed you",
             'avatar' => $this->follower->avatar ?? null,
             'follower_id' => $this->follower->id,
-            'user_id' => $this->followedUser->id,
+            'user_id' => $this->followed->id,
         ];
     }
 
