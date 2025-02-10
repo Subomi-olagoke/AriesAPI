@@ -17,8 +17,6 @@ return new class extends Migration
             $table->uuid('tutor_id');
             $table->enum('status', ['pending', 'accepted', 'declined'])->default('pending');
             $table->text('message')->nullable();
-            $table->uuid('user_id');
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->timestamps();
         });
     }
