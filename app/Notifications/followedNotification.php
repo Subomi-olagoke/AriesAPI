@@ -35,11 +35,13 @@ class followedNotification extends Notification
         return ['database'];
     }
 
-    public function toDatabase($notifiale) {
+    public function toDatabase($notifiable) {
         return [
             'message' => "{$this->follower->name} followed you",
             'avatar' => $this->follower->avatar ?? null,
             'follower_id' => $this->follower->id,
+            'notifiable_id' => $notifiable->id,
+            'notifiable_type' => get_class($notifiable),
         ];
     }
 
