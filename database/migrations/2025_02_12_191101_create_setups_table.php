@@ -13,7 +13,8 @@ return new class extends Migration
     {
         Schema::create('setups', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->uuid('user_id');
+            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->text('description')->nullable();
             $table->string('qualifications')->nullable();
             $table->text('objectives')->nullable();

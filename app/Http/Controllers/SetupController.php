@@ -3,43 +3,60 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\Setup;
 use App\Models\Topic;
 use Illuminate\Http\Request;
 
 class SetupController extends Controller
 {
     public function setup(Request $request) {
-        $request->validate([
-            'user_id' => ['required', 'exists:users,id'],
-            'role' => ['required', 'in:educator,learner'],
-            'selected_topic_ids' => 'required|array',
-            'selected_topic_ids.*' => 'exists:topics,id'
-        ]);
-        $user =  User::find($request->input('user_id'));
-        if (!$user) {
-            return response()->json(['message' => 'User not found'], 404);
-        }
+            $request->validate([
+                'user_id' => ['required', 'exists:users,id'],
+                'role' => ['required', 'in:educator,learner'],
+                'selected_topic_ids' => 'required|array',
+                'selected_topic_ids.*' => 'exists:topics,id',
+                'description' => 'nullable|string',
+                'qualifications' => 'nullable|string',
+                'objectives' => 'nullable|string',
+                'social_links' => 'nullable|array',
+                'payment_methods' => 'nullable|array',
+            ]);
 
-        $user->role = $request->role;
-        $user->save();
-        $topics = Topic::select('id', 'name')->get();
-        //$topics = Topic::all();
+            $user = User::find($request->input('user_id'));
+            if (!$user) {
+                return response()->json(['message' => 'User not found'], 404);
+            }
 
+            $user->role = $request->role;
+            $user->save();
+            $user->topic()->sync($request->input('selected_topic_ids'));
 
-        $user->topic()->sync($request->input('selected_topic_ids'));
-        return response()->json([
-            'message' => 'Role updated successfully.',
-            'setup_completed' => $user->setup_completed,
-            'user' => $user,
-            'preferences' => $user->topic()->pluck('topic_id'),
-            'topics' => $topics->map(function ($topic) {
-                return [
+            // Create or update the user's setup details
+            Setup::updateOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'description' => $request->description,
+                    'qualifications' => $request->qualifications,
+                    'objectives' => $request->objectives,
+                    'social_links' => json_encode($request->social_links),
+                    'payment_methods' => json_encode($request->payment_methods),
+                ]
+            );
+
+            $topics = Topic::select('id', 'name')->get();
+
+            return response()->json([
+                'message' => 'Role and setup details updated successfully.',
+                'setup_completed' => $user->setup_completed,
+                'user' => $user,
+                'preferences' => $user->topic()->pluck('topic_id'),
+                'topics' => $topics->map(fn($topic) => [
                     'id' => $topic->id,
                     'name' => $topic->name,
-                ];
-            }),
-        ]);
-    }
+                ]),
+            ]);
+        }
+
 
     public function createPreferences(){
         $topics = Topic::all();
