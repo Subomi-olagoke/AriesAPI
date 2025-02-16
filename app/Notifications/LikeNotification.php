@@ -44,7 +44,7 @@ class LikeNotification extends Notification
 
         if($post_id) {
             return [
-                'message' => "{$this->user->name} liked your post.",
+                'message' => "{$this->user->username} liked your post.",
                 'avatar' => $this->user->avatar,
                 'post_id' => $post_id,
                 'liked_by' => $this->user->id,
@@ -52,7 +52,7 @@ class LikeNotification extends Notification
         }
         if($comment_id) {
             return [
-                'message' => "{$this->user->name} liked your comment.",
+                'message' => "{$this->user->username} liked your comment.",
                 'avatar' => $this->user->avatar,
                 'comment_id' => $comment_id,
                 'liked_by' => $this->user->id,
@@ -60,7 +60,7 @@ class LikeNotification extends Notification
         }
         if($course_id) {
             return [
-                'message' => "{$this->user->name} liked your course.",
+                'message' => "{$this->user->username} liked your course.",
                 'avatar' => $this->user->avatar,
                 'course_id' => $course_id,
                 'liked_by' => $this->user->id,
