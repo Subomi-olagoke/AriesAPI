@@ -44,21 +44,19 @@ class LikeController {
         $newLike->comment_id = $commentId ?: null;
         $newLike->course_id = $courseId ?: null;
 
-        // if ($postId !== null) {
-        //     $newLike->post_id = $postId;
-        // }
-
-        // if ($commentId !== null) {
-        //     $newLike->comment_id = $commentId;
-        // }
-
-        // if ($courseId !== null) {
-        //     $newLike->course_id = $courseId;
-        // }
-
         $save = $newLike->save();
 
         if ($save) {
+            if ($post) {
+                $post->load('user');
+            }
+            if ($comment) {
+                $comment->load('user');
+            }
+            if ($course) {
+                $course->load('user');
+            }
+
             $notifiable = $post?->user ?? $comment?->user ?? $course?->user;
 
             if ($notifiable) {

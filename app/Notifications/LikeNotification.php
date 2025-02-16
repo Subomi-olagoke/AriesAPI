@@ -38,6 +38,8 @@ class LikeNotification extends Notification
     }
 
     public function toDatabase() {
+        \Log::info('Notification Triggered!');
+
         $post_id = $this->post?->id;
         $comment_id = $this->comment?->id;
         $course_id = $this->course?->id;
@@ -73,7 +75,7 @@ class LikeNotification extends Notification
 
             return $data;
         }
-        }
+     }
 
     }
 
