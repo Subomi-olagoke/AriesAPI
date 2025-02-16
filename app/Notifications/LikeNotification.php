@@ -71,13 +71,11 @@ class LikeNotification extends Notification
                 'liked_by_username' => $this->user->username,
             ];
 
-            \Log::info('Notification Data:', $data); // Debug log
+            \Log::info('Notification Data:', $data);
 
             return $data;
         }
      }
-
-    }
 
     /**
      * Get the mail representation of the notification.
