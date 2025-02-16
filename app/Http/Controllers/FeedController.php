@@ -14,38 +14,77 @@ class FeedController extends Controller
 {
 
 
-        public function feed() {
-            $user = auth()->user();
+    public function feed() {
+         $user = auth()->user();
 
 
-            $topicIds = $user->topic()->pluck('topic_id');
+        $topicIds = $user->topic()->pluck('topic_id');
 
 
-            $courses = Course::whereIn('topic_id', $topicIds)->get();
+        $courses = Course::whereIn('topic_id', $topicIds)->get();
 
 
-            $followingUserIds = $user->following()->pluck('id');
-            $topicUserIds = User::whereHas('topic', fn($query) => $query->whereIn('topics.id', $topicIds))->pluck('id');
+        $relatedUserIds = User::whereHas('topic', fn($query) =>
+            $query->whereIn('topics.id', $topicIds)
+        )->pluck('id');
 
-            $userIds = $followingUserIds->merge($topicUserIds)->unique();
+
+        $relatedPosts = Post::with('user')
+            ->whereIn('user_id', $relatedUserIds)
+            ->latest()
+            ->limit(10)
+            ->get();
 
 
-            $posts = Post::with('user')
-                ->whereIn('user_id', $userIds)
-                ->latest()
-                ->get();
+        $randomPosts = Post::with('user')
+            ->whereNotIn('user_id', $relatedUserIds)
+            ->inRandomOrder()
+            ->limit(10)
+            ->get();
 
-            if($user->role == User::ROLE_LEARNER) {
-                return response()->json([
-                    'posts' => $posts,
-                    'courses' => $courses
-                ]);
-            }
 
-            return response()->json([
-                'posts' => $posts
-            ]);
-        }
+        $posts = $relatedPosts->merge($randomPosts)->shuffle();
+
+        return response()->json([
+            'posts' => $posts,
+            'courses' => $user->role == User::ROLE_LEARNER ? $courses : null
+        ]);
+
+    }
+
+
+
+            // $user = auth()->user();
+
+
+            // $topicIds = $user->topic()->pluck('topic_id');
+
+
+            // $courses = Course::whereIn('topic_id', $topicIds)->get();
+
+
+            // $followingUserIds = $user->following()->pluck('id');
+            // $topicUserIds = User::whereHas('topic', fn($query) => $query->whereIn('topics.id', $topicIds))->pluck('id');
+
+            // $userIds = $followingUserIds->merge($topicUserIds)->unique();
+
+
+            // $posts = Post::with('user')
+            //     ->whereIn('user_id', $userIds)
+            //     ->latest()
+            //     ->get();
+
+            // if($user->role == User::ROLE_LEARNER) {
+            //     return response()->json([
+            //         'posts' => $posts,
+            //         'courses' => $courses
+            //     ]);
+            // }
+
+            // return response()->json([
+            //     'posts' => $posts
+            // ]);
+
 
 
 
