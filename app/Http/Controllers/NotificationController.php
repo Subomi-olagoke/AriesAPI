@@ -7,6 +7,21 @@ use Illuminate\Http\Request;
 
 class NotificationController extends Controller
 {
+
+    public function getNotifications(Request $request) {
+        return response()->json([
+            'notifications' => $request->user()->unreadNotifications
+        ]);
+    }
+
+    public function markAsRead($id) {
+        $notification = auth()->user()->notifications()->find($id);
+        if ($notification) {
+            $notification->markAsRead();
+        }
+        return response()->json(['message' => 'Notification marked as read']);
+    }
+
     /**
      * Display a listing of the resource.
      */
