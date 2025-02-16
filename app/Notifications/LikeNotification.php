@@ -48,6 +48,7 @@ class LikeNotification extends Notification
                 'avatar' => $this->user->avatar,
                 'post_id' => $post_id,
                 'liked_by' => $this->user->id,
+                'liked_by_username' => $this->user->username,
             ];
         }
         if($comment_id) {
@@ -56,6 +57,7 @@ class LikeNotification extends Notification
                 'avatar' => $this->user->avatar,
                 'comment_id' => $comment_id,
                 'liked_by' => $this->user->id,
+                'liked_by_username' => $this->user->username,
             ];
         }
         if($course_id) {
@@ -64,6 +66,7 @@ class LikeNotification extends Notification
                 'avatar' => $this->user->avatar,
                 'course_id' => $course_id,
                 'liked_by' => $this->user->id,
+                'liked_by_username' => $this->user->username,
             ];
         }
 
