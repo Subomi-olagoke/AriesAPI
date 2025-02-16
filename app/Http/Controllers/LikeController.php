@@ -21,7 +21,7 @@ class LikeController {
         $commentId = $comment?->id;
         $courseId = $course?->id;
 
-        // Check if the like already exists
+        //Check if the like already exists
         $statCheck = Like::where('user_id', '=', $user->id)
             ->where(function ($query) use ($postId, $commentId, $courseId) {
                 $query->when($postId, fn($q) => $q->where('post_id', '=', $postId))
@@ -30,7 +30,7 @@ class LikeController {
             })->first();
 
         if ($statCheck) {
-            // Remove the like if it already exists
+            //Remove like if it already exists
            $delete = $statCheck->delete();
             if ($delete) {
                 return response()->json(['message' => 'like removed']);
