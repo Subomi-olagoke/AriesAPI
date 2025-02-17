@@ -78,9 +78,9 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     //like routes
     // Like a post
     Route::post('/post/{post}/like', [LikeController::class, 'createLike'])->name('like.post');
-    Route::get('/post_likes', [LikeController::class, 'post_like_count']);
-    Route::get('/comment_likes', [LikeController::class, 'comment_like_count']);
-    Route::get('/course_likes', [LikeController::class, 'course_like_count']);
+    Route::get('/post_likes/{postId}', [LikeController::class, 'post_like_count']);
+    Route::get('/comment_likes/{commentId}', [LikeController::class, 'comment_like_count']);
+    Route::get('/course_likes/{courseId', [LikeController::class, 'course_like_count']);
 
     // Like a comment
     Route::post('/comment/{comment}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.comment');
