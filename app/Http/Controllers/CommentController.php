@@ -58,8 +58,11 @@ class CommentController extends Controller {
     }
 
     public function displayComments(Post $post) {
-        $comments = Comment::where('post_id', '=', $post->id)->get();
-        if($comments->isEmpty) {
+        //$comments = Comment::where('post_id', '=', $post->id)->get();
+        $comments = Comment::where('post_id', $post->id)
+        ->with('user')
+        ->get();
+        if($comments->isEmpty()) {
             return response()->json([
                 'message' => 'no comments for this post yet'
             ], 404);
