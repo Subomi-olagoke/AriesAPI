@@ -27,16 +27,24 @@ class HireRequestController extends Controller
         return response()->json(['message' => 'You have already sent a request to this tutor.'], 400);
     }
 
-    HireRequest::create([
-        'client_id' => $client_id,
-        'tutor_id' => $validated['tutor_id'],
-        'message' => $validated['message'] ?? null,
-    ]);
+    $newHireReq = new HireRequest();
+    $newHireReq->client_id = $client_id;
+    $newHireReq->tutor_id = $validated['tutor_id'];
+    $newHireReq->message = $validated['message'] ?? null;
+    $newHireReq->save();
+
+    // HireRequest::create([
+    //     'client_id' => $client_id,
+    //     'tutor_id' => $validated['tutor_id'],
+    //     'message' => $validated['message'] ?? null,
+    // ]);
 
     $tutor = User::find($validated['tutor_id']);
     $tutor->notify(new HireRequestNotification($client, $validated['message'] ?? null));
 
-    return response()->json(['message' => 'Hire request sent successfully.'], 201);
+    return response()->json(['message' => 'Hire request sent successfully.',
+     'hire_request' => $newHireReq
+    ],201);
 
     }
 
