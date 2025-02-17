@@ -16,9 +16,11 @@ class SearchController extends Controller
 
         $query = $request->input('query');
 
-        $results = Post::search($query)->get()
-            ->merge(User::search($query)->get())
-            ->merge(Course::search($query)->get());
+        $posts = Post::search($query)->get()->load('user');
+        $users = User::search($query)->get();
+        $courses = Course::search($query)->get()->load('user');
+
+        $results = $posts->merge($users)->merge($courses);
 
         if ($results->isEmpty()) {
             return response()->json([
@@ -32,7 +34,6 @@ class SearchController extends Controller
             'success' => true,
             'results' => $results,
         ]);
-
     }
 
 }
