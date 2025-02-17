@@ -80,7 +80,8 @@ class HireRequestController extends Controller
     }
 
     public function cancelRequest($id) {
-        $request = HireRequest::where('id', $id)
+        try {
+            $request = HireRequest::where('id', $id)
             ->where('client_id', auth()->id())
             ->where('status', 'pending')
             ->firstOrFail();
@@ -92,6 +93,11 @@ class HireRequestController extends Controller
         $request->delete();
 
         return response()->json(['message' => 'Hire request canceled.'], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['message' => 'Hire request not found or already processed.'], 404);
+        }
+
+
     }
 
     public function listRequests() {
