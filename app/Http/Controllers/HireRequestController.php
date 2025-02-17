@@ -84,6 +84,7 @@ class HireRequestController extends Controller
         $requests = HireRequest::where('tutor_id', $user->id)
             ->orWhere('client_id', $user->id)
             ->orderBy('created_at', 'desc')
+            ->with('client', 'tutor')
             ->get();
 
             if ($requests->isEmpty()) {
