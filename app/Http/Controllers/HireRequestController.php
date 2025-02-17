@@ -63,4 +63,34 @@ class HireRequestController extends Controller
 
     }
 
+    public function cancelRequest($id) {
+        $request = HireRequest::where('id', $id)
+            ->where('client_id', auth()->id())
+            ->where('status', 'pending')
+            ->firstOrFail();
+
+            if (!$request) {
+                return response()->json(['message' => 'No pending hire request found to cancel.'], 404);
+            }
+
+        $request->delete();
+
+        return response()->json(['message' => 'Hire request canceled.'], 200);
+    }
+
+    public function listRequests() {
+        $user = auth()->user();
+
+        $requests = HireRequest::where('tutor_id', $user->id)
+            ->orWhere('client_id', $user->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+            if ($requests->isEmpty()) {
+                return response()->json(['message' => 'No hire requests found.'], 404);
+            }
+
+        return response()->json($requests, 200);
+    }
+
 }

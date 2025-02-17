@@ -90,7 +90,8 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
     Route::post('/hire-request', [HireRequestController::class, 'sendRequest']);
     Route::patch('/hire-request/{id}/accept', [HireRequestController::class, 'acceptRequest']);
     Route::patch('/hire-request/{id}/decline', [HireRequestController::class, 'declineRequest']);
-    Route::get('/hire-requests', [HireRequestController::class, 'getRequests']);
+    Route::get('/hire-requests', [HireRequestController::class, 'listRequests']);
+    Route::delete('/hire-requests/{id}', [HireRequestController::class, 'cancelRequest']);
 
     Route::get('/notifications', [NotificationController::class, 'getNotifications']);
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
