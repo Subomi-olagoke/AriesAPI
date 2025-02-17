@@ -68,4 +68,28 @@ class LikeController {
         return response()->json(['message' => 'like creation failed'], 500);
     }
 
+    public function post_like_count ($postId) {
+        $count = Like::where('post_id', $postId)->count();
+        return response()->json([
+            'post_id' => $postId,
+            'like_count' => $count
+        ]);
+    }
+
+    public function comment_like_count ($commentId) {
+        $count = Like::where('comment_id', $commentId)->count();
+        return response()->json([
+            'comment_id' => $commentId,
+            'like_count' => $count
+        ]);
+    }
+
+    public function course_like_count ($courseId) {
+        $count = Like::where('course_id', $courseId)->count();
+        return response()->json([
+            'course_id' => $courseId,
+            'like_count' => $count
+        ]);
+    }
+
 }

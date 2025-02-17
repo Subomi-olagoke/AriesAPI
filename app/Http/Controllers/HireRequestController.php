@@ -48,15 +48,23 @@ class HireRequestController extends Controller
 
     }
 
-    public function acceptRequest($id){
-    $request = HireRequest::where('id', $id)
-        ->where('tutor_id', auth()->id())
-        ->where('status', 'pending')
-        ->firstOrFail();
+    public function acceptRequest($id) {
+        try {
 
-    $request->update(['status' => 'accepted']);
+            $request = HireRequest::where('id', $id)
+                ->where('tutor_id', auth()->id())
+                ->where('status', 'pending')
+                ->firstOrFail();
 
-    return response()->json(['message' => 'Hire request accepted.']);
+
+            $request->update(['status' => 'accepted']);
+
+
+            return response()->json(['message' => 'Hire request accepted.']);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['message' => 'Hire request not found or already processed.'], 404);
+        }
     }
 
     public function declineRequest($id){
