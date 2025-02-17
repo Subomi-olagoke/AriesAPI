@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use App\Models\HireRequest;
 use Illuminate\Http\Request;
-use Workbench\App\Models\User;
 use App\Notifications\HireRequestNotification;
 
 class HireRequestController extends Controller
