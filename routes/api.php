@@ -73,6 +73,7 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
 
     //comment route
     Route::post('/post/{post}/comment', [CommentController::class, 'postComment'])->name('post.comment');
+    Route::get('/posts/{post}/comments', [CommentController::class, 'displayComments']);
 
     //like routes
     // Like a post
