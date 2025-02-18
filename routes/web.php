@@ -16,3 +16,10 @@ use Illuminate\Support\Facades\Route;
 // Route::get('/', function () {
 //     return view('welcome');
 // });
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/live-class/{id}', [LiveClassController::class, 'show'])->name('live-class.show');
+    Route::post('/live-class', [LiveClassController::class, 'store'])->name('live-class.store');
+    Route::post('/live-class/{id}/join', [LiveClassController::class, 'join'])->name('live-class.join');
+    Route::post('/live-class/{id}/end', [LiveClassController::class, 'end'])->name('live-class.end');
+});
