@@ -11,9 +11,9 @@ return new class extends Migration {
 	public function up(): void {
 		Schema::create('likes', function (Blueprint $table) {
 			$table->id();
-			$table->foreignId('post_id')->constrained('posts')->onUpdate('cascade');
-            $table->foreignId('comment_id')->constrained('comments')->onUpdate('cascade');
-            $table->foreignId('course_id')->constrained('courses')->onUpdate('cascade');
+            $table->unsignedBigInteger('comment_id')->nullable()->change();
+            $table->unsignedBigInteger('post_id')->nullable()->change();
+            $table->unsignedBigInteger('course_id')->nullable()->change();
             $table->uuid('user_id');
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
 			$table->timestamps();

@@ -41,15 +41,15 @@ class LikeController {
         $newLike = new Like();
         $newLike->user_id = $user->id;
 
-        if ($postId) {
+        if ($postId !== null) {
             $newLike->post_id = $postId;
         }
 
-        if ($commentId) {
+        if ($commentId !== null) {
             $newLike->comment_id = $commentId;
         }
 
-        if ($courseId) {
+        if ($courseId !== null) {
             $newLike->course_id = $courseId;
         }
 
