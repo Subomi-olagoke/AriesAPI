@@ -75,7 +75,7 @@ Route::prefix('api')->middleware(['auth:sanctum'])->group(function() {
 
     //like routes
     // Like a post
-    Route::post('/post/{post}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.post');
+    Route::post('/post/{post}/like', [LikeController::class, 'createLike'])->name('like.post');
 
     // Like a comment
     Route::post('/comment/{comment}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.comment');
