@@ -22,7 +22,6 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaystackController;
 use App\Http\Controllers\SubscriptionController;
 
-
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -38,12 +37,19 @@ Route::post('/setup', [SetupController::class, 'setup'])->name('setup');
 Route::post('/createPreferences', [SetupController::class, 'createPreferences'])->name('createPreferences');
 Route::get('/followOptions', [SetupController::class, 'followOptions'])->name('followOptions');
 
-// Protected routes
+// Public Live Class routes (viewing list and details do not require a subscription)
+Route::prefix('live-class')->group(function () {
+    // List all live classes
+    Route::get('/', [LiveClassController::class, 'index']);
+    // View details for a specific live class
+    Route::get('/{id}', [LiveClassController::class, 'show']);
+});
+
+// Protected routes (authentication required)
 Route::middleware(['auth:sanctum'])->group(function() {
-    // Live Class routes
+    // Protected Live Class routes (actions that modify the class)
     Route::prefix('live-class')->group(function () {
         Route::post('/', [LiveClassController::class, 'store']);
-        Route::get('/{id}', [LiveClassController::class, 'show']);
         Route::post('/{id}/join', [LiveClassController::class, 'join']);
         Route::post('/{id}/end', [LiveClassController::class, 'end']);
         // WebRTC and Streaming routes
@@ -69,7 +75,7 @@ Route::middleware(['auth:sanctum'])->group(function() {
     Route::post('/follow/{id}', [FollowController::class, 'createFollow'])->name('createFollow');
     Route::post('/unfollow/{id}', [FollowController::class, 'unFollow'])->name('unfollow');
 
-    // Courses route
+    // Courses routes
     Route::post('/create-course', [EducatorsController::class, 'createCourse'])->name('postCourse');
     Route::get('/course/{id}', [EducatorsController::class, 'view'])->name('view');
 
@@ -77,22 +83,25 @@ Route::middleware(['auth:sanctum'])->group(function() {
     Route::post('/post', [PostController::class, 'storePost'])->name('post');
     Route::get('/viewPost', [PostController::class, 'viewSinglePost'])->name('viewPost');
 
-    // Comment route
+    // Comment routes
     Route::post('/post/{post}/comment', [CommentController::class, 'postComment'])->name('post.comment');
     Route::get('/posts/{post}/comments', [CommentController::class, 'displayComments']);
 
     // Like routes
     Route::post('/post/{post}/like', [LikeController::class, 'createLike'])->name('like.post');
-
     Route::get('/post_likes/{postId}', [LikeController::class, 'post_like_count']);
     Route::get('/comment_likes/{commentId}', [LikeController::class, 'comment_like_count']);
     Route::get('/course_likes/{courseId', [LikeController::class, 'course_like_count']);
 
     // Like a comment
-    Route::post('/comment/{comment}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.comment');
+    Route::post('/comment/{comment}/like', [LikeController::class, 'createLike'])
+        ->middleware('auth:api')
+        ->name('like.comment');
 
     // Like a course
-    Route::post('/course/{course}/like', [LikeController::class, 'createLike'])->middleware('auth:api')->name('like.course');
+    Route::post('/course/{course}/like', [LikeController::class, 'createLike'])
+        ->middleware('auth:api')
+        ->name('like.course');
     Route::post('/comment/{comment}/like', [LikeController::class, 'createLike'])
         ->middleware('auth:api')
         ->name('like.comment');
@@ -132,11 +141,13 @@ Route::middleware(['auth:sanctum'])->group(function() {
     })->middleware('mustBeLoggedIn');
 });
 
-// Live Class additional routes
-Route::post('/{id}/ice-candidate', [LiveClassController::class, 'sendIceCandidate']);
-Route::get('/{id}/room-status', [LiveClassController::class, 'getRoomStatus']);
-Route::post('/{id}/participant-settings', [LiveClassController::class, 'updateParticipantSettings']);
-Route::post('/{id}/connection-quality', [LiveClassController::class, 'reportConnectionQuality']);
+// Additional Live Class routes (for WebRTC specifics) protected by auth
+Route::middleware(['auth:sanctum'])->group(function() {
+    Route::post('/{id}/ice-candidate', [LiveClassController::class, 'sendIceCandidate']);
+    Route::get('/{id}/room-status', [LiveClassController::class, 'getRoomStatus']);
+    Route::post('/{id}/participant-settings', [LiveClassController::class, 'updateParticipantSettings']);
+    Route::post('/{id}/connection-quality', [LiveClassController::class, 'reportConnectionQuality']);
+});
 
 // Subscription routes
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -144,7 +155,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/subscription/verify/{reference}', [PaystackController::class, 'verifyPayment']);
 });
 
-// Paystack webhook
+// Paystack webhook (public)
 Route::post('/paystack/webhook', [PaystackController::class, 'handleWebhook']);
 
 // Subscription status routes

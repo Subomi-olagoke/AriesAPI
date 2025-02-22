@@ -16,352 +16,471 @@ use App\Events\ConnectionQualityWarning;
 
 class LiveClassController extends Controller
 {
-   private function checkSubscription()
-   {
-       $subscription = Subscription::where('user_id', auth()->id())
-           ->where('is_active', true)
-           ->where('expires_at', '>', now())
-           ->first();
+    /**
+     * Check if the user has an active subscription.
+     *
+     * @throws \Exception
+     * @return Subscription
+     */
+    private function checkSubscription()
+    {
+        $subscription = Subscription::where('user_id', auth()->id())
+            ->where('is_active', true)
+            ->where('expires_at', '>', now())
+            ->first();
 
-       if (!$subscription) {
-           throw new \Exception('Active subscription required to access live classes. Please subscribe to continue.');
-       }
+        if (!$subscription) {
+            throw new \Exception('Active subscription required to access live classes. Please subscribe to continue.');
+        }
 
-       return $subscription;
-   }
+        return $subscription;
+    }
 
-   public function store(Request $request)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+    /**
+     * List all live classes regardless of status.
+     * No subscription is required to view the list.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function index(Request $request)
+    {
+        // Retrieve all live classes (including those that have ended)
+        $liveClasses = LiveClass::with('teacher')
+            ->orderBy('scheduled_at', 'asc')
+            ->get();
 
-       $validated = $request->validate([
-           'title' => 'required|string|max:255',
-           'description' => 'nullable|string',
-           'scheduled_at' => 'required|date|after:now',
-       ]);
+        return response()->json([
+            'message'      => 'Live classes retrieved successfully',
+            'live_classes' => $liveClasses
+        ]);
+    }
 
-       $meetingId = LiveClass::generateMeetingId();
+    /**
+     * Show details for a specific live class.
+     * No subscription is required to view class details.
+     *
+     * @param LiveClass $liveClass
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function show(LiveClass $liveClass)
+    {
+        $liveClass->load(['teacher', 'activeParticipants.user']);
+        return response()->json($liveClass);
+    }
 
-       $liveClass = LiveClass::create([
-           'title' => $validated['title'],
-           'description' => $validated['description'],
-           'scheduled_at' => $validated['scheduled_at'],
-           'teacher_id' => auth()->id(),
-           'meeting_id' => $meetingId,
-           'settings' => [
-               'enable_chat' => true,
-               'mute_on_join' => true,
-               'video_on_join' => true,
-           ],
-           'status' => 'scheduled'
-       ]);
+    /**
+     * Create a new live class.
+     * Subscription is required.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function store(Request $request)
+    {
+        try {
+            $this->checkSubscription();
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
-       $liveClass->load('teacher');
+        $validated = $request->validate([
+            'title'        => 'required|string|max:255',
+            'description'  => 'nullable|string',
+            'scheduled_at' => 'required|date|after:now',
+        ]);
 
-       return response()->json([
-           'message' => 'Live class created successfully',
-           'live_class' => $liveClass,
-           'meeting_id' => $meetingId
-       ], 201);
-   }
+        $meetingId = LiveClass::generateMeetingId();
 
-   public function show(LiveClass $liveClass)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+        $liveClass = LiveClass::create([
+            'title'        => $validated['title'],
+            'description'  => $validated['description'],
+            'scheduled_at' => $validated['scheduled_at'],
+            'teacher_id'   => auth()->id(),
+            'meeting_id'   => $meetingId,
+            'settings'     => [
+                'enable_chat'   => true,
+                'mute_on_join'  => true,
+                'video_on_join' => true,
+            ],
+            'status'       => 'scheduled'
+        ]);
 
-       $liveClass->load(['teacher', 'activeParticipants.user']);
-       return response()->json($liveClass);
-   }
+        $liveClass->load('teacher');
 
-   public function join(LiveClass $liveClass)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+        return response()->json([
+            'message'    => 'Live class created successfully',
+            'live_class' => $liveClass,
+            'meeting_id' => $meetingId
+        ], 201);
+    }
 
-       $participant = $liveClass->participants()->create([
-           'user_id' => auth()->id(),
-           'role' => auth()->id() === $liveClass->teacher_id ? 'moderator' : 'participant',
-           'joined_at' => now(),
-           'preferences' => [
-               'video' => true,
-               'audio' => true,
-               'screen_share' => false
-           ]
-       ]);
+    /**
+     * Join a live class.
+     * Subscription is required.
+     *
+     * @param LiveClass $liveClass
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function join(LiveClass $liveClass)
+    {
+        try {
+            $this->checkSubscription();
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
-       if ($liveClass->status === 'scheduled') {
-           $liveClass->update(['status' => 'live']);
-       }
+        $participant = $liveClass->participants()->create([
+            'user_id'     => auth()->id(),
+            'role'        => auth()->id() === $liveClass->teacher_id ? 'moderator' : 'participant',
+            'joined_at'   => now(),
+            'preferences' => [
+                'video'        => true,
+                'audio'        => true,
+                'screen_share' => false
+            ]
+        ]);
 
-       broadcast(new UserJoinedClass($liveClass, auth()->user(), $participant))->toOthers();
+        if ($liveClass->status === 'scheduled') {
+            $liveClass->update(['status' => 'live']);
+        }
 
-       return response()->json([
-           'message' => 'Joined successfully',
-           'participant' => $participant,
-           'class' => $liveClass->load('teacher', 'activeParticipants.user')
-       ]);
-   }
+        broadcast(new UserJoinedClass($liveClass, auth()->user(), $participant))->toOthers();
 
-   public function end(LiveClass $liveClass)
-   {
-       $participant = $liveClass->participants()
-           ->where('user_id', auth()->id())
-           ->first();
+        return response()->json([
+            'message'     => 'Joined successfully',
+            'participant' => $participant,
+            'class'       => $liveClass->load('teacher', 'activeParticipants.user')
+        ]);
+    }
 
-       if (!$participant || $participant->role !== 'moderator') {
-           return response()->json(['message' => 'Only moderators can end the class'], 403);
-       }
+    /**
+     * End a live class.
+     * Only moderators (typically the teacher) can end the class.
+     *
+     * @param LiveClass $liveClass
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function end(LiveClass $liveClass)
+    {
+        $participant = $liveClass->participants()
+            ->where('user_id', auth()->id())
+            ->first();
 
-       $liveClass->update([
-           'status' => 'ended',
-           'ended_at' => now(),
-       ]);
+        if (!$participant || $participant->role !== 'moderator') {
+            return response()->json(['message' => 'Only moderators can end the class'], 403);
+        }
 
-       $liveClass->participants()
-           ->whereNull('left_at')
-           ->update(['left_at' => now()]);
+        $liveClass->update([
+            'status'   => 'ended',
+            'ended_at' => now(),
+        ]);
 
-       broadcast(new ClassEnded($liveClass))->toOthers();
+        $liveClass->participants()
+            ->whereNull('left_at')
+            ->update(['left_at' => now()]);
 
-       return response()->json(['message' => 'Class ended successfully']);
-   }
+        broadcast(new ClassEnded($liveClass))->toOthers();
 
-   public function signal(Request $request, $classId)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+        return response()->json(['message' => 'Class ended successfully']);
+    }
 
-       $validated = $request->validate([
-           'to_user_id' => 'required|string',
-           'signal_data' => 'required'
-       ]);
+    /**
+     * Handle RTC signaling for establishing peer connections.
+     * Subscription is required.
+     *
+     * @param Request $request
+     * @param mixed   $classId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function signal(Request $request, $classId)
+    {
+        try {
+            $this->checkSubscription();
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
-       broadcast(new RTCSignaling(
-           $classId,
-           auth()->id(),
-           $validated['to_user_id'],
-           $validated['signal_data']
-       ))->toOthers();
+        $validated = $request->validate([
+            'to_user_id'  => 'required|string',
+            'signal_data' => 'required'
+        ]);
 
-       return response()->json(['status' => 'success']);
-   }
+        broadcast(new RTCSignaling(
+            $classId,
+            auth()->id(),
+            $validated['to_user_id'],
+            $validated['signal_data']
+        ))->toOthers();
 
-   public function sendIceCandidate(Request $request, $classId)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+        return response()->json(['status' => 'success']);
+    }
 
-       $validated = $request->validate([
-           'to_user_id' => 'required|string',
-           'candidate' => 'required'
-       ]);
+    /**
+     * Send an ICE candidate for WebRTC connection setup.
+     * Subscription is required.
+     *
+     * @param Request $request
+     * @param mixed   $classId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function sendIceCandidate(Request $request, $classId)
+    {
+        try {
+            $this->checkSubscription();
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
-       broadcast(new IceCandidateSignal(
-           $classId,
-           auth()->id(),
-           $validated['to_user_id'],
-           $validated['candidate']
-       ))->toOthers();
+        $validated = $request->validate([
+            'to_user_id' => 'required|string',
+            'candidate'  => 'required'
+        ]);
 
-       return response()->json(['status' => 'success']);
-   }
+        broadcast(new IceCandidateSignal(
+            $classId,
+            auth()->id(),
+            $validated['to_user_id'],
+            $validated['candidate']
+        ))->toOthers();
 
-   public function getRoomStatus(LiveClass $liveClass)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+        return response()->json(['status' => 'success']);
+    }
 
-       return response()->json([
-           'status' => $liveClass->status,
-           'active_peers' => $liveClass->activeParticipants()
-               ->select('user_id', 'role', 'preferences')
-               ->with('user:id,username')
-               ->get(),
-           'settings' => $liveClass->settings
-       ]);
-   }
+    /**
+     * Get the current room status including active participants and settings.
+     * Subscription is required.
+     *
+     * @param LiveClass $liveClass
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getRoomStatus(LiveClass $liveClass)
+    {
+        try {
+            $this->checkSubscription();
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
-   public function updateParticipantSettings(Request $request, LiveClass $liveClass)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+        return response()->json([
+            'status'       => $liveClass->status,
+            'active_peers' => $liveClass->activeParticipants()
+                ->select('user_id', 'role', 'preferences')
+                ->with('user:id,username')
+                ->get(),
+            'settings'     => $liveClass->settings
+        ]);
+    }
 
-       $validated = $request->validate([
-           'preferences' => 'required|array',
-           'preferences.video' => 'boolean',
-           'preferences.audio' => 'boolean',
-           'preferences.screen_share' => 'boolean'
-       ]);
+    /**
+     * Update the settings for a participant.
+     * Subscription is required.
+     *
+     * @param Request   $request
+     * @param LiveClass $liveClass
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateParticipantSettings(Request $request, LiveClass $liveClass)
+    {
+        try {
+            $this->checkSubscription();
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
-       $participant = $liveClass->participants()
-           ->where('user_id', auth()->id())
-           ->first();
+        $validated = $request->validate([
+            'preferences'              => 'required|array',
+            'preferences.video'        => 'boolean',
+            'preferences.audio'        => 'boolean',
+            'preferences.screen_share' => 'boolean'
+        ]);
 
-       if (!$participant) {
-           return response()->json(['message' => 'Not a participant of this class'], 403);
-       }
+        $participant = $liveClass->participants()
+            ->where('user_id', auth()->id())
+            ->first();
 
-       $participant->update([
-           'preferences' => $validated['preferences']
-       ]);
+        if (!$participant) {
+            return response()->json(['message' => 'Not a participant of this class'], 403);
+        }
 
-       broadcast(new ParticipantSettingsUpdated(
-           $liveClass->id,
-           auth()->id(),
-           $validated['preferences']
-       ))->toOthers();
+        $participant->update([
+            'preferences' => $validated['preferences']
+        ]);
 
-       return response()->json(['status' => 'success']);
-   }
+        broadcast(new ParticipantSettingsUpdated(
+            $liveClass->id,
+            auth()->id(),
+            $validated['preferences']
+        ))->toOthers();
 
-   public function getParticipants(LiveClass $liveClass)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+        return response()->json(['status' => 'success']);
+    }
 
-       return response()->json([
-           'participants' => $liveClass->activeParticipants()
-               ->with('user:id,username,first_name,last_name')
-               ->get()
-       ]);
-   }
+    /**
+     * Get a list of active participants in the class.
+     * Subscription is required.
+     *
+     * @param LiveClass $liveClass
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getParticipants(LiveClass $liveClass)
+    {
+        try {
+            $this->checkSubscription();
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
-   public function startStream(LiveClass $liveClass)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+        return response()->json([
+            'participants' => $liveClass->activeParticipants()
+                ->with('user:id,username,first_name,last_name')
+                ->get()
+        ]);
+    }
 
-       $participant = $liveClass->participants()
-           ->where('user_id', auth()->id())
-           ->first();
+    /**
+     * Start the live stream for a class.
+     * Subscription is required and only moderators can start the stream.
+     *
+     * @param LiveClass $liveClass
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function startStream(LiveClass $liveClass)
+    {
+        try {
+            $this->checkSubscription();
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
-       if (!$participant || $participant->role !== 'moderator') {
-           return response()->json(['message' => 'Only moderators can start the stream'], 403);
-       }
+        $participant = $liveClass->participants()
+            ->where('user_id', auth()->id())
+            ->first();
 
-       $liveClass->update([
-           'status' => 'live'
-       ]);
+        if (!$participant || $participant->role !== 'moderator') {
+            return response()->json(['message' => 'Only moderators can start the stream'], 403);
+        }
 
-       broadcast(new StreamStarted($liveClass))->toOthers();
+        $liveClass->update([
+            'status' => 'live'
+        ]);
 
-       return response()->json([
-           'message' => 'Stream started',
-           'stream_info' => [
-               'class_id' => $liveClass->id,
-               'meeting_id' => $liveClass->meeting_id,
-               'started_at' => now()
-           ]
-       ]);
-   }
+        broadcast(new StreamStarted($liveClass))->toOthers();
 
-   public function stopStream(LiveClass $liveClass)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+        return response()->json([
+            'message'     => 'Stream started',
+            'stream_info' => [
+                'class_id'   => $liveClass->id,
+                'meeting_id' => $liveClass->meeting_id,
+                'started_at' => now()
+            ]
+        ]);
+    }
 
-       $participant = $liveClass->participants()
-           ->where('user_id', auth()->id())
-           ->first();
+    /**
+     * Stop the live stream for a class.
+     * Subscription is required and only moderators can stop the stream.
+     *
+     * @param LiveClass $liveClass
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function stopStream(LiveClass $liveClass)
+    {
+        try {
+            $this->checkSubscription();
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
-       if (!$participant || $participant->role !== 'moderator') {
-           return response()->json(['message' => 'Only moderators can stop the stream'], 403);
-       }
+        $participant = $liveClass->participants()
+            ->where('user_id', auth()->id())
+            ->first();
 
-       $liveClass->update([
-           'status' => 'ended',
-           'ended_at' => now()
-       ]);
+        if (!$participant || $participant->role !== 'moderator') {
+            return response()->json(['message' => 'Only moderators can stop the stream'], 403);
+        }
 
-       broadcast(new StreamEnded($liveClass))->toOthers();
+        $liveClass->update([
+            'status'   => 'ended',
+            'ended_at' => now()
+        ]);
 
-       return response()->json(['message' => 'Stream ended']);
-   }
+        broadcast(new StreamEnded($liveClass))->toOthers();
 
-   public function getStreamInfo(LiveClass $liveClass)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+        return response()->json(['message' => 'Stream ended']);
+    }
 
-       return response()->json([
-           'stream_info' => [
-               'class_id' => $liveClass->id,
-               'meeting_id' => $liveClass->meeting_id,
-               'status' => $liveClass->status,
-               'participants' => $liveClass->activeParticipants()
-                   ->with('user:id,username')
-                   ->get()
-           ]
-       ]);
-   }
+    /**
+     * Get current streaming information.
+     * Subscription is required.
+     *
+     * @param LiveClass $liveClass
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getStreamInfo(LiveClass $liveClass)
+    {
+        try {
+            $this->checkSubscription();
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
-   public function reportConnectionQuality(Request $request, LiveClass $liveClass)
-   {
-       try {
-           $this->checkSubscription();
-       } catch (\Exception $e) {
-           return response()->json(['message' => $e->getMessage()], 403);
-       }
+        return response()->json([
+            'stream_info' => [
+                'class_id'     => $liveClass->id,
+                'meeting_id'   => $liveClass->meeting_id,
+                'status'       => $liveClass->status,
+                'participants' => $liveClass->activeParticipants()
+                    ->with('user:id,username')
+                    ->get()
+            ]
+        ]);
+    }
 
-       $validated = $request->validate([
-           'quality_metrics' => 'required|array',
-           'quality_metrics.bitrate' => 'numeric',
-           'quality_metrics.packetsLost' => 'numeric',
-           'quality_metrics.latency' => 'numeric'
-       ]);
+    /**
+     * Report connection quality during the class.
+     * Subscription is required.
+     *
+     * @param Request   $request
+     * @param LiveClass $liveClass
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function reportConnectionQuality(Request $request, LiveClass $liveClass)
+    {
+        try {
+            $this->checkSubscription();
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
 
-       \Log::info('Connection Quality Report', [
-           'class_id' => $liveClass->id,
-           'user_id' => auth()->id(),
-           'metrics' => $validated['quality_metrics']
-       ]);
+        $validated = $request->validate([
+            'quality_metrics'            => 'required|array',
+            'quality_metrics.bitrate'    => 'numeric',
+            'quality_metrics.packetsLost'=> 'numeric',
+            'quality_metrics.latency'    => 'numeric'
+        ]);
 
-       if ($validated['quality_metrics']['packetsLost'] > 50) {
-           broadcast(new ConnectionQualityWarning(
-               $liveClass->id,
-               auth()->id()
-           ))->toOthers();
-       }
+        \Log::info('Connection Quality Report', [
+            'class_id' => $liveClass->id,
+            'user_id'  => auth()->id(),
+            'metrics'  => $validated['quality_metrics']
+        ]);
 
-       return response()->json(['status' => 'success']);
-   }
-}
+        if ($validated['quality_metrics']['packetsLost'] > 50) {
+            broadcast(new ConnectionQualityWarning(
+                $liveClass->id,
+                auth()->id()
+            ))->toOthers();
+        }
 
+        return response()->json(['status' => 'success']);
+    }
+
+    /**
+     * Check the subscription status of the current user.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function checkSubscriptionStatus()
     {
         $subscription = Subscription::where('user_id', auth()->id())
@@ -371,20 +490,20 @@ class LiveClassController extends Controller
 
         if (!$subscription) {
             return response()->json([
-                'has_subscription' => false,
-                'message' => 'No active subscription found',
+                'has_subscription'      => false,
+                'message'               => 'No active subscription found',
                 'subscription_required' => true
             ]);
         }
 
         return response()->json([
             'has_subscription' => true,
-            'subscription' => [
-                'plan_type' => $subscription->plan_type,
-                'expires_at' => $subscription->expires_at,
+            'subscription'     => [
+                'plan_type'      => $subscription->plan_type,
+                'expires_at'     => $subscription->expires_at,
                 'days_remaining' => now()->diffInDays($subscription->expires_at),
-                'is_active' => $subscription->is_active
+                'is_active'      => $subscription->is_active
             ]
         ]);
     }
-
+}
