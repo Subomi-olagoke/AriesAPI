@@ -66,6 +66,10 @@ Route::middleware(['auth:sanctum'])->group(function() {
 
     // Profile routes
     Route::get('/profile/{user:username}', [ProfileController::class, 'viewProfile'])->name('profile');
+    // route to update profile details
+    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    // route to upload an avatar
+    Route::post('/profile/avatar', [ProfileController::class, 'UploadAvatar'])->name('profile.uploadAvatar');
 
     // User preferences routes
     Route::post('/createPref', [SetupController::class, 'createPref'])->name('createPref');
