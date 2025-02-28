@@ -28,3 +28,8 @@ Broadcast::channel('live-class.{id}', function ($user, $id) {
         $liveClass->participants()->where('user_id', $user->id)->exists()
     );
 });
+
+// New channel for private messaging
+Broadcast::channel('user.{userId}', function ($user, $userId) {
+    return $user->id === $userId;
+});

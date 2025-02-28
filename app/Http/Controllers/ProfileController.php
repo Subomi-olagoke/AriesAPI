@@ -12,7 +12,7 @@ use Intervention\Image\Laravel\Facades\Image;
 
 class ProfileController extends Controller {
 
-	public function viewProfile(User $user) {
+    public function viewProfile(User $user) {
         $user = User::with('profile')->find($user->id);
 
         $posts = $user->posts()->get();
@@ -50,36 +50,57 @@ class ProfileController extends Controller {
 
 	public function UploadAvatar(Request $request) {
         $request->validate([
-            'avatar' => 'required|image|max:3000'
-           ]);
+            'avatar' => 'required|image|mimes:jpg,jpeg,png,gif,webp|max:3000'
+        ]);
 
-           $user = auth()->user();
-
-           $filename = $user->id . '_' . uniqid() . '.jpg';
-
-         $imgData = Image::read($request->file('avatar'));
-         $imgData->resize(120,120);
-         $jpegEncoder = new JpegEncoder();
-         $encodedImage = $imgData->encode($jpegEncoder);
-
-
-         Storage::put('public/avatars/' . $filename, (string) $encodedImage);
-
-         $oldAvatar = $user->avatar;
-
-
-         $user->avatar = $filename;
-         $user->save();
-
-         if($oldAvatar != "/fallback-avatar.jpg") {
-            Storage::delete(str_replace("/storage/", "public/", $oldAvatar));
-         }
-
-         return response()->json([
-            'message' => 'avatar changed successfully'
-         ], 200);
-
-	}
-
+        $user = auth()->user();
+        
+        // Generate filename with original extension to preserve format
+        $extension = $request->file('avatar')->getClientOriginalExtension();
+        $filename = $user->id . '_' . uniqid() . '.' . $extension;
+        
+        try {
+            $imgData = Image::read($request->file('avatar'));
+            
+            // Smart crop to maintain aspect ratio and create a square image
+            $imgData->fit(120, 120);
+            
+            // Choose appropriate handling based on file type
+            if (in_array(strtolower($extension), ['png', 'gif', 'webp'])) {
+                // For formats supporting transparency
+                $imgData->save(storage_path('app/public/avatars/' . $filename));
+            } else {
+                // Use JPEG for other formats
+                $jpegEncoder = new JpegEncoder(90); // 90% quality
+                $encodedImage = $imgData->encode($jpegEncoder);
+                Storage::put('public/avatars/' . $filename, (string) $encodedImage);
+            }
+            
+            // Store previous avatar for deletion
+            $oldAvatar = $user->avatar;
+            
+            // Store the public path in the database
+            $user->avatar = '/storage/avatars/' . $filename;
+            $user->save();
+            
+            // Delete old avatar if it exists and isn't the default
+            if ($oldAvatar && $oldAvatar != "/fallback-avatar.jpg") {
+                $oldPath = str_replace('/storage/', 'public/', $oldAvatar);
+                if (Storage::exists($oldPath)) {
+                    Storage::delete($oldPath);
+                }
+            }
+            
+            return response()->json([
+                'message' => 'Avatar updated successfully',
+                'avatar' => $user->avatar
+            ], 200);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to update avatar',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
-

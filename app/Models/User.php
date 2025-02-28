@@ -82,10 +82,6 @@ class User extends Authenticatable {
         'password' => 'hashed',
     ];
 
-    // public function courses() {
-    //  return $this->hasMany(Courses::class, 'user_id');
-    // }
-
     public function getRouteKeyName() {
         return 'username';
     }
@@ -136,4 +132,66 @@ class User extends Authenticatable {
         return $this->hasMany(HireRequest::class, 'tutor_id');
     }
 
+    /**
+     * Get conversations where the user is a participant (user_one or user_two).
+     */
+    public function conversations()
+    {
+        return Conversation::where('user_one_id', $this->id)
+            ->orWhere('user_two_id', $this->id)
+            ->orderBy('last_message_at', 'desc');
+    }
+
+    /**
+     * Get messages sent by the user.
+     */
+    public function messages()
+    {
+        return $this->hasMany(Message::class, 'sender_id');
+    }
+
+    /**
+     * Start or get a conversation with another user.
+     */
+    public function getConversationWith(User $otherUser)
+    {
+        // Check if a conversation already exists
+        $conversation = Conversation::where(function ($query) use ($otherUser) {
+            $query->where('user_one_id', $this->id)
+                  ->where('user_two_id', $otherUser->id);
+        })->orWhere(function ($query) use ($otherUser) {
+            $query->where('user_one_id', $otherUser->id)
+                  ->where('user_two_id', $this->id);
+        })->first();
+
+        // If no conversation exists, create a new one
+        if (!$conversation) {
+            $conversation = Conversation::create([
+                'user_one_id' => $this->id,
+                'user_two_id' => $otherUser->id,
+                'last_message_at' => now(),
+            ]);
+        }
+
+        return $conversation;
+    }
+
+    /**
+     * Get total unread messages count.
+     */
+    public function unreadMessagesCount()
+    {
+        $count = 0;
+        
+        $conversations = $this->conversations()->get();
+        
+        foreach ($conversations as $conversation) {
+            $count += $conversation->messages()
+                ->where('sender_id', '!=', $this->id)
+                ->where('is_read', false)
+                ->count();
+        }
+        
+        return $count;
+    }
 }

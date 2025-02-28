@@ -18,9 +18,6 @@ class LiveClassController extends Controller
 {
     /**
      * Check if the user has an active subscription.
-     *
-     * @throws \Exception
-     * @return Subscription
      */
     private function checkSubscription()
     {
@@ -28,12 +25,8 @@ class LiveClassController extends Controller
             ->where('is_active', true)
             ->where('expires_at', '>', now())
             ->first();
-
-        if (!$subscription) {
-            throw new \Exception('Active subscription required to access live classes. Please subscribe to continue.');
-        }
-
-        return $subscription;
+            
+        return $subscription !== null;
     }
 
     /**
@@ -78,10 +71,8 @@ class LiveClassController extends Controller
      */
     public function store(Request $request)
     {
-        try {
-            $this->checkSubscription();
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to create live classes. Please subscribe to continue.'], 403);
         }
 
         $validated = $request->validate([
@@ -124,10 +115,11 @@ class LiveClassController extends Controller
      */
     public function join(LiveClass $liveClass)
     {
-        try {
-            $this->checkSubscription();
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json([
+                'message' => 'Active subscription required to access live classes. Please subscribe to continue.',
+                'subscription_required' => true
+            ], 403);
         }
 
         $participant = $liveClass->participants()->create([
@@ -195,10 +187,8 @@ class LiveClassController extends Controller
      */
     public function signal(Request $request, $classId)
     {
-        try {
-            $this->checkSubscription();
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
         }
 
         $validated = $request->validate([
@@ -226,10 +216,8 @@ class LiveClassController extends Controller
      */
     public function sendIceCandidate(Request $request, $classId)
     {
-        try {
-            $this->checkSubscription();
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
         }
 
         $validated = $request->validate([
@@ -256,10 +244,8 @@ class LiveClassController extends Controller
      */
     public function getRoomStatus(LiveClass $liveClass)
     {
-        try {
-            $this->checkSubscription();
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
         }
 
         return response()->json([
@@ -282,10 +268,8 @@ class LiveClassController extends Controller
      */
     public function updateParticipantSettings(Request $request, LiveClass $liveClass)
     {
-        try {
-            $this->checkSubscription();
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
         }
 
         $validated = $request->validate([
@@ -325,10 +309,8 @@ class LiveClassController extends Controller
      */
     public function getParticipants(LiveClass $liveClass)
     {
-        try {
-            $this->checkSubscription();
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
         }
 
         return response()->json([
@@ -347,10 +329,8 @@ class LiveClassController extends Controller
      */
     public function startStream(LiveClass $liveClass)
     {
-        try {
-            $this->checkSubscription();
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
         }
 
         $participant = $liveClass->participants()
@@ -386,10 +366,8 @@ class LiveClassController extends Controller
      */
     public function stopStream(LiveClass $liveClass)
     {
-        try {
-            $this->checkSubscription();
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
         }
 
         $participant = $liveClass->participants()
@@ -419,10 +397,8 @@ class LiveClassController extends Controller
      */
     public function getStreamInfo(LiveClass $liveClass)
     {
-        try {
-            $this->checkSubscription();
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
         }
 
         return response()->json([
@@ -447,10 +423,8 @@ class LiveClassController extends Controller
      */
     public function reportConnectionQuality(Request $request, LiveClass $liveClass)
     {
-        try {
-            $this->checkSubscription();
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
         }
 
         $validated = $request->validate([

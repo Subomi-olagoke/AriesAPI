@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use App\Models\Subscription;
@@ -22,7 +21,8 @@ class PaystackController extends Controller
             'plan_type' => 'required|string|in:monthly,yearly'
         ]);
 
-        $amount = $validated['plan_type'] === 'monthly' ? 5000 : 50000; // ₦50 or ₦500
+        
+        $amount = 0; // 0 Naira
 
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $this->secretKey,
@@ -84,5 +84,32 @@ class PaystackController extends Controller
         }
 
         return response()->json($response->json());
+    }
+    
+    /**
+     * Create a free subscription for testing
+     */
+    public function createFreeSubscription(Request $request)
+    {
+        $request->validate([
+            'plan_type' => 'required|string|in:monthly,yearly'
+        ]);
+        
+        $user = auth()->user();
+        $duration = $request->plan_type === 'monthly' ? 30 : 365;
+        
+        $subscription = Subscription::create([
+            'user_id' => $user->id,
+            'paystack_reference' => 'free_' . uniqid(),
+            'plan_type' => $request->plan_type,
+            'starts_at' => now(),
+            'expires_at' => now()->addDays($duration),
+            'is_active' => true
+        ]);
+        
+        return response()->json([
+            'message' => 'Free subscription created successfully',
+            'subscription' => $subscription
+        ]);
     }
 }

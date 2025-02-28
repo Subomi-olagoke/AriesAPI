@@ -14,6 +14,7 @@ use App\Http\Controllers\FollowController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\CoursesController;
+use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\EducatorsController;
 use App\Http\Controllers\LiveClassController;
@@ -143,6 +144,27 @@ Route::middleware(['auth:sanctum'])->group(function() {
         ]))->toOthers();
         return response()->noContent();
     })->middleware('mustBeLoggedIn');
+    
+    // Messaging routes
+    Route::prefix('messages')->group(function () {
+        // Get all conversations for authenticated user
+        Route::get('/conversations', [MessageController::class, 'getConversations']);
+        
+        // Get a specific conversation with messages
+        Route::get('/conversations/{id}', [MessageController::class, 'getConversation']);
+        
+        // Send a message
+        Route::post('/send', [MessageController::class, 'sendMessage']);
+        
+        // Mark all messages in a conversation as read
+        Route::post('/conversations/{id}/read', [MessageController::class, 'markAsRead']);
+        
+        // Delete a message (soft delete)
+        Route::delete('/messages/{id}', [MessageController::class, 'deleteMessage']);
+        
+        // Get count of unread messages
+        Route::get('/unread-count', [MessageController::class, 'getUnreadCount']);
+    });
 });
 
 // Additional Live Class routes (for WebRTC specifics) protected by auth
@@ -161,6 +183,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 // Paystack webhook (public)
 Route::post('/paystack/webhook', [PaystackController::class, 'handleWebhook']);
+
+// Free subscription route (public)
+Route::post('/subscription/free', [PaystackController::class, 'createFreeSubscription']);
 
 // Subscription status routes
 Route::middleware(['auth:sanctum'])->group(function () {
