@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     public function up(): void
-    {
+{
+    if (!Schema::hasTable('conversations')) {
         Schema::create('conversations', function (Blueprint $table) {
             $table->id();
             $table->uuid('user_one_id');
@@ -22,6 +23,7 @@ return new class extends Migration
             $table->unique(['user_one_id', 'user_two_id']);
         });
     }
+}
 
     public function down(): void
     {
