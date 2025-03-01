@@ -16,6 +16,7 @@
         "laravel/sanctum": "^3.3",
         "laravel/scout": "^10.12",
         "laravel/tinker": "^2.8",
+        "league/flysystem-aws-s3-v3": "^3.29",
         "phpmailer/phpmailer": "^6.8"
     },
     "require-dev": {

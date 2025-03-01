@@ -197,3 +197,23 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
     Route::get('/live-class/subscription-status', [LiveClassController::class, 'checkSubscriptionStatus']);
 });
+
+// Course routes
+Route::middleware(['auth:sanctum'])->group(function () {
+    // Course management
+    Route::post('/courses', [CoursesController::class, 'createCourse']);
+    Route::get('/courses', [CoursesController::class, 'listCourses']);
+    Route::get('/courses/{id}', [CoursesController::class, 'viewCourse']);
+    Route::put('/courses/{id}', [CoursesController::class, 'updateCourse']);
+    Route::delete('/courses/{id}', [CoursesController::class, 'deleteCourse']);
+    Route::get('/courses/{id}/content', [CoursesController::class, 'getCourseContent']);
+    
+    // Enrollment management
+    Route::post('/enroll/{courseId}', [EnrollmentController::class, 'enrollInCourse']);
+    Route::get('/enrollments', [EnrollmentController::class, 'getUserEnrollments']);
+    Route::post('/enrollments/{id}/progress', [EnrollmentController::class, 'updateProgress']);
+});
+
+// Public routes for payment verification
+Route::post('/enrollment/verify', [EnrollmentController::class, 'verifyEnrollment'])->name('enrollment.verify');
+Route::post('/enrollment/webhook', [EnrollmentController::class, 'handleWebhook']);

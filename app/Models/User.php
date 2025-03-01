@@ -16,12 +16,12 @@ class User extends Authenticatable {
     /**
      * Define the searchable data.
      */
+    protected $appends = ['setup_completed'];
 
-     protected $appends = ['setup_completed'];
-
-     public function getSetupCompletedAttribute(): bool {
+    public function getSetupCompletedAttribute(): bool {
         return !empty($this->role) && $this->topic()->exists();
     }
+    
     public function toSearchableArray()
     {
         return [
@@ -29,7 +29,6 @@ class User extends Authenticatable {
             'username' => $this->username,
         ];
     }
-
 
     const ROLE_EDUCATOR = 'educator';
     const ROLE_LEARNER = 'learner';
@@ -60,6 +59,7 @@ class User extends Authenticatable {
         'first_name',
         'last_name',
         'role',
+        'avatar',
     ];
 
     /**
@@ -131,15 +131,16 @@ class User extends Authenticatable {
     {
         return $this->hasMany(HireRequest::class, 'tutor_id');
     }
-
+    
     /**
-     * Get conversations where the user is a participant (user_one or user_two).
+     * Get conversations where the user is a participant.
      */
     public function conversations()
     {
-        return Conversation::where('user_one_id', $this->id)
-            ->orWhere('user_two_id', $this->id)
-            ->orderBy('last_message_at', 'desc');
+        return Conversation::where(function ($query) {
+            $query->where('user_one_id', $this->id)
+                  ->orWhere('user_two_id', $this->id);
+        });
     }
 
     /**
@@ -151,47 +152,92 @@ class User extends Authenticatable {
     }
 
     /**
-     * Start or get a conversation with another user.
+     * Get a conversation with another user.
      */
     public function getConversationWith(User $otherUser)
     {
-        // Check if a conversation already exists
-        $conversation = Conversation::where(function ($query) use ($otherUser) {
+        return Conversation::where(function ($query) use ($otherUser) {
             $query->where('user_one_id', $this->id)
                   ->where('user_two_id', $otherUser->id);
         })->orWhere(function ($query) use ($otherUser) {
             $query->where('user_one_id', $otherUser->id)
                   ->where('user_two_id', $this->id);
         })->first();
-
-        // If no conversation exists, create a new one
-        if (!$conversation) {
-            $conversation = Conversation::create([
-                'user_one_id' => $this->id,
-                'user_two_id' => $otherUser->id,
-                'last_message_at' => now(),
-            ]);
-        }
-
-        return $conversation;
     }
 
     /**
-     * Get total unread messages count.
+     * Get enrollments for the user.
      */
-    public function unreadMessagesCount()
+    public function enrollments()
     {
-        $count = 0;
-        
-        $conversations = $this->conversations()->get();
-        
-        foreach ($conversations as $conversation) {
-            $count += $conversation->messages()
-                ->where('sender_id', '!=', $this->id)
-                ->where('is_read', false)
-                ->count();
-        }
-        
-        return $count;
+        return $this->hasMany(CourseEnrollment::class);
+    }
+
+    /**
+     * Get the courses the user is enrolled in.
+     */
+    public function enrolledCourses()
+    {
+        return $this->belongsToMany(Course::class, 'course_enrollments')
+                ->withPivot('status', 'progress', 'transaction_reference')
+                ->withTimestamps();
+    }
+
+    /**
+     * Get only active enrollments.
+     */
+    public function activeEnrollments()
+    {
+        return $this->enrollments()->where('status', 'active');
+    }
+
+    /**
+     * Get only completed enrollments.
+     */
+    public function completedEnrollments()
+    {
+        return $this->enrollments()->where('status', 'completed');
+    }
+
+    /**
+     * Check if user is enrolled in a specific course.
+     */
+    public function isEnrolledIn(Course $course)
+    {
+        return $this->enrollments()
+                ->where('course_id', $course->id)
+                ->whereIn('status', ['active', 'completed'])
+                ->exists();
+    }
+    
+    /**
+     * Get count of active enrollments.
+     */
+    public function getActiveEnrollmentsCountAttribute()
+    {
+        return $this->activeEnrollments()->count();
+    }
+    
+    /**
+     * Get count of completed enrollments.
+     */
+    public function getCompletedEnrollmentsCountAttribute()
+    {
+        return $this->completedEnrollments()->count();
+    }
+    
+    /**
+     * Get total spent on course enrollments.
+     */
+    public function getTotalSpentAttribute()
+    {
+        $enrollments = $this->enrollments()
+            ->whereIn('status', ['active', 'completed'])
+            ->with('course')
+            ->get();
+            
+        return $enrollments->sum(function($enrollment) {
+            return $enrollment->course->price ?? 0;
+        });
     }
 }
