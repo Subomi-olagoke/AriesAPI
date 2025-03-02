@@ -195,11 +195,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/upcoming', [SubscriptionController::class, 'upcoming']);
         Route::get('/history', [SubscriptionController::class, 'history']);
     });
+    
     Route::get('/live-class/subscription-status', [LiveClassController::class, 'checkSubscriptionStatus']);
-});
 
-// Course routes
-Route::middleware(['auth:sanctum'])->group(function () {
     // Course management
     Route::post('/courses', [CoursesController::class, 'createCourse']);
     Route::get('/courses', [CoursesController::class, 'listCourses']);
