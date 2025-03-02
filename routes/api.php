@@ -22,6 +22,7 @@ use App\Http\Controllers\HireRequestController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaystackController;
 use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\EnrollmentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -59,6 +60,11 @@ Route::middleware(['auth:sanctum'])->group(function() {
         Route::post('/{id}/start-stream', [LiveClassController::class, 'startStream']);
         Route::post('/{id}/stop-stream', [LiveClassController::class, 'stopStream']);
         Route::get('/{id}/stream-info', [LiveClassController::class, 'getStreamInfo']);
+        // Additional WebRTC routes
+        Route::post('/{id}/ice-candidate', [LiveClassController::class, 'sendIceCandidate']);
+        Route::get('/{id}/room-status', [LiveClassController::class, 'getRoomStatus']);
+        Route::post('/{id}/participant-settings', [LiveClassController::class, 'updateParticipantSettings']);
+        Route::post('/{id}/connection-quality', [LiveClassController::class, 'reportConnectionQuality']);
     });
 
     Route::post('/logout', [AuthManager::class, 'logout'])->name('logout');
@@ -67,9 +73,7 @@ Route::middleware(['auth:sanctum'])->group(function() {
 
     // Profile routes
     Route::get('/profile/{user:username}', [ProfileController::class, 'viewProfile'])->name('profile');
-    // route to update profile details
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    // route to upload an avatar
     Route::post('/profile/avatar', [ProfileController::class, 'UploadAvatar'])->name('profile.uploadAvatar');
 
     // User preferences routes
@@ -96,24 +100,15 @@ Route::middleware(['auth:sanctum'])->group(function() {
     Route::post('/post/{post}/like', [LikeController::class, 'createLike'])->name('like.post');
     Route::get('/post_likes/{postId}', [LikeController::class, 'post_like_count']);
     Route::get('/comment_likes/{commentId}', [LikeController::class, 'comment_like_count']);
-    Route::get('/course_likes/{courseId', [LikeController::class, 'course_like_count']);
+    Route::get('/course_likes/{courseId}', [LikeController::class, 'course_like_count']);
 
-    // Like a comment
-    Route::post('/comment/{comment}/like', [LikeController::class, 'createLike'])
-        ->middleware('auth:api')
-        ->name('like.comment');
+    // Like a comment - removed duplicate and fixed middleware
+    Route::post('/comment/{comment}/like', [LikeController::class, 'createLike'])->name('like.comment');
+    
+    // Like a course - removed duplicate and fixed middleware
+    Route::post('/course/{course}/like', [LikeController::class, 'createLike'])->name('like.course');
 
-    // Like a course
-    Route::post('/course/{course}/like', [LikeController::class, 'createLike'])
-        ->middleware('auth:api')
-        ->name('like.course');
-    Route::post('/comment/{comment}/like', [LikeController::class, 'createLike'])
-        ->middleware('auth:api')
-        ->name('like.comment');
-    Route::post('/course/{course}/like', [LikeController::class, 'createLike'])
-        ->middleware('auth:api')
-        ->name('like.course');
-
+    // Search route
     Route::get('/search', [SearchController::class, 'search'])->name('search');
 
     // Hire request routes
@@ -123,13 +118,14 @@ Route::middleware(['auth:sanctum'])->group(function() {
     Route::get('/hire-requests', [HireRequestController::class, 'listRequests']);
     Route::delete('/hire-requests/{id}', [HireRequestController::class, 'cancelRequest']);
 
+    // Notification routes
     Route::get('/notifications', [NotificationController::class, 'getNotifications']);
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
 
     // Setup status
     Route::get('/setup_status', [SetupController::class, 'checkSetupStatus']);
 
-    // Chat route
+    // Chat route - updated middleware to use auth:sanctum consistently
     Route::post('/send-chat-message', function(Request $request) {
         $formFields = $request->validate([
             'textvalue' => 'required'
@@ -143,7 +139,7 @@ Route::middleware(['auth:sanctum'])->group(function() {
             'avatar'    => auth()->user()->avatar
         ]))->toOthers();
         return response()->noContent();
-    })->middleware('mustBeLoggedIn');
+    });
     
     // Messaging routes
     Route::prefix('messages')->group(function () {
@@ -165,31 +161,11 @@ Route::middleware(['auth:sanctum'])->group(function() {
         // Get count of unread messages
         Route::get('/unread-count', [MessageController::class, 'getUnreadCount']);
     });
-});
 
-// Additional Live Class routes (for WebRTC specifics) protected by auth
-Route::middleware(['auth:sanctum'])->group(function() {
-    Route::post('/{id}/ice-candidate', [LiveClassController::class, 'sendIceCandidate']);
-    Route::get('/{id}/room-status', [LiveClassController::class, 'getRoomStatus']);
-    Route::post('/{id}/participant-settings', [LiveClassController::class, 'updateParticipantSettings']);
-    Route::post('/{id}/connection-quality', [LiveClassController::class, 'reportConnectionQuality']);
-});
-
-// Subscription routes
-Route::middleware(['auth:sanctum'])->group(function () {
-    Route::post('/subscription/initiate', [PaystackController::class, 'initiateSubscription']);
-    Route::get('/subscription/verify/{reference}', [PaystackController::class, 'verifyPayment']);
-});
-
-// Paystack webhook (public)
-Route::post('/paystack/webhook', [PaystackController::class, 'handleWebhook']);
-
-// Free subscription route (public)
-Route::post('/subscription/free', [PaystackController::class, 'createFreeSubscription']);
-
-// Subscription status routes
-Route::middleware(['auth:sanctum'])->group(function () {
+    // Subscription routes
     Route::prefix('subscription')->group(function () {
+        Route::post('/initiate', [PaystackController::class, 'initiateSubscription']);
+        Route::get('/verify/{reference}', [PaystackController::class, 'verifyPayment']);
         Route::get('/', [SubscriptionController::class, 'index']);
         Route::get('/current', [SubscriptionController::class, 'current']);
         Route::get('/upcoming', [SubscriptionController::class, 'upcoming']);
@@ -212,6 +188,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/enrollments/{id}/progress', [EnrollmentController::class, 'updateProgress']);
 });
 
-// Public routes for payment verification
+// Public routes for payment and webhooks
+Route::post('/paystack/webhook', [PaystackController::class, 'handleWebhook']);
+Route::post('/subscription/free', [PaystackController::class, 'createFreeSubscription']);
 Route::post('/enrollment/verify', [EnrollmentController::class, 'verifyEnrollment'])->name('enrollment.verify');
 Route::post('/enrollment/webhook', [EnrollmentController::class, 'handleWebhook']);
