@@ -15,22 +15,29 @@ class Course extends Model {
         return [
             'id' => $this->id,
             'title' => $this->title,
-            'description' => $this->description
+            'description' => $this->description,
+            'difficulty_level' => $this->difficulty_level
         ];
     }
     
     protected $fillable = [
         'title',
         'description',
+        'thumbnail_url',
         'video_url',
         'file_url',
         'price',
+        'duration_minutes',
+        'difficulty_level',
         'topic_id',
         'user_id'
     ];
 
     protected $casts = [
         'price' => 'decimal:2',
+        'learning_outcomes' => 'array',
+        'prerequisites' => 'array',
+        'completion_criteria' => 'array'
     ];
 
     public function user(){
@@ -47,6 +54,22 @@ class Course extends Model {
     
     public function topic() {
         return $this->belongsTo(Topic::class);
+    }
+
+    /**
+     * Get the sections for the course.
+     */
+    public function sections()
+    {
+        return $this->hasMany(CourseSection::class)->orderBy('order');
+    }
+
+    /**
+     * Get all lessons for the course through sections.
+     */
+    public function lessons()
+    {
+        return $this->hasManyThrough(CourseLesson::class, CourseSection::class);
     }
 
     /**
@@ -79,6 +102,22 @@ class Course extends Model {
     }
 
     /**
+     * Get total duration of all course lessons.
+     */
+    public function getTotalDurationAttribute()
+    {
+        return $this->lessons()->sum('duration_minutes');
+    }
+
+    /**
+     * Get number of lessons in the course.
+     */
+    public function getLessonCountAttribute()
+    {
+        return $this->lessons()->count();
+    }
+
+    /**
      * Get active enrollment count.
      */
     public function getActiveEnrollmentsCountAttribute()
@@ -106,6 +145,14 @@ class Course extends Model {
                 ->whereIn('status', ['active', 'completed'])
                 ->count() * $this->price;
     }
+
+    /**
+     * Get preview lessons for this course.
+     */
+    public function getPreviewLessonsAttribute()
+    {
+        return $this->lessons()->where('is_preview', true)->get();
+    }
     
     /**
      * Scope a query to only include free courses.
@@ -121,6 +168,14 @@ class Course extends Model {
     public function scopePaid($query)
     {
         return $query->where('price', '>', 0);
+    }
+    
+    /**
+     * Scope a query to filter by difficulty level
+     */
+    public function scopeByDifficulty($query, $level)
+    {
+        return $query->where('difficulty_level', $level);
     }
     
     /**

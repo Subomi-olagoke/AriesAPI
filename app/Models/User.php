@@ -240,4 +240,62 @@ class User extends Authenticatable {
             return $enrollment->course->price ?? 0;
         });
     }
+
+    /**
+     * Get user's bookmarks
+     */
+    public function bookmarks()
+    {
+        return $this->hasMany(Bookmark::class);
+    }
+
+    /**
+     * Get user's subscriptions
+     */
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class);
+    }
+    
+    /**
+     * Get unread messages count
+     */
+    public function unreadMessagesCount()
+    {
+        $count = 0;
+        
+        $conversations = $this->conversations()->get();
+        
+        foreach ($conversations as $conversation) {
+            $count += $conversation->messages()
+                ->where('sender_id', '!=', $this->id)
+                ->where('is_read', false)
+                ->count();
+        }
+        
+        return $count;
+    }
+
+    /**
+     * Get lesson progress records for the user.
+     */
+    public function lessonProgress()
+    {
+        return $this->hasMany(LessonProgress::class);
+    }
+    
+    /**
+     * Get completed lessons for the user.
+     */
+    public function completedLessons()
+    {
+        return $this->hasManyThrough(
+            CourseLesson::class,
+            LessonProgress::class,
+            'user_id', // Foreign key on lesson_progress table
+            'id', // Foreign key on course_lessons table
+            'id', // Local key on users table
+            'lesson_id' // Local key on lesson_progress table
+        )->where('lesson_progress.completed', true);
+    }
 }

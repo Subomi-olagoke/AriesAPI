@@ -4,23 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Models\Course;
 use App\Models\Topic;
+use App\Services\CourseService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 
 class CoursesController extends Controller {
+    
+    protected $courseService;
+    
+    public function __construct(CourseService $courseService)
+    {
+        $this->courseService = $courseService;
+    }
+    
     /**
      * Create a new course with both local and S3 storage options.
      */
     public function createCourse(Request $request) {
-        // Check if the user is an educator
-        $user = auth()->user();
-        if ($user->role != \App\Models\User::ROLE_EDUCATOR) {
-            return response()->json([
-                'message' => 'Only educators can create courses'
-            ], 403);
-        }
-
         // Validate the request
         $this->validate($request, [
             'title' => 'required|string|max:255',
@@ -30,50 +30,44 @@ class CoursesController extends Controller {
             'content_type' => 'required|in:video,file,both',
             'video' => 'required_if:content_type,video,both|file|mimes:mp4,mov,avi,webm,mkv|max:2097152', // 2GB max
             'file' => 'required_if:content_type,file,both|file|mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,zip|max:102400', // 100MB max
+            'thumbnail' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
+            'duration_minutes' => 'nullable|integer|min:1',
+            'difficulty_level' => 'nullable|in:beginner,intermediate,advanced',
+            'learning_outcomes' => 'nullable|array',
+            'prerequisites' => 'nullable|array',
+            'completion_criteria' => 'nullable|array',
         ]);
 
-        // Create the course record
-        $course = new Course();
-        $course->title = $request->title;
-        $course->description = $request->description;
-        $course->price = $request->price;
-        $course->user_id = $user->id;
-        $course->topic_id = $request->topic_id;
-
-        // Handle video upload if provided
-        if ($request->hasFile('video')) {
-            $video = $request->file('video');
-            $videoFilename = 'course_video_' . time() . '_' . uniqid() . '.' . $video->getClientOriginalExtension();
-            
-            // Store in S3
-            Storage::disk('s3')->put('course_videos/' . $videoFilename, file_get_contents($video));
-            $course->video_url = config('filesystems.disks.s3.url') . '/course_videos/' . $videoFilename;
-        }
-
-        // Handle file upload if provided
-        if ($request->hasFile('file')) {
-            $file = $request->file('file');
-            $fileFilename = 'course_file_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            
-            // Store in S3
-            Storage::disk('s3')->put('course_files/' . $fileFilename, file_get_contents($file));
-            $course->file_url = config('filesystems.disks.s3.url') . '/course_files/' . $fileFilename;
-        }
-
-        // Save the course
-        $course->save();
-
+        // Get files from request
+        $videoFile = $request->hasFile('video') ? $request->file('video') : null;
+        $documentFile = $request->hasFile('file') ? $request->file('file') : null;
+        $thumbnailFile = $request->hasFile('thumbnail') ? $request->file('thumbnail') : null;
+        
+        // Call service to create the course
+        $result = $this->courseService->createCourse(
+            auth()->user(),
+            $request->only([
+                'title', 'description', 'price', 'topic_id', 
+                'duration_minutes', 'difficulty_level', 
+                'learning_outcomes', 'prerequisites', 'completion_criteria'
+            ]),
+            $videoFile,
+            $documentFile,
+            $thumbnailFile
+        );
+        
+        // Return response based on result
         return response()->json([
-            'message' => 'Course created successfully',
-            'course' => $course
-        ], 201);
+            'message' => $result['message'],
+            'course' => $result['success'] ? $result['course'] : null
+        ], $result['code']);
     }
 
     /**
      * Display the specified course.
      */
     public function viewCourse($id) {
-        $course = Course::with(['user'])->findOrFail($id);
+        $course = Course::with(['user', 'topic'])->findOrFail($id);
         
         // Add enrollment information for the current user if authenticated
         if (Auth::check()) {
@@ -88,12 +82,31 @@ class CoursesController extends Controller {
             'course' => $course
         ]);
     }
+    
+    /**
+     * Get course with all its content
+     */
+    public function getCourseContent($id) {
+        $course = Course::findOrFail($id);
+        $user = auth()->user();
+        
+        // Use service to get course with content
+        $result = $this->courseService->getCourseWithContent($course, $user);
+        
+        if ($result['success']) {
+            return response()->json($result['data']);
+        } else {
+            return response()->json([
+                'message' => $result['message']
+            ], $result['code']);
+        }
+    }
 
     /**
      * List all courses with optional filtering.
      */
     public function listCourses(Request $request) {
-        $query = Course::with(['user']);
+        $query = Course::with(['user', 'topic']);
         
         // Filter by topic if provided
         if ($request->has('topic_id')) {
@@ -113,12 +126,25 @@ class CoursesController extends Controller {
             $query->where('price', 0);
         }
         
-        // Order by popularity or newest
+        // Filter by difficulty level if provided
+        if ($request->has('difficulty_level')) {
+            $query->where('difficulty_level', $request->difficulty_level);
+        }
+        
+        // Filter by duration if provided
+        if ($request->has('max_duration')) {
+            $query->where('duration_minutes', '<=', $request->max_duration);
+        }
+        
+        // Order by popularity, newest, or highest rated
         if ($request->has('order_by')) {
             if ($request->order_by === 'popular') {
                 $query->withCount('enrollments')->orderBy('enrollments_count', 'desc');
             } elseif ($request->order_by === 'newest') {
                 $query->orderBy('created_at', 'desc');
+            } elseif ($request->order_by === 'rating') {
+                // If you implement ratings, you could order by average rating here
+                $query->orderBy('likes_count', 'desc');
             }
         } else {
             // Default order is newest
@@ -126,7 +152,12 @@ class CoursesController extends Controller {
         }
         
         // Paginate the results
-        $courses = $query->paginate(12);
+        $courses = $query->paginate($request->get('per_page', 12));
+        
+        // Add extra statistics
+        foreach ($courses as $course) {
+            $course->lesson_count = $course->lessons()->count();
+        }
         
         return response()->json([
             'courses' => $courses
@@ -139,13 +170,6 @@ class CoursesController extends Controller {
     public function updateCourse(Request $request, $id) {
         $course = Course::findOrFail($id);
         
-        // Check if the authenticated user is the owner of the course
-        if (auth()->id() !== $course->user_id) {
-            return response()->json([
-                'message' => 'You are not authorized to update this course'
-            ], 403);
-        }
-        
         // Validate the request
         $this->validate($request, [
             'title' => 'sometimes|string|max:255',
@@ -154,64 +178,38 @@ class CoursesController extends Controller {
             'topic_id' => 'sometimes|exists:topics,id',
             'video' => 'sometimes|file|mimes:mp4,mov,avi,webm,mkv|max:2097152',
             'file' => 'sometimes|file|mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,zip|max:102400',
+            'thumbnail' => 'sometimes|image|mimes:jpg,jpeg,png,gif,webp|max:5120',
+            'duration_minutes' => 'sometimes|integer|min:1',
+            'difficulty_level' => 'sometimes|in:beginner,intermediate,advanced',
+            'learning_outcomes' => 'sometimes|array',
+            'prerequisites' => 'sometimes|array',
+            'completion_criteria' => 'sometimes|array',
         ]);
         
-        // Update the course fields
-        if ($request->has('title')) {
-            $course->title = $request->title;
-        }
+        // Get files from request
+        $videoFile = $request->hasFile('video') ? $request->file('video') : null;
+        $documentFile = $request->hasFile('file') ? $request->file('file') : null;
+        $thumbnailFile = $request->hasFile('thumbnail') ? $request->file('thumbnail') : null;
         
-        if ($request->has('description')) {
-            $course->description = $request->description;
-        }
+        // Call service to update the course
+        $result = $this->courseService->updateCourse(
+            auth()->user(),
+            $course,
+            $request->only([
+                'title', 'description', 'price', 'topic_id', 
+                'duration_minutes', 'difficulty_level', 
+                'learning_outcomes', 'prerequisites', 'completion_criteria'
+            ]),
+            $videoFile,
+            $documentFile,
+            $thumbnailFile
+        );
         
-        if ($request->has('price')) {
-            $course->price = $request->price;
-        }
-        
-        if ($request->has('topic_id')) {
-            $course->topic_id = $request->topic_id;
-        }
-        
-        // Handle video upload if provided
-        if ($request->hasFile('video')) {
-            // Delete the old video if it exists
-            if ($course->video_url) {
-                $oldPath = str_replace(config('filesystems.disks.s3.url') . '/', '', $course->video_url);
-                Storage::disk('s3')->delete($oldPath);
-            }
-            
-            $video = $request->file('video');
-            $videoFilename = 'course_video_' . time() . '_' . uniqid() . '.' . $video->getClientOriginalExtension();
-            
-            // Store in S3
-            Storage::disk('s3')->put('course_videos/' . $videoFilename, file_get_contents($video));
-            $course->video_url = config('filesystems.disks.s3.url') . '/course_videos/' . $videoFilename;
-        }
-        
-        // Handle file upload if provided
-        if ($request->hasFile('file')) {
-            // Delete the old file if it exists
-            if ($course->file_url) {
-                $oldPath = str_replace(config('filesystems.disks.s3.url') . '/', '', $course->file_url);
-                Storage::disk('s3')->delete($oldPath);
-            }
-            
-            $file = $request->file('file');
-            $fileFilename = 'course_file_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            
-            // Store in S3
-            Storage::disk('s3')->put('course_files/' . $fileFilename, file_get_contents($file));
-            $course->file_url = config('filesystems.disks.s3.url') . '/course_files/' . $fileFilename;
-        }
-        
-        // Save the course
-        $course->save();
-        
+        // Return response based on result
         return response()->json([
-            'message' => 'Course updated successfully',
-            'course' => $course
-        ]);
+            'message' => $result['message'],
+            'course' => $result['success'] ? $result['course'] : null
+        ], $result['code']);
     }
 
     /**
@@ -220,59 +218,12 @@ class CoursesController extends Controller {
     public function deleteCourse($id) {
         $course = Course::findOrFail($id);
         
-        // Check if the authenticated user is the owner of the course
-        if (auth()->id() !== $course->user_id) {
-            return response()->json([
-                'message' => 'You are not authorized to delete this course'
-            ], 403);
-        }
+        // Call service to delete the course
+        $result = $this->courseService->deleteCourse(auth()->user(), $course);
         
-        // Check if anyone is enrolled
-        if ($course->enrollments()->count() > 0) {
-            return response()->json([
-                'message' => 'Cannot delete course with active enrollments'
-            ], 400);
-        }
-        
-        // Delete the associated files
-        if ($course->video_url) {
-            $videoPath = str_replace(config('filesystems.disks.s3.url') . '/', '', $course->video_url);
-            Storage::disk('s3')->delete($videoPath);
-        }
-        
-        if ($course->file_url) {
-            $filePath = str_replace(config('filesystems.disks.s3.url') . '/', '', $course->file_url);
-            Storage::disk('s3')->delete($filePath);
-        }
-        
-        // Delete the course
-        $course->delete();
-        
+        // Return response based on result
         return response()->json([
-            'message' => 'Course deleted successfully'
-        ]);
-    }
-    
-    /**
-     * Get course content (protected by enrollment check).
-     */
-    public function getCourseContent($id) {
-        $course = Course::findOrFail($id);
-        $user = auth()->user();
-        
-        // Check if the user is enrolled or is the course creator
-        if (!$course->isUserEnrolled($user) && $course->user_id !== $user->id) {
-            return response()->json([
-                'message' => 'You need to enroll in this course to access its content'
-            ], 403);
-        }
-        
-        // Return the content URLs
-        return response()->json([
-            'video_url' => $course->video_url,
-            'file_url' => $course->file_url,
-            'title' => $course->title,
-            'description' => $course->description
-        ]);
+            'message' => $result['message']
+        ], $result['code']);
     }
 }

@@ -23,6 +23,9 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaystackController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\EnrollmentController;
+use App\Http\Controllers\CourseSectionController;
+use App\Http\Controllers\CourseLessonController;
+use App\Http\Controllers\BookmarkController;
 
 /*
 |--------------------------------------------------------------------------
@@ -85,9 +88,31 @@ Route::middleware('auth:sanctum')->group(function() {
     Route::post('/follow/{id}', [FollowController::class, 'createFollow'])->name('createFollow');
     Route::post('/unfollow/{id}', [FollowController::class, 'unFollow'])->name('unfollow');
 
-    // Courses routes
+    // Courses routes (old - keeping for backward compatibility)
     Route::post('/create-course', [EducatorsController::class, 'createCourse'])->name('postCourse');
     Route::get('/course/{id}', [EducatorsController::class, 'view'])->name('view');
+
+    // Enhanced course management
+    Route::post('/courses', [CoursesController::class, 'createCourse']);
+    Route::get('/courses', [CoursesController::class, 'listCourses']);
+    Route::get('/courses/{id}', [CoursesController::class, 'viewCourse']);
+    Route::put('/courses/{id}', [CoursesController::class, 'updateCourse']);
+    Route::delete('/courses/{id}', [CoursesController::class, 'deleteCourse']);
+    Route::get('/courses/{id}/content', [CoursesController::class, 'getCourseContent']);
+    
+    // Course sections
+    Route::get('/courses/{courseId}/sections', [CourseSectionController::class, 'index']);
+    Route::post('/courses/{courseId}/sections', [CourseSectionController::class, 'store']);
+    Route::get('/courses/{courseId}/sections/{sectionId}', [CourseSectionController::class, 'show']);
+    Route::put('/courses/{courseId}/sections/{sectionId}', [CourseSectionController::class, 'update']);
+    Route::delete('/courses/{courseId}/sections/{sectionId}', [CourseSectionController::class, 'destroy']);
+    
+    // Course lessons
+    Route::post('/sections/{sectionId}/lessons', [CourseLessonController::class, 'store']);
+    Route::get('/lessons/{lessonId}', [CourseLessonController::class, 'show']);
+    Route::put('/lessons/{lessonId}', [CourseLessonController::class, 'update']);
+    Route::delete('/lessons/{lessonId}', [CourseLessonController::class, 'destroy']);
+    Route::post('/lessons/{lessonId}/complete', [CourseLessonController::class, 'markComplete']);
 
     // Post routes
     Route::post('/post', [PostController::class, 'storePost'])->name('post');
@@ -108,6 +133,12 @@ Route::middleware('auth:sanctum')->group(function() {
     
     // Like a course
     Route::post('/course/{course}/like', [LikeController::class, 'createLike'])->name('like.course');
+
+    // Bookmark routes
+    Route::post('/course/{courseId}/bookmark', [BookmarkController::class, 'bookmarkCourse']);
+    Route::post('/post/{lessonId}/bookmark', [BookmarkController::class, 'bookmarkPost']);
+    Route::delete('/course/{courseId}/bookmark', [BookmarkController::class, 'removeBookmarkCourse']);
+    Route::delete('/post/{lessonId}/bookmark', [BookmarkController::class, 'removeBookmarkPost']);
 
     // Search route
     Route::get('/search', [SearchController::class, 'search'])->name('search');
@@ -175,14 +206,6 @@ Route::middleware('auth:sanctum')->group(function() {
     
     Route::get('/live-class/subscription-status', [LiveClassController::class, 'checkSubscriptionStatus']);
 
-    // Course management
-    Route::post('/courses', [CoursesController::class, 'createCourse']);
-    Route::get('/courses', [CoursesController::class, 'listCourses']);
-    Route::get('/courses/{id}', [CoursesController::class, 'viewCourse']);
-    Route::put('/courses/{id}', [CoursesController::class, 'updateCourse']);
-    Route::delete('/courses/{id}', [CoursesController::class, 'deleteCourse']);
-    Route::get('/courses/{id}/content', [CoursesController::class, 'getCourseContent']);
-    
     // Enrollment management
     Route::post('/enroll/{courseId}', [EnrollmentController::class, 'enrollInCourse']);
     Route::get('/enrollments', [EnrollmentController::class, 'getUserEnrollments']);
