@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\LiveClassController;
 
 /*
 |--------------------------------------------------------------------------
@@ -13,11 +14,11 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// Route::get('/', function () {
-//     return view('welcome');
-// });
+Route::get('/', function () {
+    return view('welcome');
+});
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware('auth:sanctum')->group(function () {
     Route::get('/live-class/{id}', [LiveClassController::class, 'show'])->name('live-class.show');
     Route::post('/live-class', [LiveClassController::class, 'store'])->name('live-class.store');
     Route::post('/live-class/{id}/join', [LiveClassController::class, 'join'])->name('live-class.join');

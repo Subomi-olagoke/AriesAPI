@@ -48,7 +48,8 @@ Route::prefix('live-class')->group(function () {
 });
 
 // Protected routes (authentication required)
-Route::middleware(['auth:sanctum'])->group(function() {
+// Use auth:sanctum middleware consistently for all protected routes
+Route::middleware('auth:sanctum')->group(function() {
     // Protected Live Class routes (actions that modify the class)
     Route::prefix('live-class')->group(function () {
         Route::post('/', [LiveClassController::class, 'store']);
@@ -102,10 +103,10 @@ Route::middleware(['auth:sanctum'])->group(function() {
     Route::get('/comment_likes/{commentId}', [LikeController::class, 'comment_like_count']);
     Route::get('/course_likes/{courseId}', [LikeController::class, 'course_like_count']);
 
-    // Like a comment - removed duplicate and fixed middleware
+    // Like a comment
     Route::post('/comment/{comment}/like', [LikeController::class, 'createLike'])->name('like.comment');
     
-    // Like a course - removed duplicate and fixed middleware
+    // Like a course
     Route::post('/course/{course}/like', [LikeController::class, 'createLike'])->name('like.course');
 
     // Search route
@@ -125,7 +126,7 @@ Route::middleware(['auth:sanctum'])->group(function() {
     // Setup status
     Route::get('/setup_status', [SetupController::class, 'checkSetupStatus']);
 
-    // Chat route - updated middleware to use auth:sanctum consistently
+    // Chat route - using auth:sanctum consistently
     Route::post('/send-chat-message', function(Request $request) {
         $formFields = $request->validate([
             'textvalue' => 'required'
