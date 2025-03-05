@@ -165,10 +165,11 @@ return [
 		*/
 		App\Providers\AppServiceProvider::class,
 		App\Providers\AuthServiceProvider::class,
-       // Intervention\Image\ImageServiceProvider::class,
+        // Intervention\Image\ImageServiceProvider::class,
 	    App\Providers\BroadcastServiceProvider::class,
 		App\Providers\EventServiceProvider::class,
 		App\Providers\RouteServiceProvider::class,
+        App\Providers\PaymentServiceProvider::class,
 	])->toArray(),
 
 	/*
@@ -188,5 +189,16 @@ return [
 	])->toArray(),
 
 	'Auth' => Illuminate\Support\Facades\Auth::class,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Ngrok Authentication Token
+    |--------------------------------------------------------------------------
+    |
+    | The authentication token for Ngrok to expose the local server
+    |
+    */
+    
+    'ngrok_auth_token' => env('NGROK_AUTH_TOKEN'),
 
 ];

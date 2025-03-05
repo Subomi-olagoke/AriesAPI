@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\Message;
 use App\Models\Conversation;
+use App\Services\FileUploadService;
 use Illuminate\Http\Request;
 use App\Events\MessageSent;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class MessageController extends Controller
 {
@@ -77,35 +80,53 @@ class MessageController extends Controller
         $user = Auth::user();
         $recipient = User::findOrFail($request->recipient_id);
         
-        // Get or create conversation
-        $conversation = $user->getConversationWith($recipient);
-        
-        $messageData = [
-            'sender_id' => $user->id,
-            'body' => $request->message ?? '',
-        ];
+        try {
+            DB::beginTransaction();
+            
+            // Get or create conversation
+            $conversation = $user->getConversationWith($recipient);
+            
+            $messageData = [
+                'sender_id' => $user->id,
+                'body' => $request->message ?? '',
+            ];
 
-        // Handle file attachment
-        if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $path = $file->store('message_attachments', 'public');
-            $messageData['attachment'] = $path;
-            $messageData['attachment_type'] = $file->getMimeType();
+            // Handle file attachment
+            if ($request->hasFile('attachment')) {
+                $fileUploadService = app(FileUploadService::class);
+                
+                $attachmentUrl = $fileUploadService->uploadFile(
+                    $request->file('attachment'),
+                    'message_attachments'
+                );
+                
+                $messageData['attachment'] = $attachmentUrl;
+                $messageData['attachment_type'] = $request->file('attachment')->getMimeType();
+            }
+
+            // Create message
+            $message = $conversation->messages()->create($messageData);
+            
+            // Update conversation's last_message_at
+            $conversation->update(['last_message_at' => now()]);
+            
+            // Broadcast the message event
+            broadcast(new MessageSent($message))->toOthers();
+            
+            DB::commit();
+            
+            return response()->json([
+                'conversation' => $conversation->load(['messages.sender']),
+                'message' => $message->load('sender')
+            ], 201);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to send message: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to send message: ' . $e->getMessage()
+            ], 500);
         }
-
-        // Create message
-        $message = $conversation->messages()->create($messageData);
-        
-        // Update conversation's last_message_at
-        $conversation->update(['last_message_at' => now()]);
-        
-        // Broadcast the message event
-        broadcast(new MessageSent($message))->toOthers();
-        
-        return response()->json([
-            'conversation' => $conversation->load(['messages.sender']),
-            'message' => $message->load('sender')
-        ], 201);
     }
 
     /**
@@ -143,10 +164,31 @@ class MessageController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
         
-        // Soft delete the message
-        $message->delete();
-        
-        return response()->json(['message' => 'Message deleted']);
+        try {
+            DB::beginTransaction();
+            
+            // Delete attachment if exists
+            if ($message->attachment && strpos($message->attachment, 's3.amazonaws.com') !== false) {
+                $attachmentPath = parse_url($message->attachment, PHP_URL_PATH);
+                if ($attachmentPath) {
+                    Storage::disk('s3')->delete($attachmentPath);
+                }
+            }
+            
+            // Soft delete the message
+            $message->delete();
+            
+            DB::commit();
+            
+            return response()->json(['message' => 'Message deleted']);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to delete message: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to delete message: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Models\Post;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
+use App\Services\FileUploadService;
 
 class PostController extends Controller {
     /**
@@ -48,29 +49,42 @@ class PostController extends Controller {
             $newPost->body = $request->text_content; // Use consistent field name
             
             if ($request->hasFile('media_file')) {
+                $fileUploadService = app(FileUploadService::class);
+                
                 if ($request->media_type == 'image') {
-                    // Validate image file with extended mime types
+                    // Validate image
                     $request->validate([
                         'media_file' => 'image|mimes:jpg,jpeg,png,gif,webp|max:5120',
                     ]);
                     
-                    // Store with appropriate path and disk
-                    $newPost->media_link = $request->file('media_file')->store('media/images', 'public');
+                    // Upload image to S3
+                    $newPost->media_link = $fileUploadService->uploadFile(
+                        $request->file('media_file'),
+                        'media/images'
+                    );
+                    
                 } else if ($request->media_type == 'video') {
-                    // Validate video file with more format support
+                    // Validate video
                     $request->validate([
                         'media_file' => 'mimetypes:video/avi,video/mpeg,video/quicktime,video/mp4,video/webm,video/x-matroska|max:10240',
                     ]);
                     
-                    // Store video in public disk with appropriate path
-                    $newPost->media_link = $request->file('media_file')->store('media/videos', 'public');
+                    // Upload video to S3
+                    $newPost->media_link = $fileUploadService->uploadFile(
+                        $request->file('media_file'),
+                        'media/videos'
+                    );
                     
-                    // If a thumbnail is provided, validate and store it.
+                    // Handle thumbnail if provided
                     if ($request->hasFile('media_thumbnail')) {
                         $request->validate([
                             'media_thumbnail' => 'image|mimes:jpg,jpeg,png,gif,webp|max:5120',
                         ]);
-                        $newPost->media_thumbnail = $request->file('media_thumbnail')->store('media/thumbnails', 'public');
+                        
+                        $newPost->media_thumbnail = $fileUploadService->uploadFile(
+                            $request->file('media_thumbnail'),
+                            'media/thumbnails'
+                        );
                     }
                 }
             }
@@ -78,14 +92,6 @@ class PostController extends Controller {
 
         // Save the post and return a response.
         if ($newPost->save()) {
-            // Add full URLs to media files
-            if ($newPost->media_link) {
-                $newPost->media_link = Storage::url($newPost->media_link);
-            }
-            if ($newPost->media_thumbnail) {
-                $newPost->media_thumbnail = Storage::url($newPost->media_thumbnail);
-            }
-            
             return response()->json([
                 'message' => 'New post created successfully',
                 'post' => $newPost,
@@ -105,18 +111,14 @@ class PostController extends Controller {
         }
         
         // Delete associated media files if they exist
-        if ($post->media_link) {
-            $mediaPath = str_replace('/storage/', 'public/', $post->media_link);
-            if (Storage::exists($mediaPath)) {
-                Storage::delete($mediaPath);
-            }
+        if ($post->media_link && strpos($post->media_link, 's3.amazonaws.com') !== false) {
+            $mediaPath = parse_url($post->media_link, PHP_URL_PATH);
+            Storage::disk('s3')->delete($mediaPath);
         }
         
-        if ($post->media_thumbnail) {
-            $thumbnailPath = str_replace('/storage/', 'public/', $post->media_thumbnail);
-            if (Storage::exists($thumbnailPath)) {
-                Storage::delete($thumbnailPath);
-            }
+        if ($post->media_thumbnail && strpos($post->media_thumbnail, 's3.amazonaws.com') !== false) {
+            $thumbnailPath = parse_url($post->media_thumbnail, PHP_URL_PATH);
+            Storage::disk('s3')->delete($thumbnailPath);
         }
         
         // Delete the post

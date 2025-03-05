@@ -5,7 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\CourseLesson;
 use App\Models\CourseSection;
 use App\Services\CourseLessonService;
+use App\Services\FileUploadService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class CourseLessonController extends Controller
 {
@@ -23,6 +27,13 @@ class CourseLessonController extends Controller
     {
         $section = CourseSection::findOrFail($sectionId);
         
+        // Check if user is the course owner
+        if (auth()->id() !== $section->course->user_id) {
+            return response()->json([
+                'message' => 'You are not authorized to modify this course'
+            ], 403);
+        }
+        
         $this->validate($request, [
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -37,27 +48,85 @@ class CourseLessonController extends Controller
             'assignment_data' => 'required_if:content_type,assignment|array'
         ]);
         
-        // Get files from request
-        $videoFile = $request->hasFile('video') ? $request->file('video') : null;
-        $documentFile = $request->hasFile('file') ? $request->file('file') : null;
-        $thumbnailFile = $request->hasFile('thumbnail') ? $request->file('thumbnail') : null;
-        
-        $result = $this->lessonService->createLesson(
-            auth()->user(),
-            $section,
-            $request->only([
-                'title', 'description', 'content_type', 'duration_minutes',
-                'order', 'is_preview', 'quiz_data', 'assignment_data'
-            ]),
-            $videoFile,
-            $documentFile,
-            $thumbnailFile
-        );
-        
-        return response()->json([
-            'message' => $result['message'],
-            'lesson' => $result['success'] ? $result['lesson'] : null
-        ], $result['code']);
+        try {
+            DB::beginTransaction();
+            
+            // Create new lesson
+            $lesson = new CourseLesson([
+                'section_id' => $section->id,
+                'title' => $request->title,
+                'description' => $request->description ?? null,
+                'content_type' => $request->content_type,
+                'duration_minutes' => $request->duration_minutes ?? null,
+                'order' => $request->order ?? null, // Will be auto-assigned if null
+                'is_preview' => $request->is_preview ?? false
+            ]);
+            
+            // Add quiz data if provided and content type is quiz
+            if ($lesson->content_type === 'quiz' && isset($request->quiz_data)) {
+                $lesson->quiz_data = $request->quiz_data;
+            }
+            
+            // Add assignment data if provided and content type is assignment
+            if ($lesson->content_type === 'assignment' && isset($request->assignment_data)) {
+                $lesson->assignment_data = $request->assignment_data;
+            }
+            
+            $fileUploadService = app(FileUploadService::class);
+            
+            // Handle thumbnail upload if provided
+            if ($request->hasFile('thumbnail')) {
+                $lesson->thumbnail_url = $fileUploadService->uploadFile(
+                    $request->file('thumbnail'),
+                    'lesson_thumbnails',
+                    [
+                        'process_image' => true,
+                        'width' => 640,
+                        'height' => 360,
+                        'fit' => true
+                    ]
+                );
+            }
+            
+            // Handle video upload if provided
+            if ($request->hasFile('video')) {
+                $lesson->video_url = $fileUploadService->uploadFile(
+                    $request->file('video'),
+                    'lesson_videos'
+                );
+            }
+            
+            // Handle file upload if provided
+            if ($request->hasFile('file')) {
+                $lesson->file_url = $fileUploadService->uploadFile(
+                    $request->file('file'),
+                    'lesson_files'
+                );
+            }
+            
+            $lesson->save();
+            
+            // Update course duration if provided
+            if (isset($request->duration_minutes) && $request->duration_minutes > 0) {
+                $totalDuration = CourseLesson::where('section_id', $section->id)->sum('duration_minutes');
+                $section->course->duration_minutes = $totalDuration;
+                $section->course->save();
+            }
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Lesson created successfully',
+                'lesson' => $lesson
+            ], 201);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Lesson creation failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Lesson creation failed: ' . $e->getMessage()
+            ], 500);
+        }
     }
     
     /**
@@ -67,20 +136,83 @@ class CourseLessonController extends Controller
     {
         $lesson = CourseLesson::findOrFail($lessonId);
         
-        $result = $this->lessonService->getLesson(
-            $lesson,
-            auth()->user()
-        );
+        // Get course
+        $course = $lesson->section->course;
         
-        if ($result['success']) {
-            return response()->json([
-                'lesson' => $result['lesson']
-            ]);
-        } else {
-            return response()->json([
-                'message' => $result['message']
-            ], $result['code']);
+        // Check if user can access this lesson
+        $isPreview = $lesson->is_preview;
+        $isEnrolled = false;
+        $isOwner = false;
+        
+        if (auth()->check()) {
+            $user = auth()->user();
+            $isEnrolled = $course->isUserEnrolled($user);
+            $isOwner = $user->id === $course->user_id;
         }
+        
+        $isAccessible = $isPreview || $isEnrolled || $isOwner;
+        
+        // If not accessible, return limited info
+        if (!$isAccessible) {
+            return response()->json([
+                'message' => 'Lesson requires enrollment',
+                'lesson' => [
+                    'id' => $lesson->id,
+                    'title' => $lesson->title,
+                    'description' => $lesson->description,
+                    'thumbnail_url' => $lesson->thumbnail_url,
+                    'content_type' => $lesson->content_type,
+                    'duration_minutes' => $lesson->duration_minutes,
+                    'is_preview' => $lesson->is_preview,
+                    'is_accessible' => false,
+                    'course' => [
+                        'id' => $course->id,
+                        'title' => $course->title
+                    ],
+                    'section' => [
+                        'id' => $lesson->section->id,
+                        'title' => $lesson->section->title
+                    ]
+                ]
+            ], 200);
+        }
+        
+        // For accessible lessons, return full details
+        $completed = false;
+        if (auth()->check() && $isEnrolled) {
+            $user = auth()->user();
+            $progress = $user->lessonProgress()
+                ->where('lesson_id', $lesson->id)
+                ->first();
+            $completed = $progress ? $progress->completed : false;
+        }
+        
+        return response()->json([
+            'lesson' => [
+                'id' => $lesson->id,
+                'title' => $lesson->title,
+                'description' => $lesson->description,
+                'video_url' => $lesson->video_url,
+                'file_url' => $lesson->file_url,
+                'thumbnail_url' => $lesson->thumbnail_url,
+                'content_type' => $lesson->content_type,
+                'duration_minutes' => $lesson->duration_minutes,
+                'order' => $lesson->order,
+                'quiz_data' => $lesson->quiz_data,
+                'assignment_data' => $lesson->assignment_data,
+                'is_preview' => $lesson->is_preview,
+                'is_accessible' => true,
+                'completed' => $completed,
+                'course' => [
+                    'id' => $course->id,
+                    'title' => $course->title
+                ],
+                'section' => [
+                    'id' => $lesson->section->id,
+                    'title' => $lesson->section->title
+                ]
+            ]
+        ], 200);
     }
     
     /**
@@ -89,6 +221,13 @@ class CourseLessonController extends Controller
     public function update(Request $request, $lessonId)
     {
         $lesson = CourseLesson::findOrFail($lessonId);
+        
+        // Check if user is the course owner
+        if (auth()->id() !== $lesson->section->course->user_id) {
+            return response()->json([
+                'message' => 'You are not authorized to modify this course'
+            ], 403);
+        }
         
         $this->validate($request, [
             'title' => 'sometimes|string|max:255',
@@ -104,27 +243,147 @@ class CourseLessonController extends Controller
             'assignment_data' => 'nullable|array'
         ]);
         
-        // Get files from request
-        $videoFile = $request->hasFile('video') ? $request->file('video') : null;
-        $documentFile = $request->hasFile('file') ? $request->file('file') : null;
-        $thumbnailFile = $request->hasFile('thumbnail') ? $request->file('thumbnail') : null;
-        
-        $result = $this->lessonService->updateLesson(
-            auth()->user(),
-            $lesson,
-            $request->only([
-                'title', 'description', 'content_type', 'duration_minutes',
-                'order', 'is_preview', 'quiz_data', 'assignment_data'
-            ]),
-            $videoFile,
-            $documentFile,
-            $thumbnailFile
-        );
-        
-        return response()->json([
-            'message' => $result['message'],
-            'lesson' => $result['success'] ? $result['lesson'] : null
-        ], $result['code']);
+        try {
+            DB::beginTransaction();
+            
+            // Update basic properties if provided
+            if (isset($request->title)) {
+                $lesson->title = $request->title;
+            }
+            
+            if (isset($request->description)) {
+                $lesson->description = $request->description;
+            }
+            
+            if (isset($request->content_type)) {
+                $lesson->content_type = $request->content_type;
+            }
+            
+            if (isset($request->duration_minutes)) {
+                $lesson->duration_minutes = $request->duration_minutes;
+            }
+            
+            if (isset($request->is_preview)) {
+                $lesson->is_preview = $request->is_preview;
+            }
+            
+            // Only update order if explicitly provided
+            if (isset($request->order)) {
+                // Get all other lessons in this section
+                $otherLessons = CourseLesson::where('section_id', $lesson->section_id)
+                    ->where('id', '!=', $lesson->id)
+                    ->orderBy('order')
+                    ->get();
+                
+                $order = 0;
+                $newOrder = $request->order;
+                
+                // Reorder other lessons
+                foreach ($otherLessons as $otherLesson) {
+                    if ($order == $newOrder) {
+                        $order++;
+                    }
+                    $otherLesson->order = $order;
+                    $otherLesson->save();
+                    $order++;
+                }
+                
+                $lesson->order = $newOrder;
+            }
+            
+            // Update quiz data if provided and content type is quiz
+            if ($lesson->content_type === 'quiz' && isset($request->quiz_data)) {
+                $lesson->quiz_data = $request->quiz_data;
+            }
+            
+            // Update assignment data if provided and content type is assignment
+            if ($lesson->content_type === 'assignment' && isset($request->assignment_data)) {
+                $lesson->assignment_data = $request->assignment_data;
+            }
+            
+            $fileUploadService = app(FileUploadService::class);
+            
+            // Handle thumbnail upload if provided
+            if ($request->hasFile('thumbnail')) {
+                // Delete old thumbnail if it exists
+                if ($lesson->thumbnail_url && strpos($lesson->thumbnail_url, 's3.amazonaws.com') !== false) {
+                    $oldPath = parse_url($lesson->thumbnail_url, PHP_URL_PATH);
+                    if ($oldPath) {
+                        Storage::disk('s3')->delete($oldPath);
+                    }
+                }
+                
+                $lesson->thumbnail_url = $fileUploadService->uploadFile(
+                    $request->file('thumbnail'),
+                    'lesson_thumbnails',
+                    [
+                        'process_image' => true,
+                        'width' => 640,
+                        'height' => 360,
+                        'fit' => true
+                    ]
+                );
+            }
+            
+            // Handle video upload if provided
+            if ($request->hasFile('video')) {
+                // Delete old video if it exists
+                if ($lesson->video_url && strpos($lesson->video_url, 's3.amazonaws.com') !== false) {
+                    $oldPath = parse_url($lesson->video_url, PHP_URL_PATH);
+                    if ($oldPath) {
+                        Storage::disk('s3')->delete($oldPath);
+                    }
+                }
+                
+                $lesson->video_url = $fileUploadService->uploadFile(
+                    $request->file('video'),
+                    'lesson_videos'
+                );
+            }
+            
+            // Handle file upload if provided
+            if ($request->hasFile('file')) {
+                // Delete old file if it exists
+                if ($lesson->file_url && strpos($lesson->file_url, 's3.amazonaws.com') !== false) {
+                    $oldPath = parse_url($lesson->file_url, PHP_URL_PATH);
+                    if ($oldPath) {
+                        Storage::disk('s3')->delete($oldPath);
+                    }
+                }
+                
+                $lesson->file_url = $fileUploadService->uploadFile(
+                    $request->file('file'),
+                    'lesson_files'
+                );
+            }
+            
+            $lesson->save();
+            
+            // Update course duration if changed
+            if (isset($request->duration_minutes)) {
+                $totalDuration = CourseLesson::whereHas('section', function ($query) use ($lesson) {
+                    $query->where('course_id', $lesson->section->course_id);
+                })->sum('duration_minutes');
+                
+                $course = $lesson->section->course;
+                $course->duration_minutes = $totalDuration;
+                $course->save();
+            }
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Lesson updated successfully',
+                'lesson' => $lesson->fresh()
+            ], 200);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Lesson update failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Lesson update failed: ' . $e->getMessage()
+            ], 500);
+        }
     }
     
     /**
@@ -134,14 +393,82 @@ class CourseLessonController extends Controller
     {
         $lesson = CourseLesson::findOrFail($lessonId);
         
-        $result = $this->lessonService->deleteLesson(
-            auth()->user(),
-            $lesson
-        );
+        // Check if user is the course owner
+        if (auth()->id() !== $lesson->section->course->user_id) {
+            return response()->json([
+                'message' => 'You are not authorized to modify this course'
+            ], 403);
+        }
         
-        return response()->json([
-            'message' => $result['message']
-        ], $result['code']);
+        try {
+            DB::beginTransaction();
+            
+            // Delete lesson files if they exist
+            if ($lesson->video_url && strpos($lesson->video_url, 's3.amazonaws.com') !== false) {
+                $videoPath = parse_url($lesson->video_url, PHP_URL_PATH);
+                if ($videoPath) {
+                    Storage::disk('s3')->delete($videoPath);
+                }
+            }
+            
+            if ($lesson->file_url && strpos($lesson->file_url, 's3.amazonaws.com') !== false) {
+                $filePath = parse_url($lesson->file_url, PHP_URL_PATH);
+                if ($filePath) {
+                    Storage::disk('s3')->delete($filePath);
+                }
+            }
+            
+            if ($lesson->thumbnail_url && strpos($lesson->thumbnail_url, 's3.amazonaws.com') !== false) {
+                $thumbnailPath = parse_url($lesson->thumbnail_url, PHP_URL_PATH);
+                if ($thumbnailPath) {
+                    Storage::disk('s3')->delete($thumbnailPath);
+                }
+            }
+            
+            // Store section_id and course_id for reordering and updating duration
+            $sectionId = $lesson->section_id;
+            $courseId = $lesson->section->course_id;
+            $lessonDuration = $lesson->duration_minutes;
+            
+            // Delete the lesson
+            $lesson->delete();
+            
+            // Reorder remaining lessons to ensure no gaps
+            $remainingLessons = CourseLesson::where('section_id', $sectionId)
+                ->orderBy('order')
+                ->get();
+                
+            $order = 0;
+            foreach ($remainingLessons as $remainingLesson) {
+                $remainingLesson->order = $order;
+                $remainingLesson->save();
+                $order++;
+            }
+            
+            // Update course duration
+            if ($lessonDuration > 0) {
+                $course = $lesson->section->course;
+                $totalDuration = CourseLesson::whereHas('section', function ($query) use ($courseId) {
+                    $query->where('course_id', $courseId);
+                })->sum('duration_minutes');
+                
+                $course->duration_minutes = $totalDuration;
+                $course->save();
+            }
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Lesson deleted successfully'
+            ], 200);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Lesson deletion failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Lesson deletion failed: ' . $e->getMessage()
+            ], 500);
+        }
     }
     
     /**
@@ -180,8 +507,8 @@ class CourseLessonController extends Controller
             ->first();
             
         if ($enrollment) {
-            $progress = ($completedLessons / $totalLessons) * 100;
-            $enrollment->updateProgress($progress);
+            $progressPercent = ($completedLessons / $totalLessons) * 100;
+            $enrollment->updateProgress($progressPercent);
         }
         
         return response()->json([

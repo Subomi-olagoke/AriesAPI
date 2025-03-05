@@ -3,10 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Course;
+use App\Models\User;
 use App\Models\Topic;
 use App\Services\CourseService;
+use App\Services\FileUploadService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CoursesController extends Controller {
     
@@ -38,29 +42,100 @@ class CoursesController extends Controller {
             'completion_criteria' => 'nullable|array',
         ]);
 
-        // Get files from request
-        $videoFile = $request->hasFile('video') ? $request->file('video') : null;
-        $documentFile = $request->hasFile('file') ? $request->file('file') : null;
-        $thumbnailFile = $request->hasFile('thumbnail') ? $request->file('thumbnail') : null;
+        // Get user
+        $user = auth()->user();
         
-        // Call service to create the course
-        $result = $this->courseService->createCourse(
-            auth()->user(),
-            $request->only([
-                'title', 'description', 'price', 'topic_id', 
-                'duration_minutes', 'difficulty_level', 
-                'learning_outcomes', 'prerequisites', 'completion_criteria'
-            ]),
-            $videoFile,
-            $documentFile,
-            $thumbnailFile
-        );
+        // Check if the user is an educator
+        if ($user->role != User::ROLE_EDUCATOR) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only educators can create courses',
+                'code' => 403
+            ], 403);
+        }
         
-        // Return response based on result
-        return response()->json([
-            'message' => $result['message'],
-            'course' => $result['success'] ? $result['course'] : null
-        ], $result['code']);
+        try {
+            DB::beginTransaction();
+            
+            // Create new course
+            $course = new Course();
+            $course->title = $request->title;
+            $course->description = $request->description;
+            $course->price = $request->price;
+            $course->user_id = $user->id;
+            $course->topic_id = $request->topic_id;
+            
+            // Add additional properties
+            if (isset($request->duration_minutes)) {
+                $course->duration_minutes = $request->duration_minutes;
+            }
+            
+            if (isset($request->difficulty_level)) {
+                $course->difficulty_level = $request->difficulty_level;
+            }
+            
+            if (isset($request->learning_outcomes)) {
+                $course->learning_outcomes = $request->learning_outcomes;
+            }
+            
+            if (isset($request->prerequisites)) {
+                $course->prerequisites = $request->prerequisites;
+            }
+            
+            if (isset($request->completion_criteria)) {
+                $course->completion_criteria = $request->completion_criteria;
+            }
+            
+            // Use our file upload service for media
+            $fileUploadService = app(FileUploadService::class);
+            
+            // Handle thumbnail upload
+            if ($request->hasFile('thumbnail')) {
+                $course->thumbnail_url = $fileUploadService->uploadFile(
+                    $request->file('thumbnail'),
+                    'course_thumbnails',
+                    [
+                        'process_image' => true,
+                        'width' => 800,
+                        'height' => 450,
+                        'fit' => true
+                    ]
+                );
+            }
+            
+            // Handle video upload
+            if ($request->hasFile('video')) {
+                $course->video_url = $fileUploadService->uploadFile(
+                    $request->file('video'),
+                    'course_videos'
+                );
+            }
+            
+            // Handle file upload
+            if ($request->hasFile('file')) {
+                $course->file_url = $fileUploadService->uploadFile(
+                    $request->file('file'),
+                    'course_files'
+                );
+            }
+            
+            // Save the course
+            $course->save();
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Course created successfully',
+                'course' => $course
+            ], 201);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Course creation failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Course creation failed: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -170,6 +245,13 @@ class CoursesController extends Controller {
     public function updateCourse(Request $request, $id) {
         $course = Course::findOrFail($id);
         
+        // Check if user is the course owner
+        if (auth()->id() !== $course->user_id) {
+            return response()->json([
+                'message' => 'You are not authorized to update this course'
+            ], 403);
+        }
+        
         // Validate the request
         $this->validate($request, [
             'title' => 'sometimes|string|max:255',
@@ -186,30 +268,121 @@ class CoursesController extends Controller {
             'completion_criteria' => 'sometimes|array',
         ]);
         
-        // Get files from request
-        $videoFile = $request->hasFile('video') ? $request->file('video') : null;
-        $documentFile = $request->hasFile('file') ? $request->file('file') : null;
-        $thumbnailFile = $request->hasFile('thumbnail') ? $request->file('thumbnail') : null;
-        
-        // Call service to update the course
-        $result = $this->courseService->updateCourse(
-            auth()->user(),
-            $course,
-            $request->only([
-                'title', 'description', 'price', 'topic_id', 
-                'duration_minutes', 'difficulty_level', 
-                'learning_outcomes', 'prerequisites', 'completion_criteria'
-            ]),
-            $videoFile,
-            $documentFile,
-            $thumbnailFile
-        );
-        
-        // Return response based on result
-        return response()->json([
-            'message' => $result['message'],
-            'course' => $result['success'] ? $result['course'] : null
-        ], $result['code']);
+        try {
+            DB::beginTransaction();
+            
+            // Update basic properties if provided
+            if (isset($request->title)) {
+                $course->title = $request->title;
+            }
+            
+            if (isset($request->description)) {
+                $course->description = $request->description;
+            }
+            
+            if (isset($request->price)) {
+                $course->price = $request->price;
+            }
+            
+            if (isset($request->topic_id)) {
+                $course->topic_id = $request->topic_id;
+            }
+            
+            // Update additional properties if provided
+            if (isset($request->duration_minutes)) {
+                $course->duration_minutes = $request->duration_minutes;
+            }
+            
+            if (isset($request->difficulty_level)) {
+                $course->difficulty_level = $request->difficulty_level;
+            }
+            
+            if (isset($request->learning_outcomes)) {
+                $course->learning_outcomes = $request->learning_outcomes;
+            }
+            
+            if (isset($request->prerequisites)) {
+                $course->prerequisites = $request->prerequisites;
+            }
+            
+            if (isset($request->completion_criteria)) {
+                $course->completion_criteria = $request->completion_criteria;
+            }
+            
+            // Use our file upload service for media updates
+            $fileUploadService = app(FileUploadService::class);
+            
+            // Handle thumbnail update if provided
+            if ($request->hasFile('thumbnail')) {
+                // Delete old thumbnail if it exists
+                if ($course->thumbnail_url && strpos($course->thumbnail_url, 's3.amazonaws.com') !== false) {
+                    $oldThumbnailPath = parse_url($course->thumbnail_url, PHP_URL_PATH);
+                    if ($oldThumbnailPath) {
+                        \Storage::disk('s3')->delete($oldThumbnailPath);
+                    }
+                }
+                
+                $course->thumbnail_url = $fileUploadService->uploadFile(
+                    $request->file('thumbnail'),
+                    'course_thumbnails',
+                    [
+                        'process_image' => true,
+                        'width' => 800,
+                        'height' => 450,
+                        'fit' => true
+                    ]
+                );
+            }
+            
+            // Handle video update if provided
+            if ($request->hasFile('video')) {
+                // Delete old video if it exists
+                if ($course->video_url && strpos($course->video_url, 's3.amazonaws.com') !== false) {
+                    $oldVideoPath = parse_url($course->video_url, PHP_URL_PATH);
+                    if ($oldVideoPath) {
+                        \Storage::disk('s3')->delete($oldVideoPath);
+                    }
+                }
+                
+                $course->video_url = $fileUploadService->uploadFile(
+                    $request->file('video'),
+                    'course_videos'
+                );
+            }
+            
+            // Handle file update if provided
+            if ($request->hasFile('file')) {
+                // Delete old file if it exists
+                if ($course->file_url && strpos($course->file_url, 's3.amazonaws.com') !== false) {
+                    $oldFilePath = parse_url($course->file_url, PHP_URL_PATH);
+                    if ($oldFilePath) {
+                        \Storage::disk('s3')->delete($oldFilePath);
+                    }
+                }
+                
+                $course->file_url = $fileUploadService->uploadFile(
+                    $request->file('file'),
+                    'course_files'
+                );
+            }
+            
+            // Save the updated course
+            $course->save();
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Course updated successfully',
+                'course' => $course->fresh()
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Course update failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Course update failed: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -218,12 +391,80 @@ class CoursesController extends Controller {
     public function deleteCourse($id) {
         $course = Course::findOrFail($id);
         
-        // Call service to delete the course
-        $result = $this->courseService->deleteCourse(auth()->user(), $course);
+        // Check if user is the course owner
+        if (auth()->id() !== $course->user_id) {
+            return response()->json([
+                'message' => 'You are not authorized to delete this course'
+            ], 403);
+        }
         
-        // Return response based on result
-        return response()->json([
-            'message' => $result['message']
-        ], $result['code']);
+        // Check if anyone is enrolled
+        if ($course->enrollments()->count() > 0) {
+            return response()->json([
+                'message' => 'Cannot delete course with active enrollments'
+            ], 400);
+        }
+        
+        try {
+            DB::beginTransaction();
+            
+            // Delete all associated files from S3
+            $filesToDelete = [];
+            
+            // Add course media files to deletion queue if they exist
+            if ($course->thumbnail_url && strpos($course->thumbnail_url, 's3.amazonaws.com') !== false) {
+                $filesToDelete[] = parse_url($course->thumbnail_url, PHP_URL_PATH);
+            }
+            
+            if ($course->video_url && strpos($course->video_url, 's3.amazonaws.com') !== false) {
+                $filesToDelete[] = parse_url($course->video_url, PHP_URL_PATH);
+            }
+            
+            if ($course->file_url && strpos($course->file_url, 's3.amazonaws.com') !== false) {
+                $filesToDelete[] = parse_url($course->file_url, PHP_URL_PATH);
+            }
+            
+            // Find all course sections and lessons to delete their files too
+            $sections = $course->sections()->with('lessons')->get();
+            
+            foreach ($sections as $section) {
+                foreach ($section->lessons as $lesson) {
+                    if ($lesson->video_url && strpos($lesson->video_url, 's3.amazonaws.com') !== false) {
+                        $filesToDelete[] = parse_url($lesson->video_url, PHP_URL_PATH);
+                    }
+                    
+                    if ($lesson->file_url && strpos($lesson->file_url, 's3.amazonaws.com') !== false) {
+                        $filesToDelete[] = parse_url($lesson->file_url, PHP_URL_PATH);
+                    }
+                    
+                    if ($lesson->thumbnail_url && strpos($lesson->thumbnail_url, 's3.amazonaws.com') !== false) {
+                        $filesToDelete[] = parse_url($lesson->thumbnail_url, PHP_URL_PATH);
+                    }
+                }
+            }
+            
+            // Delete all files from S3
+            foreach ($filesToDelete as $path) {
+                if ($path) {
+                    \Storage::disk('s3')->delete($path);
+                }
+            }
+            
+            // Delete the course (this will cascade delete sections and lessons via foreign keys)
+            $course->delete();
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Course deleted successfully'
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Course deletion failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Course deletion failed: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

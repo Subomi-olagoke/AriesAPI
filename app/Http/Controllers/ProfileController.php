@@ -7,14 +7,13 @@ use App\Models\Profile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use Intervention\Image\Encoders\JpegEncoder;
-use Intervention\Image\Laravel\Facades\Image;
+use App\Services\FileUploadService;
 
 class ProfileController extends Controller {
 
     public function viewProfile(User $user) {
         $user = User::with('profile')->find($user->id);
-    
+
         $posts = $user->posts()->get();
         $likes = $user->likes()->get();
         $followers = $user->followers()->count();
@@ -23,11 +22,11 @@ class ProfileController extends Controller {
         
         // Construct full name from first_name and last_name
         $fullName = $user->first_name . ' ' . $user->last_name;
-    
+
         return response()->json([
             'posts' => $posts,
             'username' => $user->username,
-            'full_name' => $fullName, // Add full name to the response
+            'full_name' => $fullName,
             'avatar' => $avatar,
             'followers' => $followers,
             'following' => $following,
@@ -40,7 +39,6 @@ class ProfileController extends Controller {
 		$profile = Profile::where('user_id', $user->id)->first();
 
 		if (!$profile) {
-			//$profile = new Profile(['user_id' => $user->id]);
             return response()->json([
                 'message' => 'you are not allowed to do that'
             ], 403);
@@ -59,40 +57,32 @@ class ProfileController extends Controller {
 
         $user = auth()->user();
         
-        // Generate filename with original extension to preserve format
-        $extension = $request->file('avatar')->getClientOriginalExtension();
-        $filename = $user->id . '_' . uniqid() . '.' . $extension;
-        
         try {
-            $imgData = Image::read($request->file('avatar'));
+            $fileUploadService = app(FileUploadService::class);
             
-            // Smart crop to maintain aspect ratio and create a square image
-            $imgData->fit(120, 120);
-            
-            // Choose appropriate handling based on file type
-            if (in_array(strtolower($extension), ['png', 'gif', 'webp'])) {
-                // For formats supporting transparency
-                $imgData->save(storage_path('app/public/avatars/' . $filename));
-            } else {
-                // Use JPEG for other formats
-                $jpegEncoder = new JpegEncoder(90); // 90% quality
-                $encodedImage = $imgData->encode($jpegEncoder);
-                Storage::put('public/avatars/' . $filename, (string) $encodedImage);
-            }
+            // Upload with image processing
+            $avatarUrl = $fileUploadService->uploadFile(
+                $request->file('avatar'), 
+                'avatars',
+                [
+                    'process_image' => true,
+                    'width' => 120,
+                    'height' => 120,
+                    'fit' => true
+                ]
+            );
             
             // Store previous avatar for deletion
             $oldAvatar = $user->avatar;
             
-            // Store the public path in the database
-            $user->avatar = '/storage/avatars/' . $filename;
+            // Update user record with new avatar URL
+            $user->avatar = $avatarUrl;
             $user->save();
             
             // Delete old avatar if it exists and isn't the default
-            if ($oldAvatar && $oldAvatar != "/fallback-avatar.jpg") {
-                $oldPath = str_replace('/storage/', 'public/', $oldAvatar);
-                if (Storage::exists($oldPath)) {
-                    Storage::delete($oldPath);
-                }
+            if ($oldAvatar && $oldAvatar != "/fallback-avatar.jpg" && strpos($oldAvatar, 's3.amazonaws.com') !== false) {
+                $oldPath = parse_url($oldAvatar, PHP_URL_PATH);
+                Storage::disk('s3')->delete($oldPath);
             }
             
             return response()->json([
