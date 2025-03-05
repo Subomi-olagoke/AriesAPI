@@ -14,16 +14,20 @@ class ProfileController extends Controller {
 
     public function viewProfile(User $user) {
         $user = User::with('profile')->find($user->id);
-
+    
         $posts = $user->posts()->get();
         $likes = $user->likes()->get();
         $followers = $user->followers()->count();
         $following = $user->following()->count();
         $avatar = $user->profile ? $user->profile->avatar : null;
-
+        
+        // Construct full name from first_name and last_name
+        $fullName = $user->first_name . ' ' . $user->last_name;
+    
         return response()->json([
             'posts' => $posts,
             'username' => $user->username,
+            'full_name' => $fullName, // Add full name to the response
             'avatar' => $avatar,
             'followers' => $followers,
             'following' => $following,
