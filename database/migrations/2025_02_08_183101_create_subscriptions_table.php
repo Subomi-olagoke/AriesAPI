@@ -4,49 +4,31 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     public function up()
     {
-        Schema::table('subscriptions', function (Blueprint $table) {
-            // Add new columns for recurring subscriptions
-            if (!Schema::hasColumn('subscriptions', 'paystack_subscription_code')) {
-                $table->string('paystack_subscription_code')->nullable()->after('paystack_reference');
-            }
+        Schema::create('subscriptions', function (Blueprint $table) {
+            $table->id();
+            // Existing columns (adjust these as needed)
+            $table->string('paystack_reference')->nullable();
+            $table->string('plan_type')->nullable();
+            $table->boolean('is_active')->default(true);
             
-            if (!Schema::hasColumn('subscriptions', 'paystack_email_token')) {
-                $table->string('paystack_email_token')->nullable()->after('paystack_subscription_code');
-            }
+            // New columns for recurring subscriptions
+            // Note: When creating a new table, the "after" method is unnecessary since column order is defined by the order of declarations.
+            $table->string('paystack_subscription_code')->nullable();
+            $table->string('paystack_email_token')->nullable();
+            $table->string('plan_code')->nullable();
+            $table->decimal('amount', 10, 2)->default(0);
+            $table->string('status')->default('pending');
+            $table->boolean('is_recurring')->default(false);
             
-            if (!Schema::hasColumn('subscriptions', 'plan_code')) {
-                $table->string('plan_code')->nullable()->after('plan_type');
-            }
-            
-            if (!Schema::hasColumn('subscriptions', 'amount')) {
-                $table->decimal('amount', 10, 2)->default(0)->after('plan_code');
-            }
-            
-            if (!Schema::hasColumn('subscriptions', 'status')) {
-                $table->string('status')->default('pending')->after('amount');
-            }
-            
-            if (!Schema::hasColumn('subscriptions', 'is_recurring')) {
-                $table->boolean('is_recurring')->default(false)->after('is_active');
-            }
+            $table->timestamps();
         });
     }
 
     public function down()
     {
-        Schema::table('subscriptions', function (Blueprint $table) {
-            $table->dropColumn([
-                'paystack_subscription_code',
-                'paystack_email_token',
-                'plan_code',
-                'amount',
-                'status',
-                'is_recurring'
-            ]);
-        });
+        Schema::dropIfExists('subscriptions');
     }
 };
