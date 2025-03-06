@@ -117,6 +117,7 @@ Route::middleware('auth:sanctum')->group(function() {
     Route::put('/lessons/{lessonId}', [CourseLessonController::class, 'update']);
     Route::delete('/lessons/{lessonId}', [CourseLessonController::class, 'destroy']);
     Route::post('/lessons/{lessonId}/complete', [CourseLessonController::class, 'markComplete']);
+    Route::get('/courses-by-topic', [CoursesController::class, 'getCoursesByTopic']);
 
     // Post routes
     Route::post('/post', [PostController::class, 'storePost'])->name('post');

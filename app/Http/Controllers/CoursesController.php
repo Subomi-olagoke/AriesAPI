@@ -467,4 +467,86 @@ class CoursesController extends Controller {
             ], 500);
         }
     }
+
+    /**
+     * Get courses organized by the user's selected topics.
+     * 
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getCoursesByTopic(Request $request)
+    {
+        $user = auth()->user();
+        
+        // Get user's selected topics
+        $userTopics = $user->topic()->with('courses.user')->get();
+        
+        $coursesByTopic = [];
+        
+        // For each topic, get the related courses
+        foreach ($userTopics as $topic) {
+            $courses = $topic->courses()
+                ->with(['user:id,username,first_name,last_name,avatar', 'topic'])
+                ->orderBy('created_at', 'desc')
+                ->get();
+                
+            // Add enrollment information for each course
+            foreach ($courses as $course) {
+                $course->is_enrolled = $course->isUserEnrolled($user);
+                $course->enrollment = $user->enrollments()
+                    ->where('course_id', $course->id)
+                    ->first();
+            }
+            
+            // Only include the topic if it has courses
+            if ($courses->count() > 0) {
+                $coursesByTopic[] = [
+                    'topic' => [
+                        'id' => $topic->id,
+                        'name' => $topic->name
+                    ],
+                    'courses' => $courses
+                ];
+            }
+        }
+        
+        // Optional: Include recommended courses from other topics
+        $recommendedCourses = $this->getRecommendedCourses($user, 5); // Get 5 recommended courses
+        
+        return response()->json([
+            'courses_by_topic' => $coursesByTopic,
+            'recommended_courses' => $recommendedCourses
+        ]);
+    }
+
+    /**
+     * Get recommended courses for user that aren't in their selected topics.
+     * 
+     * @param  \App\Models\User  $user
+     * @param  int  $limit
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    private function getRecommendedCourses($user, $limit = 5)
+    {
+        // Get IDs of user's selected topics
+        $userTopicIds = $user->topic()->pluck('topic_id');
+        
+        // Get popular courses from other topics
+        $recommendedCourses = Course::whereNotIn('topic_id', $userTopicIds)
+            ->with(['user:id,username,first_name,last_name,avatar', 'topic'])
+            ->withCount('enrollments')
+            ->orderBy('enrollments_count', 'desc')
+            ->limit($limit)
+            ->get();
+            
+        // Add enrollment information
+        foreach ($recommendedCourses as $course) {
+            $course->is_enrolled = $course->isUserEnrolled($user);
+            $course->enrollment = $user->enrollments()
+                ->where('course_id', $course->id)
+                ->first();
+        }
+        
+        return $recommendedCourses;
+    }
 }
