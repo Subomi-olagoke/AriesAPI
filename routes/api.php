@@ -16,6 +16,7 @@ use App\Http\Controllers\CommentController;
 use App\Http\Controllers\CoursesController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReadlistController;
 use App\Http\Controllers\EducatorsController;
 use App\Http\Controllers\LiveClassController;
 use App\Http\Controllers\HireRequestController;
@@ -49,6 +50,9 @@ Route::prefix('live-class')->group(function () {
     // View details for a specific live class
     Route::get('/{id}', [LiveClassController::class, 'show']);
 });
+
+// Public route for accessing shared readlists via share key
+Route::get('/readlists/shared/{shareKey}', [ReadlistController::class, 'showByShareKey']);
 
 // Protected routes (authentication required)
 // Use auth:sanctum middleware consistently for all protected routes
@@ -139,6 +143,22 @@ Route::middleware('auth:sanctum')->group(function() {
     Route::post('/post/{lessonId}/bookmark', [BookmarkController::class, 'bookmarkPost']);
     Route::delete('/course/{courseId}/bookmark', [BookmarkController::class, 'removeBookmarkCourse']);
     Route::delete('/post/{lessonId}/bookmark', [BookmarkController::class, 'removeBookmarkPost']);
+
+    // Readlist routes
+    Route::prefix('readlists')->group(function () {
+        Route::get('/', [ReadlistController::class, 'index']);
+        Route::post('/', [ReadlistController::class, 'store']);
+        Route::get('/public', [ReadlistController::class, 'publicReadlists']);
+        Route::get('/{id}', [ReadlistController::class, 'show']);
+        Route::put('/{id}', [ReadlistController::class, 'update']);
+        Route::delete('/{id}', [ReadlistController::class, 'destroy']);
+        
+        // Readlist item routes
+        Route::post('/{id}/items', [ReadlistController::class, 'addItem']);
+        Route::delete('/{id}/items/{itemId}', [ReadlistController::class, 'removeItem']);
+        Route::put('/{id}/reorder', [ReadlistController::class, 'reorderItems']);
+        Route::post('/{id}/regenerate-share-key', [ReadlistController::class, 'regenerateShareKey']);
+    });
 
     // Search route
     Route::get('/search', [SearchController::class, 'search'])->name('search');

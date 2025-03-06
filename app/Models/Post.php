@@ -32,5 +32,11 @@ class Post extends Model {
         return $this->hasMany(Comment::class, 'post_id');
     }
 
-
+    /**
+     * Get the readlist items for this post.
+     */
+    public function readlistItems()
+    {
+        return $this->morphMany(ReadlistItem::class, 'item');
+    }
 }

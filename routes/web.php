@@ -24,3 +24,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/live-class/{id}/join', [LiveClassController::class, 'join'])->name('live-class.join');
     Route::post('/live-class/{id}/end', [LiveClassController::class, 'end'])->name('live-class.end');
 });
+
+// Route for shared readlists - this creates a nice URL for sharing
+Route::get('/readlists/shared/{shareKey}', function($shareKey) {
+    // This route will be handled by the frontend
+    return view('welcome');
+})->name('readlist.shared');

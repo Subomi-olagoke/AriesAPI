@@ -187,4 +187,12 @@ class Course extends Model {
             $query->whereIn('status', ['active', 'completed']);
         }])->orderBy('enrollments_count', 'desc');
     }
+    
+    /**
+     * Get the readlist items for this course.
+     */
+    public function readlistItems()
+    {
+        return $this->morphMany(ReadlistItem::class, 'item');
+    }
 }
