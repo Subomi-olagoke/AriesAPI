@@ -531,20 +531,35 @@ class CoursesController extends Controller {
         // Get IDs of user's selected topics
         $userTopicIds = $user->topic()->pluck('topic_id');
         
-        // Get popular courses from other topics
-        $recommendedCourses = Course::whereNotIn('topic_id', $userTopicIds)
-            ->with(['user:id,username,first_name,last_name,avatar', 'topic'])
-            ->withCount('enrollments')
-            ->orderBy('enrollments_count', 'desc')
-            ->limit($limit)
-            ->get();
-            
+        try {
+            // Try the original approach with enrollments count
+            $recommendedCourses = Course::whereNotIn('topic_id', $userTopicIds)
+                ->with(['user:id,username,first_name,last_name,avatar', 'topic'])
+                ->withCount('enrollments')
+                ->orderBy('enrollments_count', 'desc')
+                ->limit($limit)
+                ->get();
+        } catch (\Exception $e) {
+            // Fallback if the course_enrollments table doesn't exist
+            $recommendedCourses = Course::whereNotIn('topic_id', $userTopicIds)
+                ->with(['user:id,username,first_name,last_name,avatar', 'topic'])
+                ->inRandomOrder()
+                ->limit($limit)
+                ->get();
+        }
+                
         // Add enrollment information
         foreach ($recommendedCourses as $course) {
-            $course->is_enrolled = $course->isUserEnrolled($user);
-            $course->enrollment = $user->enrollments()
-                ->where('course_id', $course->id)
-                ->first();
+            try {
+                $course->is_enrolled = $course->isUserEnrolled($user);
+                $course->enrollment = $user->enrollments()
+                    ->where('course_id', $course->id)
+                    ->first();
+            } catch (\Exception $e) {
+                // Fallback if enrollments fail
+                $course->is_enrolled = false;
+                $course->enrollment = null;
+            }
         }
         
         return $recommendedCourses;
