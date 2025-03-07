@@ -3,21 +3,13 @@
 namespace App\Models;
 
 use App\Models\User;
-use Laravel\Scout\Searchable;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Post extends Model {
-    use Searchable;
 
-    public function toSearchableArray()
-    {
-        return [
-            'id' => $this->id,
-            'title' => $this->title,
-            'body' => $this->body,
-        ];
-    }
+   
 
 	use HasFactory;
 

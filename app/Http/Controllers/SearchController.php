@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Course;
 use App\Models\Post;
-use Illuminate\Http\Request;
 use App\Models\User;
+use Illuminate\Http\Request;
 
 class SearchController extends Controller
 {
@@ -16,9 +16,23 @@ class SearchController extends Controller
 
         $query = $request->input('query');
 
-        $posts = Post::search($query)->get()->load('user');
-        $users = User::search($query)->get();
-        $courses = Course::search($query)->get()->load('user');
+        // Search users
+        $users = User::where('username', 'LIKE', "%{$query}%")
+            ->orWhere('first_name', 'LIKE', "%{$query}%")
+            ->orWhere('last_name', 'LIKE', "%{$query}%")
+            ->get();
+
+        // Search posts
+        $posts = Post::where('title', 'LIKE', "%{$query}%")
+            ->orWhere('body', 'LIKE', "%{$query}%")
+            ->with('user')
+            ->get();
+
+        // Search courses
+        $courses = Course::where('title', 'LIKE', "%{$query}%")
+            ->orWhere('description', 'LIKE', "%{$query}%")
+            ->with('user')
+            ->get();
 
         $results = $posts->merge($users)->merge($courses);
 
@@ -35,5 +49,4 @@ class SearchController extends Controller
             'results' => $results,
         ]);
     }
-
 }

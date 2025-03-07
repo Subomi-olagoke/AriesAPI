@@ -2,23 +2,15 @@
 
 namespace App\Models;
 
-use Laravel\Scout\Searchable;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Course extends Model {
-    use Searchable;
+    
     use HasFactory;
 
-    public function toSearchableArray()
-    {
-        return [
-            'id' => $this->id,
-            'title' => $this->title,
-            'description' => $this->description,
-            'difficulty_level' => $this->difficulty_level
-        ];
-    }
+    
     
     protected $fillable = [
         'title',
