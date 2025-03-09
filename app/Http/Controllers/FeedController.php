@@ -19,28 +19,46 @@ class FeedController extends Controller
             $query->whereIn('topics.id', $topicIds)
         )->pluck('id');
 
-        // Get posts from related users
-        $relatedPosts = Post::with('user')
-            ->whereIn('user_id', $relatedUserIds)
-            ->latest()
-            ->limit(10)
-            ->get();
+        // Get posts from users the current user is following
+        $followingIds = $user->following()->pluck('followeduser');
+        
+        // Combine posts from topic-related users and followed users
+        // Prioritize followed users' posts
+        $feedQuery = Post::with('user')
+            ->where(function($query) use ($relatedUserIds, $followingIds) {
+                $query->whereIn('user_id', $followingIds)
+                      ->orWhereIn('user_id', $relatedUserIds);
+            })
+            ->orderBy('created_at', 'desc')
+            ->take(50);
+            
+        // If we need supplementary posts to fill the feed
+        $postCount = $feedQuery->count();
+        
+        if ($postCount < 20) {
+            // Add some additional posts from outside the user's network if needed
+            // but make sure they're always placed after the relevant posts
+            $supplementalPosts = Post::with('user')
+                ->whereNotIn('user_id', $relatedUserIds)
+                ->whereNotIn('user_id', $followingIds)
+                ->where('visibility', 'public')
+                ->orderBy('created_at', 'desc')
+                ->take(20 - $postCount)
+                ->get();
+                
+            $feedPosts = $feedQuery->get();
+            
+            // Merge while maintaining the created_at order
+            $posts = $feedPosts->concat($supplementalPosts)
+                ->sortByDesc('created_at')
+                ->values();
+        } else {
+            $posts = $feedQuery->get();
+        }
 
-        // Get some random posts as well for variety
-        $randomPosts = Post::with('user')
-            ->whereNotIn('user_id', $relatedUserIds)
-            ->inRandomOrder()
-            ->limit(10)
-            ->get();
-
-        // Merge posts but don't shuffle
-        $posts = $relatedPosts->merge($randomPosts);
-
-        // Return only the posts
+        // Return posts with consistent ordering by creation date (newest first)
         return response()->json([
             'posts' => $posts
         ]);
     }
-
-
 }
