@@ -12,6 +12,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class EducatorsController extends Controller {
 
@@ -140,6 +141,67 @@ class EducatorsController extends Controller {
             
             // Add calculated fields
             $user->full_name = $user->first_name . ' ' . $user->last_name;
+            
+            // Remove unnecessary relationship data
+            unset($user->profile);
+            unset($user->topic);
+            
+            return $user;
+        });
+        
+        return response()->json([
+            'educators' => $educators,
+            'total' => $educators->total(),
+            'per_page' => $educators->perPage(),
+            'current_page' => $educators->currentPage(),
+            'last_page' => $educators->lastPage()
+        ]);
+    }
+
+    /**
+     * Get all educators with information about whether the current user follows them
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getAllEducatorsWithFollowStatus(Request $request)
+    {
+        // Define pagination parameters with defaults
+        $perPage = $request->get('per_page', 15);
+        $page = $request->get('page', 1);
+        
+        // Get the current user's ID
+        $currentUserId = auth()->id();
+        
+        // Get the IDs of users the current user follows
+        $followedUserIds = auth()->user()->following()->pluck('followeduser')->toArray();
+        
+        // Query for all users with educator role
+        $educators = User::where('role', User::ROLE_EDUCATOR)
+            ->with(['profile', 'topic']) // Include relationships
+            ->select(['id', 'username', 'first_name', 'last_name', 'avatar', 'created_at'])
+            ->withCount(['courses', 'followers']) // Count relationships
+            ->orderBy('followers_count', 'desc') // Order by popularity
+            ->paginate($perPage);
+            
+        // Transform the data to include additional info
+        $educators->getCollection()->transform(function($user) use ($followedUserIds, $currentUserId) {
+            // Add profile data if available
+            if ($user->profile) {
+                $user->bio = $user->profile->bio;
+            }
+            
+            // Add topics/interests
+            $user->topics = $user->topic->pluck('name');
+            
+            // Add calculated fields
+            $user->full_name = $user->first_name . ' ' . $user->last_name;
+            
+            // Add follow status (if current user follows this educator)
+            $user->is_followed = in_array($user->id, $followedUserIds);
+            
+            // Is this the current user?
+            $user->is_current_user = ($user->id === $currentUserId);
             
             // Remove unnecessary relationship data
             unset($user->profile);
