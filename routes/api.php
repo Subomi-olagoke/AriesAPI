@@ -43,6 +43,9 @@ Route::post('/setup', [SetupController::class, 'setup'])->name('setup');
 Route::post('/createPreferences', [SetupController::class, 'createPreferences'])->name('createPreferences');
 Route::get('/followOptions', [SetupController::class, 'followOptions'])->name('followOptions');
 
+// Public educators route - get all educators
+Route::get('/educators', [EducatorsController::class, 'getAllEducators']);
+
 // Public Live Class routes (viewing list and details do not require a subscription)
 Route::prefix('live-class')->group(function () {
     // List all live classes
@@ -74,6 +77,9 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/{id}/participant-settings', [LiveClassController::class, 'updateParticipantSettings']);
         Route::post('/{id}/connection-quality', [LiveClassController::class, 'reportConnectionQuality']);
     });
+
+    // Educators with follow status - authenticated version
+    Route::get('/educators/with-follows', [EducatorsController::class, 'getAllEducatorsWithFollowStatus']);
 
     Route::post('/logout', [AuthManager::class, 'logout'])->name('logout');
     Route::get('/feed', [FeedController::class, 'feed'])->name('feed');
