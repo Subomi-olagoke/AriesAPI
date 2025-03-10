@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Support\Str;
-
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,38 +11,28 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 class User extends Authenticatable {
     use HasApiTokens, HasFactory, Notifiable;
 
-    /**
-     * Define the searchable data.
-     */
     protected $appends = ['setup_completed'];
 
     public function getSetupCompletedAttribute(): bool {
         return !empty($this->role) && $this->topic()->exists();
     }
     
-
     const ROLE_EDUCATOR = 'educator';
     const ROLE_LEARNER = 'learner';
     const ROLE_EXPLORER = 'explorer';
 
-    public $incrementing = false; // Disable auto-incrementing
-    protected $keyType = 'string'; // Use string type for the primary key
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected static function boot()
     {
         parent::boot();
 
-        // Automatically generate a UUID when creating a new user
         static::creating(function ($model) {
             $model->id = (string) Str::uuid();
         });
     }
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'username',
         'email',
@@ -54,21 +43,11 @@ class User extends Authenticatable {
         'avatar',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var array<int, string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
-     */
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
@@ -124,9 +103,6 @@ class User extends Authenticatable {
         return $this->hasMany(HireRequest::class, 'tutor_id');
     }
     
-    /**
-     * Get conversations where the user is a participant.
-     */
     public function conversations()
     {
         return Conversation::where(function ($query) {
@@ -135,17 +111,11 @@ class User extends Authenticatable {
         });
     }
 
-    /**
-     * Get messages sent by the user.
-     */
     public function messages()
     {
         return $this->hasMany(Message::class, 'sender_id');
     }
 
-    /**
-     * Get a conversation with another user.
-     */
     public function getConversationWith(User $otherUser)
     {
         return Conversation::where(function ($query) use ($otherUser) {
@@ -157,17 +127,11 @@ class User extends Authenticatable {
         })->first();
     }
 
-    /**
-     * Get enrollments for the user.
-     */
     public function enrollments()
     {
         return $this->hasMany(CourseEnrollment::class);
     }
 
-    /**
-     * Get the courses the user is enrolled in.
-     */
     public function enrolledCourses()
     {
         return $this->belongsToMany(Course::class, 'course_enrollments')
@@ -175,25 +139,16 @@ class User extends Authenticatable {
                 ->withTimestamps();
     }
 
-    /**
-     * Get only active enrollments.
-     */
     public function activeEnrollments()
     {
         return $this->enrollments()->where('status', 'active');
     }
 
-    /**
-     * Get only completed enrollments.
-     */
     public function completedEnrollments()
     {
         return $this->enrollments()->where('status', 'completed');
     }
 
-    /**
-     * Check if user is enrolled in a specific course.
-     */
     public function isEnrolledIn(Course $course)
     {
         return $this->enrollments()
@@ -202,25 +157,16 @@ class User extends Authenticatable {
                 ->exists();
     }
     
-    /**
-     * Get count of active enrollments.
-     */
     public function getActiveEnrollmentsCountAttribute()
     {
         return $this->activeEnrollments()->count();
     }
     
-    /**
-     * Get count of completed enrollments.
-     */
     public function getCompletedEnrollmentsCountAttribute()
     {
         return $this->completedEnrollments()->count();
     }
     
-    /**
-     * Get total spent on course enrollments.
-     */
     public function getTotalSpentAttribute()
     {
         $enrollments = $this->enrollments()
@@ -233,25 +179,16 @@ class User extends Authenticatable {
         });
     }
 
-    /**
-     * Get user's bookmarks
-     */
     public function bookmarks()
     {
         return $this->hasMany(Bookmark::class);
     }
 
-    /**
-     * Get user's subscriptions
-     */
     public function subscriptions()
     {
         return $this->hasMany(Subscription::class);
     }
     
-    /**
-     * Get unread messages count
-     */
     public function unreadMessagesCount()
     {
         $count = 0;
@@ -268,26 +205,20 @@ class User extends Authenticatable {
         return $count;
     }
 
-    /**
-     * Get lesson progress records for the user.
-     */
     public function lessonProgress()
     {
         return $this->hasMany(LessonProgress::class);
     }
     
-    /**
-     * Get completed lessons for the user.
-     */
     public function completedLessons()
     {
         return $this->hasManyThrough(
             CourseLesson::class,
             LessonProgress::class,
-            'user_id', // Foreign key on lesson_progress table
-            'id', // Foreign key on course_lessons table
-            'id', // Local key on users table
-            'lesson_id' // Local key on lesson_progress table
+            'user_id',
+            'id',
+            'id',
+            'lesson_id'
         )->where('lesson_progress.completed', true);
     }
 }

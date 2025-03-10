@@ -13,7 +13,7 @@ class ProfileController extends Controller {
 
     public function viewProfile(User $user) {
         $user = User::with('profile')->find($user->id);
-
+    
         $posts = $user->posts()->get();
         $likes = $user->likes()->get();
         $followers = $user->followers()->count();
@@ -22,12 +22,12 @@ class ProfileController extends Controller {
         
         // Construct full name from first_name and last_name
         $fullName = $user->first_name . ' ' . $user->last_name;
-
+    
         return response()->json([
             'posts' => $posts,
             'username' => $user->username,
             'full_name' => $fullName,
-            'avatar' => $avatar,
+            'avatar' => $avatar,  // This will be null if profile is null
             'followers' => $followers,
             'following' => $following,
             'likes' => $likes
@@ -54,7 +54,7 @@ class ProfileController extends Controller {
         $request->validate([
             'avatar' => 'required|image|mimes:jpg,jpeg,png,gif,webp|max:3000'
         ]);
-
+    
         $user = auth()->user();
         
         try {
@@ -84,6 +84,12 @@ class ProfileController extends Controller {
             // Update user record with new avatar URL
             $user->avatar = $avatarUrl;
             $user->save();
+            
+            // Optionally update profile avatar as well if you want consistency
+            $profile = $user->profile ?? new Profile();
+            $profile->user_id = $user->id;
+            $profile->avatar = $avatarUrl;
+            $profile->save();
             
             // Delete old avatar if it exists and isn't the default
             if ($oldAvatar && $oldAvatar != "/fallback-avatar.jpg" && !str_contains($oldAvatar, 'fallback')) {
