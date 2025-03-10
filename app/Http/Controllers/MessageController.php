@@ -69,6 +69,9 @@ class MessageController extends Controller
     /**
      * Start a conversation or send a message to an existing one.
      */
+    /**
+     * Start a conversation or send a message to an existing one.
+     */
     public function sendMessage(Request $request)
     {
         $request->validate([
@@ -154,6 +157,9 @@ class MessageController extends Controller
     /**
      * Delete a message.
      */
+    /**
+     * Delete a message.
+     */
     public function deleteMessage($messageId)
     {
         $user = Auth::user();
@@ -168,11 +174,9 @@ class MessageController extends Controller
             DB::beginTransaction();
             
             // Delete attachment if exists
-            if ($message->attachment && strpos($message->attachment, 's3.amazonaws.com') !== false) {
-                $attachmentPath = parse_url($message->attachment, PHP_URL_PATH);
-                if ($attachmentPath) {
-                    Storage::disk('s3')->delete($attachmentPath);
-                }
+            if ($message->attachment) {
+                $fileUploadService = app(FileUploadService::class);
+                $fileUploadService->deleteFile($message->attachment);
             }
             
             // Soft delete the message

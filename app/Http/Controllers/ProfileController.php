@@ -72,6 +72,12 @@ class ProfileController extends Controller {
                 ]
             );
             
+            if (!$avatarUrl) {
+                return response()->json([
+                    'message' => 'Failed to upload avatar to Cloudinary'
+                ], 500);
+            }
+            
             // Store previous avatar for deletion
             $oldAvatar = $user->avatar;
             
@@ -80,9 +86,8 @@ class ProfileController extends Controller {
             $user->save();
             
             // Delete old avatar if it exists and isn't the default
-            if ($oldAvatar && $oldAvatar != "/fallback-avatar.jpg" && strpos($oldAvatar, 's3.amazonaws.com') !== false) {
-                $oldPath = parse_url($oldAvatar, PHP_URL_PATH);
-                Storage::disk('s3')->delete($oldPath);
+            if ($oldAvatar && $oldAvatar != "/fallback-avatar.jpg" && !str_contains($oldAvatar, 'fallback')) {
+                $fileUploadService->deleteFile($oldAvatar);
             }
             
             return response()->json([

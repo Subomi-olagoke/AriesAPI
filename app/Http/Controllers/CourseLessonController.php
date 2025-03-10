@@ -23,6 +23,9 @@ class CourseLessonController extends Controller
     /**
      * Create a new lesson for a course section
      */
+    /**
+     * Create a new lesson for a course section with Cloudinary for media
+     */
     public function store(Request $request, $sectionId)
     {
         $section = CourseSection::findOrFail($sectionId);
@@ -86,6 +89,10 @@ class CourseLessonController extends Controller
                         'fit' => true
                     ]
                 );
+                
+                if (!$lesson->thumbnail_url) {
+                    throw new \Exception('Failed to upload thumbnail to Cloudinary');
+                }
             }
             
             // Handle video upload if provided
@@ -94,6 +101,10 @@ class CourseLessonController extends Controller
                     $request->file('video'),
                     'lesson_videos'
                 );
+                
+                if (!$lesson->video_url) {
+                    throw new \Exception('Failed to upload video to Cloudinary');
+                }
             }
             
             // Handle file upload if provided
@@ -102,6 +113,10 @@ class CourseLessonController extends Controller
                     $request->file('file'),
                     'lesson_files'
                 );
+                
+                if (!$lesson->file_url) {
+                    throw new \Exception('Failed to upload file to Cloudinary');
+                }
             }
             
             $lesson->save();
@@ -218,6 +233,9 @@ class CourseLessonController extends Controller
     /**
      * Update a lesson
      */
+    /**
+     * Update a lesson with Cloudinary for media
+     */
     public function update(Request $request, $lessonId)
     {
         $lesson = CourseLesson::findOrFail($lessonId);
@@ -306,11 +324,8 @@ class CourseLessonController extends Controller
             // Handle thumbnail upload if provided
             if ($request->hasFile('thumbnail')) {
                 // Delete old thumbnail if it exists
-                if ($lesson->thumbnail_url && strpos($lesson->thumbnail_url, 's3.amazonaws.com') !== false) {
-                    $oldPath = parse_url($lesson->thumbnail_url, PHP_URL_PATH);
-                    if ($oldPath) {
-                        Storage::disk('s3')->delete($oldPath);
-                    }
+                if ($lesson->thumbnail_url) {
+                    $fileUploadService->deleteFile($lesson->thumbnail_url);
                 }
                 
                 $lesson->thumbnail_url = $fileUploadService->uploadFile(
@@ -323,38 +338,44 @@ class CourseLessonController extends Controller
                         'fit' => true
                     ]
                 );
+                
+                if (!$lesson->thumbnail_url) {
+                    throw new \Exception('Failed to upload thumbnail to Cloudinary');
+                }
             }
             
             // Handle video upload if provided
             if ($request->hasFile('video')) {
                 // Delete old video if it exists
-                if ($lesson->video_url && strpos($lesson->video_url, 's3.amazonaws.com') !== false) {
-                    $oldPath = parse_url($lesson->video_url, PHP_URL_PATH);
-                    if ($oldPath) {
-                        Storage::disk('s3')->delete($oldPath);
-                    }
+                if ($lesson->video_url) {
+                    $fileUploadService->deleteFile($lesson->video_url);
                 }
                 
                 $lesson->video_url = $fileUploadService->uploadFile(
                     $request->file('video'),
                     'lesson_videos'
                 );
+                
+                if (!$lesson->video_url) {
+                    throw new \Exception('Failed to upload video to Cloudinary');
+                }
             }
             
             // Handle file upload if provided
             if ($request->hasFile('file')) {
                 // Delete old file if it exists
-                if ($lesson->file_url && strpos($lesson->file_url, 's3.amazonaws.com') !== false) {
-                    $oldPath = parse_url($lesson->file_url, PHP_URL_PATH);
-                    if ($oldPath) {
-                        Storage::disk('s3')->delete($oldPath);
-                    }
+                if ($lesson->file_url) {
+                    $fileUploadService->deleteFile($lesson->file_url);
                 }
                 
                 $lesson->file_url = $fileUploadService->uploadFile(
                     $request->file('file'),
                     'lesson_files'
                 );
+                
+                if (!$lesson->file_url) {
+                    throw new \Exception('Failed to upload file to Cloudinary');
+                }
             }
             
             $lesson->save();
@@ -389,6 +410,9 @@ class CourseLessonController extends Controller
     /**
      * Delete a lesson
      */
+   /**
+     * Delete a lesson and its associated media from Cloudinary
+     */
     public function destroy($lessonId)
     {
         $lesson = CourseLesson::findOrFail($lessonId);
@@ -403,26 +427,20 @@ class CourseLessonController extends Controller
         try {
             DB::beginTransaction();
             
-            // Delete lesson files if they exist
-            if ($lesson->video_url && strpos($lesson->video_url, 's3.amazonaws.com') !== false) {
-                $videoPath = parse_url($lesson->video_url, PHP_URL_PATH);
-                if ($videoPath) {
-                    Storage::disk('s3')->delete($videoPath);
-                }
+            // Get file upload service
+            $fileUploadService = app(FileUploadService::class);
+            
+            // Delete lesson files from Cloudinary if they exist
+            if ($lesson->video_url) {
+                $fileUploadService->deleteFile($lesson->video_url);
             }
             
-            if ($lesson->file_url && strpos($lesson->file_url, 's3.amazonaws.com') !== false) {
-                $filePath = parse_url($lesson->file_url, PHP_URL_PATH);
-                if ($filePath) {
-                    Storage::disk('s3')->delete($filePath);
-                }
+            if ($lesson->file_url) {
+                $fileUploadService->deleteFile($lesson->file_url);
             }
             
-            if ($lesson->thumbnail_url && strpos($lesson->thumbnail_url, 's3.amazonaws.com') !== false) {
-                $thumbnailPath = parse_url($lesson->thumbnail_url, PHP_URL_PATH);
-                if ($thumbnailPath) {
-                    Storage::disk('s3')->delete($thumbnailPath);
-                }
+            if ($lesson->thumbnail_url) {
+                $fileUploadService->deleteFile($lesson->thumbnail_url);
             }
             
             // Store section_id and course_id for reordering and updating duration

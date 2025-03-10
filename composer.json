@@ -9,6 +9,7 @@
         "algolia/algoliasearch-client-php": "^4.13",
         "aws/aws-sdk-php": "^3.294",
         "beyondcode/laravel-websockets": "^1.14",
+        "cloudinary/cloudinary_php": "^3.1",
         "doctrine/dbal": "^3.5.1",
         "guzzlehttp/guzzle": "^7.2",
         "illuminate/support": "^10.0",

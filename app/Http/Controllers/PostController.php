@@ -22,6 +22,10 @@ class PostController extends Controller {
      * Store a new post.
      * For media posts, the server handles file uploads for images and videos.
      */
+    /**
+     * Store a new post.
+     * For media posts, uses Cloudinary for file uploads for images and videos.
+     */
     public function storePost(Request $request) {
         // Validate the incoming request parameters
         $request->validate([
@@ -57,7 +61,7 @@ class PostController extends Controller {
                         'media_file' => 'image|mimes:jpg,jpeg,png,gif,webp|max:5120',
                     ]);
                     
-                    // Upload image to S3
+                    // Upload image to Cloudinary
                     $newPost->media_link = $fileUploadService->uploadFile(
                         $request->file('media_file'),
                         'media/images'
@@ -69,7 +73,7 @@ class PostController extends Controller {
                         'media_file' => 'mimetypes:video/avi,video/mpeg,video/quicktime,video/mp4,video/webm,video/x-matroska|max:10240',
                     ]);
                     
-                    // Upload video to S3
+                    // Upload video to Cloudinary
                     $newPost->media_link = $fileUploadService->uploadFile(
                         $request->file('media_file'),
                         'media/videos'
@@ -83,7 +87,13 @@ class PostController extends Controller {
                         
                         $newPost->media_thumbnail = $fileUploadService->uploadFile(
                             $request->file('media_thumbnail'),
-                            'media/thumbnails'
+                            'media/thumbnails',
+                            [
+                                'process_image' => true,
+                                'width' => 500,
+                                'height' => 300,
+                                'fit' => true
+                            ]
                         );
                     }
                 }
@@ -104,21 +114,24 @@ class PostController extends Controller {
     /**
      * Delete a post.
      */
+    /**
+     * Delete a post.
+     */
     public function deletePost(Post $post) {
         // Check if the authenticated user is the owner of the post
         if (auth()->id() !== $post->user_id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
         
-        // Delete associated media files if they exist
-        if ($post->media_link && strpos($post->media_link, 's3.amazonaws.com') !== false) {
-            $mediaPath = parse_url($post->media_link, PHP_URL_PATH);
-            Storage::disk('s3')->delete($mediaPath);
+        // Delete associated media files from Cloudinary if they exist
+        $fileUploadService = app(FileUploadService::class);
+        
+        if ($post->media_link) {
+            $fileUploadService->deleteFile($post->media_link);
         }
         
-        if ($post->media_thumbnail && strpos($post->media_thumbnail, 's3.amazonaws.com') !== false) {
-            $thumbnailPath = parse_url($post->media_thumbnail, PHP_URL_PATH);
-            Storage::disk('s3')->delete($thumbnailPath);
+        if ($post->media_thumbnail) {
+            $fileUploadService->deleteFile($post->media_thumbnail);
         }
         
         // Delete the post
@@ -128,7 +141,6 @@ class PostController extends Controller {
             return response()->json(['message' => 'Failed to delete post'], 500);
         }
     }
-    
     /**
      * Get posts for a user.
      */
