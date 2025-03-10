@@ -18,7 +18,10 @@ class ProfileController extends Controller {
         $likes = $user->likes()->get();
         $followers = $user->followers()->count();
         $following = $user->following()->count();
-        $avatar = $user->profile ? $user->profile->avatar : null;
+        
+        // Prioritize the direct avatar attribute
+        $avatar = $user->avatar ?? 
+                  ($user->profile && $user->profile->avatar ? $user->profile->avatar : null);
         
         // Construct full name from first_name and last_name
         $fullName = $user->first_name . ' ' . $user->last_name;
@@ -27,7 +30,7 @@ class ProfileController extends Controller {
             'posts' => $posts,
             'username' => $user->username,
             'full_name' => $fullName,
-            'avatar' => $avatar,  // This will be null if profile is null
+            'avatar' => $avatar,  // Now using the direct avatar attribute first
             'followers' => $followers,
             'following' => $following,
             'likes' => $likes
