@@ -13,7 +13,9 @@ class CloudinaryServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(Cloudinary::class, function ($app) {
-            return new Cloudinary(config('cloudinary.cloud_url'));
+            // Hardcode the Cloudinary URL instead of using config
+            $cloudinaryUrl = "cloudinary://789173963938137:xAJe8VzAp_ZhWyy-SICwZy3o1Ps@dnm8itso6";
+            return new Cloudinary($cloudinaryUrl);
         });
     }
 
