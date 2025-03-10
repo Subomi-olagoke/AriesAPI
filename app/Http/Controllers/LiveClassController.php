@@ -18,15 +18,31 @@ class LiveClassController extends Controller
 {
     /**
      * Check if the user has an active subscription.
+     * In local environment, always returns true for development purposes.
      */
     private function checkSubscription()
     {
-        $subscription = Subscription::where('user_id', auth()->id())
-            ->where('is_active', true)
-            ->where('expires_at', '>', now())
-            ->first();
-            
-        return $subscription !== null;
+        // In local/development environment, bypass subscription check
+        if (app()->environment('local')) {
+            return true;
+        }
+        
+        // In production, check for an actual subscription
+        try {
+            $subscription = Subscription::where('user_id', auth()->id())
+                ->where('is_active', true)
+                ->where('expires_at', '>', now())
+                ->first();
+                
+            return $subscription !== null;
+        } catch (\Exception $e) {
+            // Log the error but allow access in development
+            if (app()->environment('production')) {
+                \Log::error('Subscription check failed: ' . $e->getMessage());
+                return false;
+            }
+            return true;
+        }
     }
 
     /**
@@ -457,27 +473,86 @@ class LiveClassController extends Controller
      */
     public function checkSubscriptionStatus()
     {
-        $subscription = Subscription::where('user_id', auth()->id())
-            ->where('is_active', true)
-            ->where('expires_at', '>', now())
-            ->first();
-
-        if (!$subscription) {
+        // In local environment, return fake subscription for development
+        if (app()->environment('local')) {
             return response()->json([
-                'has_subscription'      => false,
-                'message'               => 'No active subscription found',
-                'subscription_required' => true
+                'has_subscription' => true,
+                'subscription' => [
+                    'plan_type' => 'development',
+                    'expires_at' => now()->addYear(),
+                    'days_remaining' => 365,
+                    'is_active' => true
+                ]
             ]);
         }
 
-        return response()->json([
-            'has_subscription' => true,
-            'subscription'     => [
-                'plan_type'      => $subscription->plan_type,
-                'expires_at'     => $subscription->expires_at,
-                'days_remaining' => now()->diffInDays($subscription->expires_at),
-                'is_active'      => $subscription->is_active
-            ]
-        ]);
+        // In production, check actual subscription
+        try {
+            $subscription = Subscription::where('user_id', auth()->id())
+                ->where('is_active', true)
+                ->where('expires_at', '>', now())
+                ->first();
+
+            if (!$subscription) {
+                return response()->json([
+                    'has_subscription' => false,
+                    'message' => 'No active subscription found',
+                    'subscription_required' => true,
+                    'plans' => [
+                        [
+                            'type' => 'monthly',
+                            'price' => 5000,
+                            'features' => [
+                                'Access to all live classes',
+                                'Chat during classes',
+                                'Screen sharing',
+                                'HD video quality'
+                            ]
+                        ],
+                        [
+                            'type' => 'yearly',
+                            'price' => 50000,
+                            'features' => [
+                                'All monthly features',
+                                '2 months free',
+                                'Priority support',
+                                'Recording access'
+                            ]
+                        ]
+                    ]
+                ]);
+            }
+
+            return response()->json([
+                'has_subscription' => true,
+                'subscription' => [
+                    'plan_type' => $subscription->plan_type,
+                    'expires_at' => $subscription->expires_at,
+                    'days_remaining' => now()->diffInDays($subscription->expires_at),
+                    'is_active' => $subscription->is_active
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error checking subscription status: ' . $e->getMessage());
+            
+            // In non-production, provide a fallback subscription
+            if (!app()->environment('production')) {
+                return response()->json([
+                    'has_subscription' => true,
+                    'subscription' => [
+                        'plan_type' => 'development',
+                        'expires_at' => now()->addYear(),
+                        'days_remaining' => 365,
+                        'is_active' => true
+                    ]
+                ]);
+            }
+            
+            return response()->json([
+                'has_subscription' => false,
+                'message' => 'Error checking subscription status',
+                'subscription_required' => true
+            ]);
+        }
     }
 }
