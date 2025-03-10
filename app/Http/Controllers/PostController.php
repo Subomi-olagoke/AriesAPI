@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Post;
+use App\Models\Like;
+use App\Models\Comment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
@@ -18,10 +20,6 @@ class PostController extends Controller {
         return response()->json(['post' => $post]);
     }
 
-    /**
-     * Store a new post.
-     * For media posts, the server handles file uploads for images and videos.
-     */
     /**
      * Store a new post.
      * For media posts, uses Cloudinary for file uploads for images and videos.
@@ -114,9 +112,6 @@ class PostController extends Controller {
     /**
      * Delete a post.
      */
-    /**
-     * Delete a post.
-     */
     public function deletePost(Post $post) {
         // Check if the authenticated user is the owner of the post
         if (auth()->id() !== $post->user_id) {
@@ -153,5 +148,20 @@ class PostController extends Controller {
             ->paginate(10);
             
         return response()->json(['posts' => $posts]);
+    }
+    
+    /**
+     * Get statistics (like count and comment count) for a specific post.
+     */
+    public function getPostStats($postId) {
+        $post = Post::findOrFail($postId);
+        $likeCount = Like::where('post_id', $postId)->count();
+        $commentCount = Comment::where('post_id', $postId)->count();
+        
+        return response()->json([
+            'post_id' => $postId,
+            'like_count' => $likeCount,
+            'comment_count' => $commentCount
+        ]);
     }
 }

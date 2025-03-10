@@ -71,4 +71,12 @@ class CommentController extends Controller {
             $comments, 200
         );
     }
+    
+    public function getCommentCount($postId) {
+        $count = Comment::where('post_id', $postId)->count();
+        return response()->json([
+            'post_id' => $postId,
+            'comment_count' => $count
+        ]);
+    }
 }
