@@ -110,11 +110,10 @@ class MessageController extends Controller
 
             if (!$conversation) {
                 $conversation = Conversation::create([
-                    'id' => Str::uuid()->toString(), // Explicitly convert UUID to string
                     'user_one_id' => $user->id,
                     'user_two_id' => $recipient->id,
-                    // No need to manually set created_at and updated_at
                     'last_message_at' => now()
+                    // ID will be auto-generated
                 ]);
             }
 
