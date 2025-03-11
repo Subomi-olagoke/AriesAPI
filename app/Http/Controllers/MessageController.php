@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class MessageController extends Controller
 {
@@ -99,7 +100,6 @@ class MessageController extends Controller
         try {
             DB::beginTransaction();
 
-            // Find or create conversation
             $conversation = Conversation::where(function ($query) use ($user, $recipient) {
                 $query->where('user_one_id', $user->id)
                       ->where('user_two_id', $recipient->id);
@@ -110,13 +110,13 @@ class MessageController extends Controller
 
             if (!$conversation) {
                 $conversation = Conversation::create([
+                    'id' => Str::uuid(),
                     'user_one_id' => $user->id,
                     'user_two_id' => $recipient->id,
                     'last_message_at' => now()
                 ]);
             }
 
-            // Prepare message data
             $messageData = [
                 'conversation_id' => $conversation->id,
                 'sender_id' => $user->id,
@@ -124,7 +124,6 @@ class MessageController extends Controller
                 'is_read' => false
             ];
 
-            // Handle file attachment
             if ($request->hasFile('attachment')) {
                 $fileUploadService = app(FileUploadService::class);
 
@@ -137,15 +136,12 @@ class MessageController extends Controller
                 $messageData['attachment_type'] = $request->file('attachment')->getMimeType();
             }
 
-            // Create message
             $message = Message::create($messageData);
 
-            // Update conversation's last message timestamp
             $conversation->update([
                 'last_message_at' => now()
             ]);
 
-            // Broadcast message (if using Laravel Echo)
             broadcast(new MessageSent($message))->toOthers();
 
             DB::commit();
