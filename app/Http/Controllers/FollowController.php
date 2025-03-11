@@ -8,76 +8,91 @@ use Illuminate\Http\Request;
 use App\Notifications\followedNotification;
 
 class FollowController extends Controller {
-	public function createFollow(Request $request, $id) {
 
+    public function createFollow(Request $request, $username) {
         $user = $request->user();
-        if($id == $user->id) {
+
+        // Prevent self-following by comparing usernames.
+        if ($user->username === $username) {
             return response()->json([
-                "message" => "you cannot follow yourself"
+                "message" => "You cannot follow yourself"
             ], 403);
         }
 
-
-        $user2 = User::find($id);
+        // Find the target user by username.
+        $user2 = User::where('username', $username)->first();
         if (!$user2) {
             return response()->json(['message' => 'User not found'], 404);
         }
 
-        $existCheck = $this->followStat($id);
-        if($existCheck) {
+        // Check if the authenticated user is already following the target user.
+        $existCheck = $this->followStat($user2->id);
+        if ($existCheck) {
             return response()->json([
                 "message" => "You are already following this user"
             ], 409);
         }
 
+        // Create the follow record using the target user's id.
+        $newFollow = new Follow();
+        $newFollow->user_id = $user->id;
+        $newFollow->followeduser = $user2->id;
+        $save = $newFollow->save();
 
-		$newFollow = new Follow();
-		$newFollow->user_id = $user->id;
-		$newFollow->followeduser = $id;
-		$save = $newFollow->save();
-
-        if($save) {
-            //$notifiable = User::find($newFollow->followeduser);
+        if ($save) {
             $user2->notify(new followedNotification($user, $user2));
-
             return response()->json([
-                'message' => 'followed successfully'
+                'message' => 'Followed successfully'
             ], 201);
         }
-	}
-
-    public function followStat($id) {
-        return Follow::where([['user_id', '=', auth()->user()->id],
-        ['followeduser', '=', $id]])->exists();
     }
 
-	public function unFollow($id) {
+    public function unFollow(Request $request, $username) {
+        $user = $request->user();
 
-        $existCheck = $this->followStat($id);
+        // Prevent self-unfollowing (or a no-op) by comparing usernames.
+        if ($user->username === $username) {
+            return response()->json([
+                "message" => "You cannot unfollow yourself"
+            ], 403);
+        }
 
-        if(!$existCheck) {
+        // Find the target user by username.
+        $user2 = User::where('username', $username)->first();
+        if (!$user2) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        // Check if the follow relationship exists.
+        $existCheck = $this->followStat($user2->id);
+        if (!$existCheck) {
             return response()->json([
                 "message" => "You are not following this user"
             ], 403);
         }
 
-        $deleted = 0;
+        // Delete the follow record.
+        $deleted = Follow::where('user_id', $user->id)
+            ->where('followeduser', $user2->id)
+            ->delete();
 
-        if($existCheck) {
-        $deleted = Follow::where('user_id', auth()->user()->id)
-        ->where('followeduser', $id)
-        ->delete();
-        }
-
-        if($deleted >= 1) {
+        if ($deleted >= 1) {
             return response()->json([
-                "message" => "unfollowed user"
+                "message" => "Unfollowed user"
             ], 200);
         }
         return response()->json([
-            "message" => "error. try again later"
+            "message" => "Error. Try again later"
         ], 500);
-	}
+    }
+
+    // This helper method accepts a user id (of the target user) and checks the follow status.
+    public function followStat($targetUserId) {
+        return Follow::where([
+            ['user_id', '=', auth()->user()->id],
+            ['followeduser', '=', $targetUserId]
+        ])->exists();
+    }
 
     public function followerCount(User $user) {
         return $user->followers()->count();
