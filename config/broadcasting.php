@@ -1,7 +1,6 @@
 <?php
 
 return [
-
     /*
     |--------------------------------------------------------------------------
     | Default Broadcaster
@@ -14,7 +13,6 @@ return [
     | Supported: "pusher", "ably", "redis", "log", "null"
     |
     */
-
     'default' => env('BROADCAST_DRIVER', 'null'),
 
     /*
@@ -27,16 +25,14 @@ return [
     | each available type of connection are provided inside this array.
     |
     */
-
     'connections' => [
-
         'pusher' => [
             'driver' => 'pusher',
             'key' => env('PUSHER_APP_KEY'),
             'secret' => env('PUSHER_APP_SECRET'),
             'app_id' => env('PUSHER_APP_ID'),
             'options' => [
-                'cluster' => env('PUSHER_APP_CLUSTER'),
+                'cluster' => env('PUSHER_APP_CLUSTER', 'mt1'),
                 'host' => env('PUSHER_HOST') ?: 'api-'.env('PUSHER_APP_CLUSTER', 'mt1').'.pusher.com',
                 'port' => env('PUSHER_PORT', 443),
                 'scheme' => env('PUSHER_SCHEME', 'https'),
@@ -45,6 +41,7 @@ return [
             ],
             'client_options' => [
                 // Guzzle client options: https://docs.guzzlephp.org/en/stable/request-options.html
+                // 'verify' => false, // Useful for self-signed certificates
             ],
         ],
 
@@ -65,7 +62,5 @@ return [
         'null' => [
             'driver' => 'null',
         ],
-
     ],
-
 ];
