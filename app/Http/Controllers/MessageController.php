@@ -19,6 +19,10 @@ class MessageController extends Controller
     {
         $user = Auth::user();
 
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+
         $conversations = Conversation::where('user_one_id', $user->id)
             ->orWhere('user_two_id', $user->id)
             ->with(['latestMessage'])
@@ -38,6 +42,11 @@ class MessageController extends Controller
     public function getConversation($id)
     {
         $user = Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+
         $conversation = Conversation::with(['messages.sender'])
             ->findOrFail($id);
 
@@ -61,23 +70,61 @@ class MessageController extends Controller
     {
         $request->validate([
             'username' => 'required|exists:users,username',
-            'message' => 'required_without:attachment|string',
+            'message' => 'required_without:attachment|string|max:5000',
             'attachment' => 'nullable|file|max:10240',
         ]);
 
         $user = Auth::user();
-        $recipient = User::where('username', $request->username)->firstOrFail();
+        
+        if (!$user) {
+            return response()->json([
+                'message' => 'User not authenticated'
+            ], 401);
+        }
+
+        $recipient = User::where('username', $request->username)->first();
+        
+        if (!$recipient) {
+            return response()->json([
+                'message' => 'Recipient not found'
+            ], 404);
+        }
+
+        if ($recipient->id === $user->id) {
+            return response()->json([
+                'message' => 'You cannot send a message to yourself'
+            ], 400);
+        }
 
         try {
             DB::beginTransaction();
 
-            $conversation = $user->getConversationWith($recipient);
+            // Find or create conversation
+            $conversation = Conversation::where(function ($query) use ($user, $recipient) {
+                $query->where('user_one_id', $user->id)
+                      ->where('user_two_id', $recipient->id);
+            })->orWhere(function ($query) use ($user, $recipient) {
+                $query->where('user_one_id', $recipient->id)
+                      ->where('user_two_id', $user->id);
+            })->first();
 
+            if (!$conversation) {
+                $conversation = Conversation::create([
+                    'user_one_id' => $user->id,
+                    'user_two_id' => $recipient->id,
+                    'last_message_at' => now()
+                ]);
+            }
+
+            // Prepare message data
             $messageData = [
+                'conversation_id' => $conversation->id,
                 'sender_id' => $user->id,
                 'body' => $request->message ?? '',
+                'is_read' => false
             ];
 
+            // Handle file attachment
             if ($request->hasFile('attachment')) {
                 $fileUploadService = app(FileUploadService::class);
 
@@ -90,10 +137,15 @@ class MessageController extends Controller
                 $messageData['attachment_type'] = $request->file('attachment')->getMimeType();
             }
 
-            $message = $conversation->messages()->create($messageData);
+            // Create message
+            $message = Message::create($messageData);
 
-            $conversation->update(['last_message_at' => now()]);
+            // Update conversation's last message timestamp
+            $conversation->update([
+                'last_message_at' => now()
+            ]);
 
+            // Broadcast message (if using Laravel Echo)
             broadcast(new MessageSent($message))->toOthers();
 
             DB::commit();
@@ -104,9 +156,15 @@ class MessageController extends Controller
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Failed to send message: ' . $e->getMessage());
+            Log::error('Failed to send message: ', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'user_id' => $user->id,
+                'recipient_id' => $recipient->id
+            ]);
             return response()->json([
-                'message' => 'Failed to send message: ' . $e->getMessage()
+                'message' => 'Failed to send message',
+                'error' => config('app.debug') ? $e->getMessage() : 'An unexpected error occurred'
             ], 500);
         }
     }
@@ -114,6 +172,11 @@ class MessageController extends Controller
     public function markAsRead($conversationId)
     {
         $user = Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+
         $conversation = Conversation::findOrFail($conversationId);
 
         if ($conversation->user_one_id !== $user->id && $conversation->user_two_id !== $user->id) {
@@ -131,6 +194,11 @@ class MessageController extends Controller
     public function deleteMessage($messageId)
     {
         $user = Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+
         $message = Message::findOrFail($messageId);
 
         if ($message->sender_id !== $user->id) {
@@ -154,7 +222,8 @@ class MessageController extends Controller
             DB::rollBack();
             Log::error('Failed to delete message: ' . $e->getMessage());
             return response()->json([
-                'message' => 'Failed to delete message: ' . $e->getMessage()
+                'message' => 'Failed to delete message',
+                'error' => config('app.debug') ? $e->getMessage() : 'An unexpected error occurred'
             ], 500);
         }
     }
@@ -162,6 +231,11 @@ class MessageController extends Controller
     public function getUnreadCount()
     {
         $user = Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+
         $unreadCount = $user->unreadMessagesCount();
 
         return response()->json(['unread_count' => $unreadCount]);
