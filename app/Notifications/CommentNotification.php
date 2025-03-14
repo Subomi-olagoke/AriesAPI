@@ -36,7 +36,7 @@ class CommentNotification extends Notification
     public function toDatabase($notifiable)
     {
         return [
-            'message' => "{$this->user->username} commented: \"{$this->comment->content}\"",
+            'message' => "{$this->user->username} commented on your post.",
             'comment_id' => $this->comment->id,
             'avatar' => $this->user->avatar,
             'post_id' => $this->comment->post_id,
