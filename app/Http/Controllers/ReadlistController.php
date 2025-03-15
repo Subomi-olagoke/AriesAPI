@@ -81,16 +81,13 @@ class ReadlistController extends Controller
         try {
             DB::beginTransaction();
             
-            // Generate a unique share key
-            $shareKey = Str::random(10);
-            
-            // Create the readlist directly through the model
+            // Create readlist with direct property assignment
             $readlist = new Readlist();
             $readlist->title = $request->title;
             $readlist->description = $request->description;
             $readlist->is_public = $request->is_public === 'true' || $request->is_public === '1' ? true : false;
             $readlist->user_id = $user->id;
-            $readlist->share_key = $shareKey;
+            $readlist->share_key = Str::random(10);
             
             // Handle image upload if provided
             if ($request->hasFile('image')) {
@@ -112,25 +109,31 @@ class ReadlistController extends Controller
                 $readlist->image_url = $imageUrl;
             }
             
-            $readlist->save();
+            // Save the readlist and get the ID
+            $saveResult = $readlist->save();
             
-            // Explicitly get the newly created readlist from the database
-            $createdReadlist = Readlist::where('user_id', $user->id)
-                ->where('title', $request->title)
-                ->where('share_key', $shareKey)
-                ->orderBy('created_at', 'desc')
-                ->first();
-                
-            if (!$createdReadlist) {
-                throw new \Exception('Failed to retrieve the created readlist');
+            if (!$saveResult) {
+                throw new \Exception('Failed to save readlist to database');
             }
+            
+            // Add debugging to see what's happening
+            Log::debug('Readlist after save:', [
+                'id' => $readlist->id,
+                'title' => $readlist->title,
+                'description' => $readlist->description,
+                'user_id' => $readlist->user_id,
+                'share_key' => $readlist->share_key,
+            ]);
+            
+            // For the response, we'll use the model as is
+            $shareUrl = url("/readlists/shared/{$readlist->share_key}");
             
             DB::commit();
             
             return response()->json([
                 'message' => 'Readlist created successfully',
-                'readlist' => $createdReadlist,
-                'share_url' => url("/readlists/shared/{$createdReadlist->share_key}")
+                'readlist' => $readlist,
+                'share_url' => $shareUrl
             ], 201);
             
         } catch (\Exception $e) {
