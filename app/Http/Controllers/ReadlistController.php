@@ -4,9 +4,9 @@ namespace App\Http\Controllers;
 use App\Models\Post;
 use App\Models\Course;
 use App\Models\ReadlistItem;
-
 use App\Models\Readlist;
 use App\Helpers\SimpleIdGenerator;
+use App\Services\FileUploadService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +15,19 @@ use Illuminate\Support\Str;
 
 class ReadlistController extends Controller
 {
+    protected $fileUploadService;
+
+    /**
+     * Create a new controller instance.
+     *
+     * @param FileUploadService $fileUploadService
+     * @return void
+     */
+    public function __construct(FileUploadService $fileUploadService)
+    {
+        $this->fileUploadService = $fileUploadService;
+    }
+
     /**
      * Store a newly created readlist.
      */
@@ -46,8 +59,7 @@ class ReadlistController extends Controller
             
             // Handle image upload if provided
             if ($request->hasFile('image')) {
-                $fileUploadService = app(FileUploadService::class);
-                $imageUrl = $fileUploadService->uploadFile(
+                $imageUrl = $this->fileUploadService->uploadFile(
                     $request->file('image'),
                     'readlist_images',
                     [
@@ -79,6 +91,7 @@ class ReadlistController extends Controller
                 'description' => $readlist->description,
                 'user_id' => $readlist->user_id,
                 'share_key' => $readlist->share_key,
+                'image_url' => $readlist->image_url,
             ]);
             
             // For the response, we'll use the model as is
