@@ -22,41 +22,20 @@ class FeedController extends Controller
         // Get posts from users the current user is following
         $followingIds = $user->following()->pluck('followeduser');
         
-        // Combine posts from topic-related users and followed users
-        // Prioritize followed users' posts
-        $feedQuery = Post::with('user')
-            ->where(function($query) use ($relatedUserIds, $followingIds) {
-                $query->whereIn('user_id', $followingIds)
-                      ->orWhereIn('user_id', $relatedUserIds);
-            })
+        // Get all public posts ordered by created_at descending (newest first)
+        $posts = Post::with('user')
+            ->where('visibility', 'public')
             ->orderBy('created_at', 'desc')
-            ->take(50);
+            ->take(50)
+            ->get();
             
-        // If we need supplementary posts to fill the feed
-        $postCount = $feedQuery->count();
-        
-        if ($postCount < 20) {
-            // Add some additional posts from outside the user's network if needed
-            // but make sure they're always placed after the relevant posts
-            $supplementalPosts = Post::with('user')
-                ->whereNotIn('user_id', $relatedUserIds)
-                ->whereNotIn('user_id', $followingIds)
-                ->where('visibility', 'public')
-                ->orderBy('created_at', 'desc')
-                ->take(20 - $postCount)
-                ->get();
-                
-            $feedPosts = $feedQuery->get();
-            
-            // Merge while maintaining the created_at order
-            $posts = $feedPosts->concat($supplementalPosts)
-                ->sortByDesc('created_at')
-                ->values();
-        } else {
-            $posts = $feedQuery->get();
+        // Add relationship flags to each post
+        foreach ($posts as $post) {
+            $post->is_from_followed_user = $followingIds->contains($post->user_id);
+            $post->is_from_related_topic = $relatedUserIds->contains($post->user_id);
         }
 
-        // Return posts with consistent ordering by creation date (newest first)
+        // Return posts with newest first
         return response()->json([
             'posts' => $posts
         ]);
