@@ -1,6 +1,9 @@
 <?php
 
 namespace App\Http\Controllers;
+use App\Models\Post;
+use App\Models\Course;
+use App\Models\ReadlistItem;
 
 use App\Models\Readlist;
 use App\Helpers\SimpleIdGenerator;
