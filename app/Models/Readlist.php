@@ -12,6 +12,12 @@ class Readlist extends Model
 {
     use HasFactory;
 
+    // Make sure incrementing is set to true (this is default, but let's be explicit)
+    public $incrementing = true;
+    
+    // Make sure the key type is int
+    protected $keyType = 'int';
+    
     protected $fillable = [
         'user_id',
         'title',
