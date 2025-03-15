@@ -6,6 +6,7 @@ use App\Models\Course;
 use App\Models\Post;
 use App\Models\Readlist;
 use App\Models\ReadlistItem;
+use App\Services\FileUploadService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,13 @@ use Illuminate\Support\Str;
 
 class ReadlistController extends Controller
 {
+    protected $fileUploadService;
+    
+    public function __construct(FileUploadService $fileUploadService)
+    {
+        $this->fileUploadService = $fileUploadService;
+    }
+    
     /**
      * Display a listing of the user's readlists.
      */
@@ -65,6 +73,7 @@ class ReadlistController extends Controller
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'is_public' => 'nullable|boolean',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
         ]);
         
         $user = $request->user();
@@ -72,13 +81,34 @@ class ReadlistController extends Controller
         try {
             DB::beginTransaction();
             
-            $readlist = new Readlist([
+            $readlistData = [
                 'title' => $request->title,
                 'description' => $request->description,
                 'is_public' => $request->is_public ?? false,
                 'user_id' => $user->id
-            ]);
+            ];
             
+            // Handle image upload if provided
+            if ($request->hasFile('image')) {
+                $imageUrl = $this->fileUploadService->uploadFile(
+                    $request->file('image'),
+                    'readlist_images',
+                    [
+                        'process_image' => true,
+                        'width' => 800,
+                        'height' => 450,
+                        'fit' => true
+                    ]
+                );
+                
+                if (!$imageUrl) {
+                    throw new \Exception('Failed to upload image');
+                }
+                
+                $readlistData['image_url'] = $imageUrl;
+            }
+            
+            $readlist = new Readlist($readlistData);
             $readlist->save();
             
             DB::commit();
@@ -166,6 +196,7 @@ class ReadlistController extends Controller
                 'id' => $readlist->id,
                 'title' => $readlist->title,
                 'description' => $readlist->description,
+                'image_url' => $readlist->image_url,
                 'is_public' => $readlist->is_public,
                 'created_at' => $readlist->created_at,
                 'updated_at' => $readlist->updated_at,
@@ -246,6 +277,7 @@ class ReadlistController extends Controller
                 'id' => $readlist->id,
                 'title' => $readlist->title,
                 'description' => $readlist->description,
+                'image_url' => $readlist->image_url,
                 'is_public' => $readlist->is_public,
                 'created_at' => $readlist->created_at,
                 'updated_at' => $readlist->updated_at,
@@ -266,6 +298,7 @@ class ReadlistController extends Controller
             'title' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
             'is_public' => 'nullable|boolean',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
         ]);
         
         $readlist = Readlist::findOrFail($id);
@@ -290,6 +323,31 @@ class ReadlistController extends Controller
             
             if ($request->has('is_public')) {
                 $readlist->is_public = $request->is_public;
+            }
+            
+            // Handle image upload if provided
+            if ($request->hasFile('image')) {
+                // Delete old image if it exists
+                if ($readlist->image_url) {
+                    $this->fileUploadService->deleteFile($readlist->image_url);
+                }
+                
+                $imageUrl = $this->fileUploadService->uploadFile(
+                    $request->file('image'),
+                    'readlist_images',
+                    [
+                        'process_image' => true,
+                        'width' => 800,
+                        'height' => 450,
+                        'fit' => true
+                    ]
+                );
+                
+                if (!$imageUrl) {
+                    throw new \Exception('Failed to upload image');
+                }
+                
+                $readlist->image_url = $imageUrl;
             }
             
             $readlist->save();
@@ -327,6 +385,11 @@ class ReadlistController extends Controller
         
         try {
             DB::beginTransaction();
+            
+            // Delete image if it exists
+            if ($readlist->image_url) {
+                $this->fileUploadService->deleteFile($readlist->image_url);
+            }
             
             // Delete will cascade to readlist items due to foreign key constraints
             $readlist->delete();

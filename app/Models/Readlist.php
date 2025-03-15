@@ -22,6 +22,7 @@ class Readlist extends Model
         'user_id',
         'title',
         'description',
+        'image_url',
         'is_public',
         'share_key'
     ];
