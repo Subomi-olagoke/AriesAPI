@@ -123,6 +123,7 @@ Route::middleware('auth:sanctum')->group(function() {
     Route::prefix('readlists')->group(function () {
         Route::get('/', [ReadlistController::class, 'index']);
         Route::post('/', [ReadlistController::class, 'store']);
+        Route::get('/user', [ReadlistController::class, 'getUserReadlists']);
         Route::get('/public', [ReadlistController::class, 'publicReadlists']);
         Route::get('/{id}', [ReadlistController::class, 'show']);
         Route::put('/{id}', [ReadlistController::class, 'update']);
@@ -145,6 +146,7 @@ Route::middleware('auth:sanctum')->group(function() {
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
 
     Route::get('/setup_status', [SetupController::class, 'checkSetupStatus']);
+   
 
     Route::post('/send-chat-message', function(Request $request) {
         $formFields = $request->validate([

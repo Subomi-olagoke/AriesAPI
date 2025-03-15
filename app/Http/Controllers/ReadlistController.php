@@ -594,4 +594,22 @@ class ReadlistController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get all readlists for the current user
+     * 
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getUserReadlists()
+    {
+        $user = auth()->user();
+        
+        $readlists = Readlist::where('user_id', $user->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        return response()->json([
+            'readlists' => $readlists
+        ]);
+    }
 }
