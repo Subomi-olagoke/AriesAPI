@@ -2,11 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Course;
-use App\Models\Post;
 use App\Models\Readlist;
-use App\Models\ReadlistItem;
-use App\Services\FileUploadService;
+use App\Helpers\SimpleIdGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -15,55 +12,6 @@ use Illuminate\Support\Str;
 
 class ReadlistController extends Controller
 {
-    protected $fileUploadService;
-    
-    public function __construct(FileUploadService $fileUploadService)
-    {
-        $this->fileUploadService = $fileUploadService;
-    }
-    
-    /**
-     * Display a listing of the user's readlists.
-     */
-    public function index(Request $request)
-    {
-        $user = $request->user();
-        $readlists = $user->readlists()
-            ->withCount('items')
-            ->orderBy('created_at', 'desc')
-            ->get();
-            
-        // Add share URLs to each readlist
-        $readlists->each(function($readlist) {
-            $readlist->share_url = $readlist->share_url;
-        });
-            
-        return response()->json([
-            'readlists' => $readlists
-        ]);
-    }
-
-    /**
-     * Display public readlists.
-     */
-    public function publicReadlists(Request $request)
-    {
-        $readlists = Readlist::where('is_public', true)
-            ->withCount('items')
-            ->with('user:id,username,first_name,last_name,avatar')
-            ->orderBy('created_at', 'desc')
-            ->paginate(10);
-            
-        // Add share URLs to each readlist
-        $readlists->each(function($readlist) {
-            $readlist->share_url = $readlist->share_url;
-        });
-            
-        return response()->json([
-            'readlists' => $readlists
-        ]);
-    }
-
     /**
      * Store a newly created readlist.
      */
@@ -81,8 +29,12 @@ class ReadlistController extends Controller
         try {
             DB::beginTransaction();
             
+            // Get the next ID for readlists (starting from 1)
+            $nextId = SimpleIdGenerator::getNextId('readlists');
+            
             // Create readlist with direct property assignment
             $readlist = new Readlist();
+            $readlist->id = $nextId; // Set the ID explicitly
             $readlist->title = $request->title;
             $readlist->description = $request->description;
             $readlist->is_public = $request->is_public === 'true' || $request->is_public === '1' ? true : false;
@@ -91,7 +43,8 @@ class ReadlistController extends Controller
             
             // Handle image upload if provided
             if ($request->hasFile('image')) {
-                $imageUrl = $this->fileUploadService->uploadFile(
+                $fileUploadService = app(FileUploadService::class);
+                $imageUrl = $fileUploadService->uploadFile(
                     $request->file('image'),
                     'readlist_images',
                     [
@@ -109,7 +62,7 @@ class ReadlistController extends Controller
                 $readlist->image_url = $imageUrl;
             }
             
-            // Save the readlist and get the ID
+            // Save the readlist with the custom ID
             $saveResult = $readlist->save();
             
             if (!$saveResult) {
@@ -137,13 +90,14 @@ class ReadlistController extends Controller
             ], 201);
             
         } catch (\Exception $e) {
-            DB::rollback();
+            DB::rollBack();
             Log::error('Readlist creation failed: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Failed to create readlist: ' . $e->getMessage()
             ], 500);
         }
     }
+
 
     /**
      * Display the specified readlist with its items.

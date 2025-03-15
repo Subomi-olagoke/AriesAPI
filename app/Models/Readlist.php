@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,8 +11,8 @@ class Readlist extends Model
 {
     use HasFactory;
 
-    // Make sure incrementing is set to true (this is default, but let's be explicit)
-    public $incrementing = true;
+    // Allow manual ID assignment by setting incrementing to false
+    public $incrementing = false;
     
     // Make sure the key type is int
     protected $keyType = 'int';
@@ -37,7 +36,9 @@ class Readlist extends Model
 
         // Automatically generate a unique share_key when creating a readlist
         static::creating(function ($model) {
-            $model->share_key = Str::random(10);
+            if (!$model->share_key) {
+                $model->share_key = \Illuminate\Support\Str::random(10);
+            }
         });
     }
 
