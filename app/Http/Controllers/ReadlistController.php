@@ -72,7 +72,7 @@ class ReadlistController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'is_public' => 'nullable|boolean',
+            'is_public' => 'nullable|string',
             'image' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
         ]);
         
@@ -84,7 +84,7 @@ class ReadlistController extends Controller
             $readlistData = [
                 'title' => $request->title,
                 'description' => $request->description,
-                'is_public' => $request->is_public ?? false,
+                'is_public' => $request->is_public === 'true' || $request->is_public === '1' ? true : false,
                 'user_id' => $user->id
             ];
             
@@ -297,7 +297,7 @@ class ReadlistController extends Controller
         $request->validate([
             'title' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
-            'is_public' => 'nullable|boolean',
+            'is_public' => 'nullable|string',
             'image' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
         ]);
         
@@ -322,7 +322,7 @@ class ReadlistController extends Controller
             }
             
             if ($request->has('is_public')) {
-                $readlist->is_public = $request->is_public;
+                $readlist->is_public = $request->is_public === 'true' || $request->is_public === '1' ? true : false;
             }
             
             // Handle image upload if provided
