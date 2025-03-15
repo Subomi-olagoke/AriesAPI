@@ -111,6 +111,9 @@ class ReadlistController extends Controller
             $readlist = new Readlist($readlistData);
             $readlist->save();
             
+            // Refresh the model to get the correct ID
+            $readlist = $readlist->fresh();
+            
             DB::commit();
             
             return response()->json([
