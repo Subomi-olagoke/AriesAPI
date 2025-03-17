@@ -25,7 +25,7 @@ class CogniService
     }
 
     /**
-     * Ask a question to Cogni (OpenAI's ChatGPT)
+     * 
      *
      * @param string $question The user's question
      * @param array $context Additional context or previous messages
