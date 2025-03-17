@@ -14,7 +14,7 @@ class CogniService
     public function __construct()
     {
         // Hardcoded API key - replace this with your actual OpenAI API key
-        $this->apiKey = 'sk-Bp578m_DZrRmUq9mjMTkD3P7_sPgnK_MzysOxdWLGMT3BlbkFJ36JxNCLslJByUnh4fMJbDwDL_I5v70pE3Y0E9BzFMA';
+        $this->apiKey = 'sk-vVeQcJc7smgCrz3_CA-kSjOFNeK9mZK1PAh-oeFBmTT3BlbkFJtx_ZcL0zdW2-H4TREVGCWSutKtT37wifoXV7vJZNsA';
         
         // Don't use config for now
         // $this->apiKey = config('services.openai.api_key');
