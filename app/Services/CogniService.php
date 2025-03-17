@@ -13,11 +13,15 @@ class CogniService
 
     public function __construct()
     {
-        // Hardcoded API key - replace this with your actual OpenAI API key
-        $this->apiKey = 'sk-vVeQcJc7smgCrz3_CA-kSjOFNeK9mZK1PAh-oeFBmTT3BlbkFJtx_ZcL0zdW2-H4TREVGCWSutKtT37wifoXV7vJZNsA';
+        // Use config values from services.php
+        $this->apiKey = config('services.openai.api_key');
+        $this->baseUrl = config('services.openai.endpoint', 'https://api.openai.com/v1');
+        $this->model = config('services.openai.model', 'gpt-3.5-turbo');
         
-        // Don't use config for now
-        // $this->apiKey = config('services.openai.api_key');
+        // Log warning if API key is not set
+        if (empty($this->apiKey)) {
+            Log::warning('OpenAI API key is not configured in environment');
+        }
     }
 
     /**
