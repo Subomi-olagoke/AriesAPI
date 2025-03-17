@@ -23,7 +23,7 @@ class FeedController extends Controller
         $followingIds = $user->following()->pluck('followeduser');
         
         // Get all public posts ordered by created_at descending (newest first)
-        $posts = Post::with('user')
+        $posts = Post::with(['user', 'comments.user'])
             ->where('visibility', 'public')
             ->orderBy('created_at', 'desc')
             ->take(50)
@@ -33,6 +33,27 @@ class FeedController extends Controller
         foreach ($posts as $post) {
             $post->is_from_followed_user = $followingIds->contains($post->user_id);
             $post->is_from_related_topic = $relatedUserIds->contains($post->user_id);
+            
+            // Find mutual comments - comments from people the user follows
+            $mutualComments = $post->comments->filter(function ($comment) use ($followingIds) {
+                return $followingIds->contains($comment->user_id);
+            })->values();
+            
+            // Add mutual comments to the post
+            $post->mutual_comments = $mutualComments->map(function ($comment) {
+                return [
+                    'id' => $comment->id,
+                    'content' => $comment->content,
+                    'created_at' => $comment->created_at,
+                    'user' => [
+                        'id' => $comment->user->id,
+                        'username' => $comment->user->username,
+                        'first_name' => $comment->user->first_name,
+                        'last_name' => $comment->user->last_name,
+                        'avatar' => $comment->user->avatar
+                    ]
+                ];
+            });
         }
 
         // Return posts with newest first

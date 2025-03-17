@@ -14,7 +14,11 @@ class ProfileController extends Controller {
     public function viewProfile(User $user) {
         $user = User::with('profile')->find($user->id);
     
-        $posts = $user->posts()->get();
+        // Get posts ordered by newest first
+        $posts = $user->posts()
+                      ->orderBy('created_at', 'desc')
+                      ->get();
+                      
         $likes = $user->likes()->get();
         $followers = $user->followers()->count();
         $following = $user->following()->count();
