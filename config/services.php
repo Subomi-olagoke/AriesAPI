@@ -1,5 +1,4 @@
 <?php
-
 return [
     'mailgun' => [
         'domain' => env('MAILGUN_DOMAIN'),
@@ -20,7 +19,9 @@ return [
         'public_key' => env('PAYSTACK_PUBLIC_KEY'),
     ],
     'openai' => [
-        'api_key' => 'sk-your-openai-api-key-goes-here', // Hardcoded key (replace with your actual key)
-        'organization' => null, // Add your organization ID if needed
+        'api_key' => env('OPENAI_API_KEY'),
+        'organization' => env('OPENAI_ORGANIZATION'),
+        'endpoint' => 'https://api.openai.com/v1',
+        'model' => env('OPENAI_MODEL', 'gpt-3.5-turbo'),
     ],
 ];
