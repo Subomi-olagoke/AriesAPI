@@ -111,6 +111,7 @@ class PostController extends Controller {
     
     /**
      * Delete a post.
+     * Only the owner of the post can delete it.
      */
     public function deletePost(Post $post) {
         // Check if the authenticated user is the owner of the post
@@ -136,6 +137,7 @@ class PostController extends Controller {
             return response()->json(['message' => 'Failed to delete post'], 500);
         }
     }
+    
     /**
      * Get posts for a user.
      */

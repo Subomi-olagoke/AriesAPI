@@ -60,14 +60,15 @@ Route::middleware('auth:sanctum')->group(function() {
 
     // Cogni endpoints
     Route::prefix('cogni')->group(function () {
+        // Core functionality
         Route::post('/ask', [CogniController::class, 'ask']);
         Route::post('/explain', [CogniController::class, 'explain']);
         Route::post('/quiz', [CogniController::class, 'generateQuiz']);
         
         // Conversation management
         Route::get('/conversations', [CogniController::class, 'getConversations']);
-        Route::get('/conversations/{conversationId}', [CogniController::class, 'getConversation']);
-        Route::delete('/conversations/{conversationId}', [CogniController::class, 'deleteConversation']);
+        Route::get('/conversations/{conversationId}', [CogniController::class, 'getConversationHistory']);
+        Route::delete('/conversations/{conversationId}', [CogniController::class, 'clearConversation']);
     });
     
     Route::get('/educators/with-follows', [EducatorsController::class, 'getAllEducatorsWithFollowStatus']);
@@ -102,6 +103,7 @@ Route::middleware('auth:sanctum')->group(function() {
     Route::get('/courses-by-topic', [CoursesController::class, 'getCoursesByTopic']);
     Route::post('/post', [PostController::class, 'storePost'])->name('post');
     Route::get('/viewPost', [PostController::class, 'viewSinglePost'])->name('viewPost');
+    Route::delete('/posts/{post}', [PostController::class, 'deletePost'])->name('post.delete');
     Route::post('/post/{post}/comment', [CommentController::class, 'postComment'])->name('post.comment');
     Route::get('/posts/{post}/comments', [CommentController::class, 'displayComments']);
     Route::get('/posts/{postId}/comment-count', [CommentController::class, 'getCommentCount']);
