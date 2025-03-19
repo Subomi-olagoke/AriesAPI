@@ -29,35 +29,54 @@ class ProfileController extends Controller {
         
         // Construct full name from first_name and last_name
         $fullName = $user->first_name . ' ' . $user->last_name;
+        
+        // Get the bio from the profile
+        $bio = $user->profile ? $user->profile->bio : null;
     
         return response()->json([
             'posts' => $posts,
             'username' => $user->username,
             'full_name' => $fullName,
-            'avatar' => $avatar,  // Now using the direct avatar attribute first
+            'avatar' => $avatar,
+            'bio' => $bio,  // Added bio to the response
             'followers' => $followers,
             'following' => $following,
             'likes' => $likes
         ]);
     }
 
-	public function update(Request $request) {
-		$user = Auth::user();
-		$profile = Profile::where('user_id', $user->id)->first();
+    public function update(Request $request) {
+        $user = Auth::user();
+        $profile = Profile::where('user_id', $user->id)->first();
 
-		if (!$profile) {
-            return response()->json([
-                'message' => 'you are not allowed to do that'
-            ], 403);
-		}
+        if (!$profile) {
+            // Create a new profile if one doesn't exist
+            $profile = new Profile();
+            $profile->user_id = $user->id;
+        }
 
-		$profile->fill($request->all());
-		$profile->save();
+        // Validate the request
+        $request->validate([
+            'bio' => 'nullable|string|max:500'  // Add appropriate validation rules
+        ]);
 
-		return response()->json(['profile' => $profile]);
-	}
+        // Update profile fields
+        if ($request->has('bio')) {
+            $profile->bio = $request->bio;
+        }
+        
+        // Fill other profile fields if they exist in the request
+        $profile->fill($request->except('bio'));
+        
+        $profile->save();
 
-	public function UploadAvatar(Request $request) {
+        return response()->json([
+            'message' => 'Profile updated successfully',
+            'profile' => $profile
+        ]);
+    }
+
+    public function UploadAvatar(Request $request) {
         $request->validate([
             'avatar' => 'required|image|mimes:jpg,jpeg,png,gif,webp|max:3000'
         ]);

@@ -409,11 +409,22 @@ class ReadlistController extends Controller
         ]);
         
         $readlist = Readlist::findOrFail($id);
+        $user = auth()->user();
+        
+        // Debug information
+        \Log::info('Add to readlist attempt', [
+            'readlist_id' => $id,
+            'readlist_user_id' => $readlist->user_id,
+            'auth_user_id' => $user->id,
+            'is_owner' => ($readlist->user_id === $user->id)
+        ]);
         
         // Check if the readlist belongs to the authenticated user
-        if ($readlist->user_id !== Auth::id()) {
+        if ($readlist->user_id != $user->id) {
             return response()->json([
-                'message' => 'You do not have permission to modify this readlist'
+                'message' => 'You do not have permission to modify this readlist',
+                'readlist_user_id' => $readlist->user_id,
+                'auth_user_id' => $user->id
             ], 403);
         }
         
@@ -463,14 +474,14 @@ class ReadlistController extends Controller
             ], 201);
             
         } catch (\Exception $e) {
-            DB::rollback();
+            DB::rollBack();
             Log::error('Adding item to readlist failed: ' . $e->getMessage());
             return response()->json([
-                'message' => 'Failed to add item to readlist: ' . $e->getMessage()
+                'message' => 'Failed to add item to readlist: ' . $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ], 500);
         }
     }
-
     /**
      * Remove an item from a readlist.
      */
