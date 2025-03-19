@@ -22,7 +22,7 @@ class PostController extends Controller {
 
     /**
      * Store a new post.
-     * For media posts, uses Cloudinary for file uploads for images and videos.
+     * For media posts, uses Cloudinary for file uploads for images, videos, and files.
      */
     public function storePost(Request $request) {
         // Validate the incoming request parameters
@@ -30,11 +30,11 @@ class PostController extends Controller {
             // Either text content is provided (for text-only posts)
             // or media_type must be provided and be one of the allowed values.
             'text_content' => 'required_without:media_type|string',
-            'media_type'   => 'required|string|in:image,video,text',
-            // For image or video posts, the 'media_file' field is required.
-            'media_file'   => 'required_if:media_type,image,video|file|max:10240', // 10MB
-            // For video posts, a thumbnail is also required.
-            'media_thumbnail' => 'required_if:media_type,video|image|mimes:jpg,jpeg,png,gif,webp|max:5120',
+            'media_type'   => 'required|string|in:image,video,text,file',
+            // For image, video, or file posts, the 'media_file' field is required.
+            'media_file'   => 'required_if:media_type,image,video,file|file|max:10240', // 10MB
+            // For video posts, a thumbnail is optional
+            'media_thumbnail' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120',
             'visibility'   => 'required|in:public,followers',
         ]);
 
@@ -48,7 +48,7 @@ class PostController extends Controller {
             $newPost->body = $request->text_content;
         } else {
             // For media posts, handle the file upload.
-            $newPost->body = $request->text_content; // Use consistent field name
+            $newPost->body = $request->text_content ?? ''; // Use consistent field name
             
             if ($request->hasFile('media_file')) {
                 $fileUploadService = app(FileUploadService::class);
@@ -77,7 +77,7 @@ class PostController extends Controller {
                         'media/videos'
                     );
                     
-                    // Handle thumbnail if provided
+                    // Handle thumbnail if provided (now optional)
                     if ($request->hasFile('media_thumbnail')) {
                         $request->validate([
                             'media_thumbnail' => 'image|mimes:jpg,jpeg,png,gif,webp|max:5120',
@@ -94,6 +94,18 @@ class PostController extends Controller {
                             ]
                         );
                     }
+                } else if ($request->media_type == 'file') {
+                    // Allow various file types
+                    $newPost->media_link = $fileUploadService->uploadFile(
+                        $request->file('media_file'),
+                        'media/files'
+                    );
+                    
+                    // Store the original filename to display it to users
+                    $newPost->original_filename = $request->file('media_file')->getClientOriginalName();
+                    
+                    // Store mime type for proper rendering in the frontend
+                    $newPost->mime_type = $request->file('media_file')->getMimeType();
                 }
             }
         }
