@@ -32,87 +32,93 @@ class ReadlistController extends Controller
      * Store a newly created readlist.
      */
     public function store(Request $request)
-    {
-        $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'is_public' => 'nullable|string',
-            'image' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
+{
+    $request->validate([
+        'title' => 'required|string|max:255',
+        'description' => 'nullable|string',
+        'is_public' => 'nullable|string',
+        'image' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
+    ]);
+    
+    $user = $request->user();
+    
+    // Log the user ID for debugging
+    \Log::info('Creating readlist', [
+        'user_id' => $user->id,
+        'user_class' => get_class($user)
+    ]);
+    
+    try {
+        DB::beginTransaction();
+        
+        // Get the next ID for readlists (starting from 1)
+        $nextId = SimpleIdGenerator::getNextId('readlists');
+        
+        // Create readlist with direct property assignment
+        $readlist = new Readlist();
+        $readlist->id = $nextId; // Set the ID explicitly
+        $readlist->title = $request->title;
+        $readlist->description = $request->description;
+        $readlist->is_public = $request->is_public === 'true' || $request->is_public === '1' ? true : false;
+        $readlist->user_id = $user->id;
+        $readlist->share_key = Str::random(10);
+        
+        // Handle image upload if provided
+        if ($request->hasFile('image')) {
+            $imageUrl = $this->fileUploadService->uploadFile(
+                $request->file('image'),
+                'readlist_images',
+                [
+                    'process_image' => true,
+                    'width' => 800,
+                    'height' => 450,
+                    'fit' => true
+                ]
+            );
+            
+            if (!$imageUrl) {
+                throw new \Exception('Failed to upload image');
+            }
+            
+            $readlist->image_url = $imageUrl;
+        }
+        
+        // Save the readlist with the custom ID
+        $saveResult = $readlist->save();
+        
+        if (!$saveResult) {
+            throw new \Exception('Failed to save readlist to database');
+        }
+        
+        // Add debugging to see what's happening
+        \Log::debug('Readlist after save:', [
+            'id' => $readlist->id,
+            'title' => $readlist->title,
+            'description' => $readlist->description,
+            'user_id' => $readlist->user_id,
+            'share_key' => $readlist->share_key,
+            'image_url' => $readlist->image_url,
         ]);
         
-        $user = $request->user();
+        // For the response, we'll use the model as is
+        $shareUrl = url("/readlists/shared/{$readlist->share_key}");
         
-        try {
-            DB::beginTransaction();
-            
-            // Get the next ID for readlists (starting from 1)
-            $nextId = SimpleIdGenerator::getNextId('readlists');
-            
-            // Create readlist with direct property assignment
-            $readlist = new Readlist();
-            $readlist->id = $nextId; // Set the ID explicitly
-            $readlist->title = $request->title;
-            $readlist->description = $request->description;
-            $readlist->is_public = $request->is_public === 'true' || $request->is_public === '1' ? true : false;
-            $readlist->user_id = $user->id;
-            $readlist->share_key = Str::random(10);
-            
-            // Handle image upload if provided
-            if ($request->hasFile('image')) {
-                $imageUrl = $this->fileUploadService->uploadFile(
-                    $request->file('image'),
-                    'readlist_images',
-                    [
-                        'process_image' => true,
-                        'width' => 800,
-                        'height' => 450,
-                        'fit' => true
-                    ]
-                );
-                
-                if (!$imageUrl) {
-                    throw new \Exception('Failed to upload image');
-                }
-                
-                $readlist->image_url = $imageUrl;
-            }
-            
-            // Save the readlist with the custom ID
-            $saveResult = $readlist->save();
-            
-            if (!$saveResult) {
-                throw new \Exception('Failed to save readlist to database');
-            }
-            
-            // Add debugging to see what's happening
-            Log::debug('Readlist after save:', [
-                'id' => $readlist->id,
-                'title' => $readlist->title,
-                'description' => $readlist->description,
-                'user_id' => $readlist->user_id,
-                'share_key' => $readlist->share_key,
-                'image_url' => $readlist->image_url,
-            ]);
-            
-            // For the response, we'll use the model as is
-            $shareUrl = url("/readlists/shared/{$readlist->share_key}");
-            
-            DB::commit();
-            
-            return response()->json([
-                'message' => 'Readlist created successfully',
-                'readlist' => $readlist,
-                'share_url' => $shareUrl
-            ], 201);
-            
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Readlist creation failed: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Failed to create readlist: ' . $e->getMessage()
-            ], 500);
-        }
+        DB::commit();
+        
+        return response()->json([
+            'message' => 'Readlist created successfully',
+            'readlist' => $readlist,
+            'share_url' => $shareUrl
+        ], 201);
+        
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Readlist creation failed: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'Failed to create readlist: ' . $e->getMessage()
+        ], 500);
     }
+}
 
 
     /**
