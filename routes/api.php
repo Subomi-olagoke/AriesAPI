@@ -28,6 +28,7 @@ use App\Http\Controllers\CourseSectionController;
 use App\Http\Controllers\CourseLessonController;
 use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\CogniController;
+use App\Http\Controllers\OpenLibraryController;
 
 Route::post('/register', [AuthManager::class, 'register'])->name('register');
 Route::post('/login', [AuthManager::class, 'login'])->name('login');
@@ -70,6 +71,19 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/conversations/{conversationId}', [CogniController::class, 'getConversationHistory']);
         Route::delete('/conversations/{conversationId}', [CogniController::class, 'clearConversation']);
     });
+    
+    // Open Library Routes
+    Route::get('/libraries', [OpenLibraryController::class, 'index']);
+    Route::post('/libraries', [OpenLibraryController::class, 'store']);
+    Route::post('/libraries/dynamic', [OpenLibraryController::class, 'createDynamicLibrary']);
+    Route::get('/libraries/{id}', [OpenLibraryController::class, 'show']);
+    Route::put('/libraries/{id}', [OpenLibraryController::class, 'update']);
+    Route::delete('/libraries/{id}', [OpenLibraryController::class, 'destroy']);
+    Route::post('/libraries/{id}/refresh', [OpenLibraryController::class, 'refreshLibrary']);
+    Route::post('/libraries/{id}/content', [OpenLibraryController::class, 'addContent']);
+    Route::delete('/libraries/{id}/content', [OpenLibraryController::class, 'removeContent']);
+    Route::get('/courses/{courseId}/libraries', [OpenLibraryController::class, 'getCourseLibraries']);
+    Route::get('/libraries/similar', [OpenLibraryController::class, 'getSimilarLibraries']);
     
     Route::get('/educators/with-follows', [EducatorsController::class, 'getAllEducatorsWithFollowStatus']);
     Route::post('/logout', [AuthManager::class, 'logout'])->name('logout');
