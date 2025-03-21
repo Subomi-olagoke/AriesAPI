@@ -1033,28 +1033,23 @@ class EnhancedCogniService extends CogniService
                 $topicIds = [$topicId];
             } else {
                 $topicIds = $userTopicIds;
+                
+                // If user has no topics, don't filter by topics
+                if (empty($topicIds)) {
+                    $topicIds = Topic::pluck('id')->toArray();
+                }
             }
             
             // Start building query for educators
             $educatorQuery = User::where('role', User::ROLE_EDUCATOR)
-                ->where('id', '!=', $user->id) // Exclude the user themselves
-                ->with(['profile', 'courses' => function($query) use ($difficultyLevel) {
-                    if ($difficultyLevel) {
-                        $query->where('difficulty_level', $difficultyLevel);
-                    }
-                }]);
-            
-            // Calculate educator scores based on various factors
+                ->where('id', '!=', $user->id); // Exclude the user themselves
+                
+            // Get all educators first
             $educators = $educatorQuery->get();
             $scoredEducators = [];
             
             foreach ($educators as $educator) {
-                // Skip educators with no courses
-                if ($educator->courses->isEmpty()) {
-                    continue;
-                }
-                
-                // Calculate base score
+                // Calculate base score (even for educators with no courses)
                 $score = 0;
                 
                 // Topic match score
@@ -1062,35 +1057,47 @@ class EnhancedCogniService extends CogniService
                 $topicMatches = array_intersect($topicIds, $educatorTopicIds);
                 $topicMatchScore = count($topicMatches) * 20;
                 
-                // Course count score (max 30)
-                $courseCount = $educator->courses->count();
+                // Add some points even if the educator has no courses yet
+                // This ensures new educators still get recommended
+                $courseCount = $educator->courses()->count();
                 $courseCountScore = min(30, $courseCount * 5);
+                
+                // If educator has no courses, give them a small base score
+                if ($courseCount == 0) {
+                    $courseCountScore = 5;
+                }
                 
                 // Course quality/difficulty match score
                 $difficultyMatchScore = 0;
                 $qualityCourseCount = 0;
                 
-                foreach ($educator->courses as $course) {
-                    // Does the course match requested difficulty?
-                    if (!$difficultyLevel || $course->difficulty_level === $difficultyLevel) {
-                        $difficultyMatchScore += 5;
-                        $qualityCourseCount++;
+                // Only evaluate courses if the educator has them
+                if ($courseCount > 0) {
+                    $courses = $educator->courses;
+                    
+                    foreach ($courses as $course) {
+                        // Does the course match requested difficulty?
+                        if (!$difficultyLevel || $course->difficulty_level === $difficultyLevel) {
+                            $difficultyMatchScore += 5;
+                            $qualityCourseCount++;
+                        }
+                        
+                        // Add points for courses in user's topics of interest
+                        if (in_array($course->topic_id, $topicIds)) {
+                            $difficultyMatchScore += 10;
+                        }
                     }
                     
-                    // Add points for courses in user's topics of interest
-                    if (in_array($course->topic_id, $topicIds)) {
-                        $difficultyMatchScore += 10;
-                    }
+                    // Cap difficulty match score
+                    $difficultyMatchScore = min(50, $difficultyMatchScore);
                 }
-                
-                // Cap difficulty match score
-                $difficultyMatchScore = min(50, $difficultyMatchScore);
                 
                 // Calculate total score
                 $score = $topicMatchScore + $courseCountScore + $difficultyMatchScore;
                 
-                // Only include educators with some topic matches or quality courses
-                if ($score > 0 && $qualityCourseCount > 0) {
+                // Include all educators with a minimum score or who have matching topics
+                // Modified to be more inclusive
+                if ($score > 0 || !empty($topicMatches)) {
                     $scoredEducators[] = [
                         'educator' => $educator,
                         'score' => $score,
@@ -1121,26 +1128,29 @@ class EnhancedCogniService extends CogniService
                     $topicIds
                 );
                 
-                // Get top courses by this educator
-                $topCourses = $educator->courses()
-                    ->when($difficultyLevel, function($query) use ($difficultyLevel) {
-                        return $query->where('difficulty_level', $difficultyLevel);
-                    })
-                    ->when($topicIds, function($query) use ($topicIds) {
-                        return $query->whereIn('topic_id', $topicIds);
-                    })
-                    ->orderBy('id', 'desc') // Using ID as a proxy for recency
-                    ->limit(3)
-                    ->get()
-                    ->map(function($course) {
-                        return [
-                            'id' => $course->id,
-                            'title' => $course->title,
-                            'topic' => $course->topic ? $course->topic->name : null,
-                            'difficulty_level' => $course->difficulty_level
-                        ];
-                    })
-                    ->toArray();
+                // Get top courses by this educator (if any)
+                $topCourses = [];
+                if ($educator->courses()->count() > 0) {
+                    $topCourses = $educator->courses()
+                        ->when($difficultyLevel, function($query) use ($difficultyLevel) {
+                            return $query->where('difficulty_level', $difficultyLevel);
+                        })
+                        ->when($topicIds, function($query) use ($topicIds) {
+                            return $query->whereIn('topic_id', $topicIds);
+                        })
+                        ->orderBy('id', 'desc') // Using ID as a proxy for recency
+                        ->limit(3)
+                        ->get()
+                        ->map(function($course) {
+                            return [
+                                'id' => $course->id,
+                                'title' => $course->title,
+                                'topic' => $course->topic ? $course->topic->name : null,
+                                'difficulty_level' => $course->difficulty_level
+                            ];
+                        })
+                        ->toArray();
+                }
                 
                 $recommendations[] = [
                     'id' => $educator->id,
@@ -1189,11 +1199,13 @@ class EnhancedCogniService extends CogniService
         // Generate different reason types based on available data
         if (!empty($matchedTopicNames)) {
             return "Specializes in " . implode(" and ", $matchedTopicNames) . 
-                   " with " . $courseCount . " relevant " . ($courseCount == 1 ? "course" : "courses");
+                   ($courseCount > 0 ? " with " . $courseCount . " relevant " . ($courseCount == 1 ? "course" : "courses") : "");
         } elseif ($courseCount >= 3) {
             return "Experienced educator with " . $courseCount . " well-structured courses";
+        } elseif ($courseCount > 0) {
+            return "Creates educational content that may interest you";
         } else {
-            return "Creates quality educational content that may interest you";
+            return "Educator with expertise in " . (!empty($educatorTopics) ? implode(", ", array_slice($educatorTopics, 0, 2)) : "relevant topics");
         }
     }
 }
