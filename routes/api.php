@@ -60,16 +60,22 @@ Route::middleware('auth:sanctum')->group(function() {
     });
 
     // Cogni endpoints
-    Route::prefix('cogni')->group(function () {
-        // Core functionality
-        Route::post('/ask', [CogniController::class, 'ask']);
-        Route::post('/explain', [CogniController::class, 'explain']);
-        Route::post('/quiz', [CogniController::class, 'generateQuiz']);
+    Route::middleware('auth:sanctum')->prefix('cogni')->group(function () {
+        // Original Cogni routes
+        Route::post('/ask', [App\Http\Controllers\EnhancedCogniController::class, 'ask']);
+        Route::get('/conversations', [App\Http\Controllers\CogniController::class, 'getConversations']);
+        Route::get('/conversations/{conversationId}', [App\Http\Controllers\CogniController::class, 'getConversationHistory']);
+        Route::post('/conversations/clear', [App\Http\Controllers\CogniController::class, 'clearConversation']);
         
-        // Conversation management
-        Route::get('/conversations', [CogniController::class, 'getConversations']);
-        Route::get('/conversations/{conversationId}', [CogniController::class, 'getConversationHistory']);
-        Route::delete('/conversations/{conversationId}', [CogniController::class, 'clearConversation']);
+        // New Readlist related endpoints
+        Route::post('/readlists/generate', [App\Http\Controllers\EnhancedCogniController::class, 'generateReadlist']);
+        Route::get('/readlists/{id}/analyze', [App\Http\Controllers\EnhancedCogniController::class, 'analyzeReadlist']);
+        Route::get('/readlists/{id}/recommend', [App\Http\Controllers\EnhancedCogniController::class, 'recommendForReadlist']);
+        Route::get('/readlists/{id}/assessments', [App\Http\Controllers\EnhancedCogniController::class, 'generateAssessments']);
+        Route::post('/readlists/{id}/plan', [App\Http\Controllers\EnhancedCogniController::class, 'createStudyPlan']);
+        
+        // Educator recommendations
+        Route::get('/educators/recommend', [App\Http\Controllers\EnhancedCogniController::class, 'recommendEducators']);
     });
     
     // Open Library Routes
