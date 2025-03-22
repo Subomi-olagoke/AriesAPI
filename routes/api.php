@@ -29,6 +29,7 @@ use App\Http\Controllers\CourseLessonController;
 use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\CogniController;
 use App\Http\Controllers\OpenLibraryController;
+use App\Http\Controllers\HireController;
 
 Route::post('/register', [AuthManager::class, 'register'])->name('register');
 Route::post('/login', [AuthManager::class, 'login'])->name('login');
@@ -152,11 +153,18 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/{id}/regenerate-share-key', [ReadlistController::class, 'regenerateShareKey']);
     });
     Route::get('/search', [SearchController::class, 'search'])->name('search');
+    
+    // Hire routes
+    Route::post('/hire/{id}', [HireController::class, 'hireInstructor']);
+    Route::delete('/hire/end/{id?}', [HireController::class, 'endHireSession']);
+    
+    // Hire request routes
     Route::post('/hire-request', [HireRequestController::class, 'sendRequest']);
     Route::patch('/hire-request/{id}/accept', [HireRequestController::class, 'acceptRequest']);
     Route::patch('/hire-request/{id}/decline', [HireRequestController::class, 'declineRequest']);
     Route::get('/hire-requests', [HireRequestController::class, 'listRequests']);
     Route::delete('/hire-requests/{id}', [HireRequestController::class, 'cancelRequest']);
+    
     Route::get('/notifications', [NotificationController::class, 'getNotifications']);
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::get('/setup_status', [SetupController::class, 'checkSetupStatus']);
