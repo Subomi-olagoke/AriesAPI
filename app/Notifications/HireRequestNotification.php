@@ -4,7 +4,6 @@ namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class HireRequestNotification extends Notification
@@ -25,26 +24,13 @@ class HireRequestNotification extends Notification
 
     /**
      * Get the notification's delivery channels.
+     * Removed 'mail' from array to disable email notifications
      *
      * @return array<int, string>
      */
     public function via(object $notifiable): array
     {
-        return ['mail', 'database'];
-    }
-
-    /**
-     * Get the mail representation of the notification.
-     */
-    public function toMail(object $notifiable): MailMessage
-    {
-        return (new MailMessage)
-            ->subject('New Hire Request')
-            ->greeting('Hello ' . $notifiable->name . ',')
-            ->line($this->client->name . ' has sent you a hire request.')
-            ->line($this->message ? 'Message: "' . $this->message . '"' : '')
-            ->action('View Request', url('/hire-requests'))
-            ->line('Thank you for using our platform!');
+        return ['database'];
     }
 
     /**
