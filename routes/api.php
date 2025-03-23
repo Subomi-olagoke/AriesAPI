@@ -54,6 +54,7 @@ Route::post('/forgot-password', [ForgotPasswordManager::class, 'forgotPassword']
 Route::post('/reset-password', [ForgotPasswordManager::class, 'resetPassword']);
 Route::post('/reset-password/token', [ResetPasswordController::class, 'generateResetToken']);
 Route::post('/reset-password/reset', [ResetPasswordController::class, 'resetPassword']);
+Route::post('auth/google', [GoogleController::class, 'authenticateWithGoogle']);
 
 // Protected routes that require authentication
 Route::middleware('auth:sanctum')->group(function () {
