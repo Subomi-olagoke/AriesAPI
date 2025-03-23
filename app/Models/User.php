@@ -221,4 +221,14 @@ class User extends Authenticatable {
             'lesson_id'
         )->where('lesson_progress.completed', true);
     }
+    
+    public function paymentMethods()
+    {
+        return $this->hasMany(PaymentMethod::class);
+    }
+
+    public function defaultPaymentMethod()
+    {
+        return $this->hasOne(PaymentMethod::class)->where('is_default', true);
+    }
 }
