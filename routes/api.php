@@ -64,17 +64,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/profile/update', [ProfileController::class, 'update']);
     Route::post('/profile/avatar', [ProfileController::class, 'UploadAvatar']);
 
-    // Post routes
+    // Post routes - include both singular and plural paths
     Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
+    Route::get('/posts/{post}', [PostController::class, 'viewSinglePost']); // Additional plural route
+    Route::post('/post', [PostController::class, 'storePost']); // Add singular route
     Route::post('/create-post', [PostController::class, 'storePost']);
+    Route::post('/posts', [PostController::class, 'storePost']); // Additional plural route
+    Route::delete('/post/{post}', [PostController::class, 'deletePost']); // Additional singular route
     Route::delete('/posts/{post}', [PostController::class, 'deletePost']);
+    Route::get('/post/user/{userId?}', [PostController::class, 'getUserPosts']); // Additional singular route
     Route::get('/posts/user/{userId?}', [PostController::class, 'getUserPosts']);
+    Route::get('/post/{postId}/stats', [PostController::class, 'getPostStats']); // Additional singular route
     Route::get('/posts/{postId}/stats', [PostController::class, 'getPostStats']);
 
     // Comment routes
     Route::post('/add-comment/{post_id}', [CommentController::class, 'postComment']);
+    Route::post('/comment/{post_id}', [CommentController::class, 'postComment']); // Additional route
+    Route::delete('/comment/{commentId}', [CommentController::class, 'deleteComment']); // Additional route
     Route::delete('/comments/{commentId}', [CommentController::class, 'deleteComment']);
+    Route::get('/comment/{post}', [CommentController::class, 'displayComments']); // Additional route
     Route::get('/comments/{post}', [CommentController::class, 'displayComments']);
+    Route::get('/comment/{postId}/count', [CommentController::class, 'getCommentCount']); // Additional route
     Route::get('/comments/{postId}/count', [CommentController::class, 'getCommentCount']);
 
     // Feed route
@@ -101,10 +111,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Hire Request routes
     Route::post('/hire-requests', [HireRequestController::class, 'sendRequest']);
+    Route::post('/hire-request', [HireRequestController::class, 'sendRequest']); // Additional route
     Route::post('/hire-requests/{id}/accept', [HireRequestController::class, 'acceptRequest']);
+    Route::post('/hire-request/{id}/accept', [HireRequestController::class, 'acceptRequest']); // Additional route
     Route::post('/hire-requests/{id}/decline', [HireRequestController::class, 'declineRequest']);
+    Route::post('/hire-request/{id}/decline', [HireRequestController::class, 'declineRequest']); // Additional route
     Route::delete('/hire-requests/{id}', [HireRequestController::class, 'cancelRequest']);
+    Route::delete('/hire-request/{id}', [HireRequestController::class, 'cancelRequest']); // Additional route
     Route::get('/hire-requests', [HireRequestController::class, 'listRequests']);
+    Route::get('/hire-request', [HireRequestController::class, 'listRequests']); // Additional route
 
     // Setup routes
     Route::post('/setup', [SetupController::class, 'setup']);
@@ -113,31 +128,68 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/follow-options', [SetupController::class, 'followOptions']);
     Route::get('/setup-status', [SetupController::class, 'checkSetupStatus']);
 
-    // Course routes
+    // Course routes - add both singular and plural
+    Route::post('/course', [CoursesController::class, 'createCourse']); // Additional route
     Route::post('/courses', [CoursesController::class, 'createCourse']);
+    Route::get('/course/{id}', [CoursesController::class, 'viewCourse']); // Already there
     Route::get('/courses/{id}', [CoursesController::class, 'viewCourse']);
+    Route::get('/course/{id}/content', [CoursesController::class, 'getCourseContent']); // Additional route
     Route::get('/courses/{id}/content', [CoursesController::class, 'getCourseContent']);
+    Route::get('/course', [CoursesController::class, 'listCourses']); // Additional route
     Route::get('/courses', [CoursesController::class, 'listCourses']);
+    Route::put('/course/{id}', [CoursesController::class, 'updateCourse']); // Additional route
     Route::put('/courses/{id}', [CoursesController::class, 'updateCourse']);
+    Route::delete('/course/{id}', [CoursesController::class, 'deleteCourse']); // Additional route
     Route::delete('/courses/{id}', [CoursesController::class, 'deleteCourse']);
+    Route::get('/course-by-topic', [CoursesController::class, 'getCoursesByTopic']); // Additional route
     Route::get('/courses-by-topic', [CoursesController::class, 'getCoursesByTopic']);
 
     // Course Section routes
     Route::get('/courses/{courseId}/sections', [CourseSectionController::class, 'index']);
+    Route::get('/course/{courseId}/sections', [CourseSectionController::class, 'index']); // Additional route
     Route::post('/courses/{courseId}/sections', [CourseSectionController::class, 'store']);
+    Route::post('/course/{courseId}/sections', [CourseSectionController::class, 'store']); // Additional route
     Route::get('/courses/{courseId}/sections/{sectionId}', [CourseSectionController::class, 'show']);
+    Route::get('/course/{courseId}/sections/{sectionId}', [CourseSectionController::class, 'show']); // Additional route
     Route::put('/courses/{courseId}/sections/{sectionId}', [CourseSectionController::class, 'update']);
+    Route::put('/course/{courseId}/sections/{sectionId}', [CourseSectionController::class, 'update']); // Additional route
     Route::delete('/courses/{courseId}/sections/{sectionId}', [CourseSectionController::class, 'destroy']);
+    Route::delete('/course/{courseId}/sections/{sectionId}', [CourseSectionController::class, 'destroy']); // Additional route
 
     // Course Lesson routes
     Route::post('/sections/{sectionId}/lessons', [CourseLessonController::class, 'store']);
+    Route::post('/section/{sectionId}/lessons', [CourseLessonController::class, 'store']); // Additional route
+    Route::post('/section/{sectionId}/lesson', [CourseLessonController::class, 'store']); // Additional route
+    Route::post('/sections/{sectionId}/lesson', [CourseLessonController::class, 'store']); // Additional route
     Route::get('/lessons/{lessonId}', [CourseLessonController::class, 'show']);
+    Route::get('/lesson/{lessonId}', [CourseLessonController::class, 'show']); // Additional route
     Route::put('/lessons/{lessonId}', [CourseLessonController::class, 'update']);
+    Route::put('/lesson/{lessonId}', [CourseLessonController::class, 'update']); // Additional route
     Route::delete('/lessons/{lessonId}', [CourseLessonController::class, 'destroy']);
+    Route::delete('/lesson/{lessonId}', [CourseLessonController::class, 'destroy']); // Additional route
     Route::post('/lessons/{lessonId}/complete', [CourseLessonController::class, 'markComplete']);
+    Route::post('/lesson/{lessonId}/complete', [CourseLessonController::class, 'markComplete']); // Additional route
 
-    // Live Class routes
+    // Live Class routes - both singular and plural
     Route::prefix('live-classes')->group(function () {
+        Route::get('/', [LiveClassController::class, 'index']);
+        Route::get('/{liveClass}', [LiveClassController::class, 'show']);
+        Route::post('/', [LiveClassController::class, 'store']);
+        Route::post('/{liveClass}/join', [LiveClassController::class, 'join']);
+        Route::post('/{liveClass}/end', [LiveClassController::class, 'end']);
+        Route::post('/{classId}/signal', [LiveClassController::class, 'signal']);
+        Route::post('/{classId}/ice-candidate', [LiveClassController::class, 'sendIceCandidate']);
+        Route::get('/{liveClass}/status', [LiveClassController::class, 'getRoomStatus']);
+        Route::put('/{liveClass}/participant-settings', [LiveClassController::class, 'updateParticipantSettings']);
+        Route::get('/{liveClass}/participants', [LiveClassController::class, 'getParticipants']);
+        Route::post('/{liveClass}/start-stream', [LiveClassController::class, 'startStream']);
+        Route::post('/{liveClass}/stop-stream', [LiveClassController::class, 'stopStream']);
+        Route::get('/{liveClass}/stream-info', [LiveClassController::class, 'getStreamInfo']);
+        Route::post('/{liveClass}/report-connection', [LiveClassController::class, 'reportConnectionQuality']);
+    });
+
+    // Duplicate routes with singular "live-class"
+    Route::prefix('live-class')->group(function () {
         Route::get('/', [LiveClassController::class, 'index']);
         Route::get('/{liveClass}', [LiveClassController::class, 'show']);
         Route::post('/', [LiveClassController::class, 'store']);
@@ -162,14 +214,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/course/{id}', [EducatorsController::class, 'view']);
     Route::get('/download/{file}', [EducatorsController::class, 'download']);
     Route::get('/educators', [EducatorsController::class, 'getAllEducators']);
+    Route::get('/educator', [EducatorsController::class, 'getAllEducators']); // Additional route
     Route::get('/educators/with-follow-status', [EducatorsController::class, 'getAllEducatorsWithFollowStatus']);
+    Route::get('/educator/with-follow-status', [EducatorsController::class, 'getAllEducatorsWithFollowStatus']); // Additional route
 
     // Enrollment routes
     Route::post('/courses/{courseId}/enroll', [EnrollmentController::class, 'enrollInCourse']);
+    Route::post('/course/{courseId}/enroll', [EnrollmentController::class, 'enrollInCourse']); // Additional route
     Route::post('/enrollment/verify', [EnrollmentController::class, 'verifyEnrollment'])->name('enrollment.verify');
     Route::get('/enrollments', [EnrollmentController::class, 'getUserEnrollments']);
+    Route::get('/enrollment', [EnrollmentController::class, 'getUserEnrollments']); // Additional route
     Route::post('/enrollments/{enrollmentId}/progress', [EnrollmentController::class, 'updateProgress']);
+    Route::post('/enrollment/{enrollmentId}/progress', [EnrollmentController::class, 'updateProgress']); // Additional route
     Route::post('/courses/{courseId}/enroll/saved-card', [EnrollmentController::class, 'enrollWithSavedCard']);
+    Route::post('/course/{courseId}/enroll/saved-card', [EnrollmentController::class, 'enrollWithSavedCard']); // Additional route
 
     // Bookmark routes
     Route::post('/bookmark/course/{courseId}', [BookmarkController::class, 'bookmarkCourse']);
@@ -179,47 +237,84 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Notification routes
     Route::get('/notifications', [NotificationController::class, 'getNotifications']);
+    Route::get('/notification', [NotificationController::class, 'getNotifications']); // Additional route
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notification/{id}/read', [NotificationController::class, 'markAsRead']); // Additional route
 
     // Messaging routes
     Route::get('/conversations', [MessageController::class, 'getConversations']);
+    Route::get('/conversation', [MessageController::class, 'getConversations']); // Additional route
     Route::get('/conversations/{id}', [MessageController::class, 'getConversation']);
+    Route::get('/conversation/{id}', [MessageController::class, 'getConversation']); // Additional route
     Route::post('/messages', [MessageController::class, 'sendMessage']);
+    Route::post('/message', [MessageController::class, 'sendMessage']); // Additional route
     Route::post('/conversations/{conversationId}/read', [MessageController::class, 'markAsRead']);
+    Route::post('/conversation/{conversationId}/read', [MessageController::class, 'markAsRead']); // Additional route
     Route::delete('/messages/{messageId}', [MessageController::class, 'deleteMessage']);
+    Route::delete('/message/{messageId}', [MessageController::class, 'deleteMessage']); // Additional route
     Route::get('/messages/unread-count', [MessageController::class, 'getUnreadCount']);
+    Route::get('/message/unread-count', [MessageController::class, 'getUnreadCount']); // Additional route
 
     // Readlist routes
     Route::get('/readlists', [ReadlistController::class, 'getUserReadlists']);
+    Route::get('/readlist', [ReadlistController::class, 'getUserReadlists']); // Additional route
     Route::post('/readlists', [ReadlistController::class, 'store']);
+    Route::post('/readlist', [ReadlistController::class, 'store']); // Additional route
     Route::get('/readlists/{id}', [ReadlistController::class, 'show']);
+    Route::get('/readlist/{id}', [ReadlistController::class, 'show']); // Additional route
     Route::put('/readlists/{id}', [ReadlistController::class, 'update']);
+    Route::put('/readlist/{id}', [ReadlistController::class, 'update']); // Additional route
     Route::delete('/readlists/{id}', [ReadlistController::class, 'destroy']);
+    Route::delete('/readlist/{id}', [ReadlistController::class, 'destroy']); // Additional route
     Route::post('/readlists/{id}/items', [ReadlistController::class, 'addItem']);
+    Route::post('/readlist/{id}/items', [ReadlistController::class, 'addItem']); // Additional route
+    Route::post('/readlist/{id}/item', [ReadlistController::class, 'addItem']); // Additional route
+    Route::post('/readlists/{id}/item', [ReadlistController::class, 'addItem']); // Additional route
     Route::delete('/readlists/{id}/items/{itemId}', [ReadlistController::class, 'removeItem']);
+    Route::delete('/readlist/{id}/items/{itemId}', [ReadlistController::class, 'removeItem']); // Additional route
+    Route::delete('/readlist/{id}/item/{itemId}', [ReadlistController::class, 'removeItem']); // Additional route
+    Route::delete('/readlists/{id}/item/{itemId}', [ReadlistController::class, 'removeItem']); // Additional route
     Route::post('/readlists/{id}/reorder', [ReadlistController::class, 'reorderItems']);
+    Route::post('/readlist/{id}/reorder', [ReadlistController::class, 'reorderItems']); // Additional route
     Route::post('/readlists/{id}/regenerate-key', [ReadlistController::class, 'regenerateShareKey']);
+    Route::post('/readlist/{id}/regenerate-key', [ReadlistController::class, 'regenerateShareKey']); // Additional route
 
     // Open Library routes
     Route::get('/libraries', [OpenLibraryController::class, 'index']);
+    Route::get('/library', [OpenLibraryController::class, 'index']); // Additional route
     Route::post('/libraries', [OpenLibraryController::class, 'store']);
+    Route::post('/library', [OpenLibraryController::class, 'store']); // Additional route
     Route::get('/libraries/{id}', [OpenLibraryController::class, 'show']);
+    Route::get('/library/{id}', [OpenLibraryController::class, 'show']); // Additional route
     Route::put('/libraries/{id}', [OpenLibraryController::class, 'update']);
+    Route::put('/library/{id}', [OpenLibraryController::class, 'update']); // Additional route
     Route::delete('/libraries/{id}', [OpenLibraryController::class, 'destroy']);
+    Route::delete('/library/{id}', [OpenLibraryController::class, 'destroy']); // Additional route
     Route::post('/libraries/{id}/refresh', [OpenLibraryController::class, 'refreshLibrary']);
+    Route::post('/library/{id}/refresh', [OpenLibraryController::class, 'refreshLibrary']); // Additional route
     Route::post('/libraries/{id}/content', [OpenLibraryController::class, 'addContent']);
+    Route::post('/library/{id}/content', [OpenLibraryController::class, 'addContent']); // Additional route
     Route::delete('/libraries/{id}/content', [OpenLibraryController::class, 'removeContent']);
+    Route::delete('/library/{id}/content', [OpenLibraryController::class, 'removeContent']); // Additional route
     Route::post('/libraries/dynamic', [OpenLibraryController::class, 'createDynamicLibrary']);
+    Route::post('/library/dynamic', [OpenLibraryController::class, 'createDynamicLibrary']); // Additional route
     Route::get('/courses/{courseId}/libraries', [OpenLibraryController::class, 'getCourseLibraries']);
+    Route::get('/course/{courseId}/libraries', [OpenLibraryController::class, 'getCourseLibraries']); // Additional route
+    Route::get('/courses/{courseId}/library', [OpenLibraryController::class, 'getCourseLibraries']); // Additional route
+    Route::get('/course/{courseId}/library', [OpenLibraryController::class, 'getCourseLibraries']); // Additional route
     Route::get('/libraries/similar', [OpenLibraryController::class, 'getSimilarLibraries']);
+    Route::get('/library/similar', [OpenLibraryController::class, 'getSimilarLibraries']); // Additional route
 
     // Cogni AI Assistant routes
     Route::post('/cogni/ask', [CogniController::class, 'ask']);
     Route::get('/cogni/conversations', [CogniController::class, 'getConversations']);
+    Route::get('/cogni/conversation', [CogniController::class, 'getConversations']); // Additional route
     Route::get('/cogni/conversations/{conversationId}', [CogniController::class, 'getConversationHistory']);
+    Route::get('/cogni/conversation/{conversationId}', [CogniController::class, 'getConversationHistory']); // Additional route
     Route::post('/cogni/explain', [CogniController::class, 'explain']);
     Route::post('/cogni/generate-quiz', [CogniController::class, 'generateQuiz']);
     Route::post('/cogni/conversations/clear', [CogniController::class, 'clearConversation']);
+    Route::post('/cogni/conversation/clear', [CogniController::class, 'clearConversation']); // Additional route
 
     // Enhanced Cogni routes
     Route::post('/cogni/enhanced/readlist', [EnhancedCogniController::class, 'generateReadlist']);
@@ -235,17 +330,32 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Subscription routes
     Route::post('/subscriptions/initiate', [PaystackController::class, 'initiateSubscription']);
+    Route::post('/subscription/initiate', [PaystackController::class, 'initiateSubscription']); // Additional route
     Route::get('/subscriptions/verify/{reference}', [PaystackController::class, 'verifyPayment']);
+    Route::get('/subscription/verify/{reference}', [PaystackController::class, 'verifyPayment']); // Additional route
     Route::post('/subscriptions/cancel', [PaystackController::class, 'cancelSubscription']);
+    Route::post('/subscription/cancel', [PaystackController::class, 'cancelSubscription']); // Additional route
     Route::get('/subscriptions', [SubscriptionController::class, 'index']);
+    Route::get('/subscription', [SubscriptionController::class, 'index']); // Additional route
     Route::get('/subscriptions/current', [SubscriptionController::class, 'current']);
+    Route::get('/subscription/current', [SubscriptionController::class, 'current']); // Additional route
     Route::get('/subscriptions/upcoming', [SubscriptionController::class, 'upcoming']);
+    Route::get('/subscription/upcoming', [SubscriptionController::class, 'upcoming']); // Additional route
     Route::get('/subscriptions/history', [SubscriptionController::class, 'history']);
+    Route::get('/subscription/history', [SubscriptionController::class, 'history']); // Additional route
     Route::post('/subscriptions/free', [PaystackController::class, 'createFreeSubscription']);
+    Route::post('/subscription/free', [PaystackController::class, 'createFreeSubscription']); // Additional route
     Route::post('/payment/retry', [PaystackController::class, 'retryPayment']);
     
-    // Payment methods routes
+    // Payment methods routes - add both singular and plural
     Route::prefix('payment-methods')->group(function () {
+        Route::get('/', [PaymentMethodController::class, 'index']);
+        Route::post('/initiate', [PaymentMethodController::class, 'initiate']);
+        Route::post('/{id}/default', [PaymentMethodController::class, 'setDefault']);
+        Route::delete('/{id}', [PaymentMethodController::class, 'destroy']);
+    });
+    
+    Route::prefix('payment-method')->group(function () {
         Route::get('/', [PaymentMethodController::class, 'index']);
         Route::post('/initiate', [PaymentMethodController::class, 'initiate']);
         Route::post('/{id}/default', [PaymentMethodController::class, 'setDefault']);
@@ -255,27 +365,47 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Webhook routes (no authentication required)
 Route::post('/webhooks/paystack', [PaystackController::class, 'handleWebhook']);
+Route::post('/webhook/paystack', [PaystackController::class, 'handleWebhook']); // Additional route
 Route::post('/webhooks/enrollment', [EnrollmentController::class, 'handleWebhook']);
+Route::post('/webhook/enrollment', [EnrollmentController::class, 'handleWebhook']); // Additional route
 
 // Public readlist share route
 Route::get('/readlists/shared/{shareKey}', [ReadlistController::class, 'showByShareKey']);
+Route::get('/readlist/shared/{shareKey}', [ReadlistController::class, 'showByShareKey']); // Additional route
 
 // Public payment verification route
 Route::get('/payment-methods/verify', [PaymentMethodController::class, 'verify'])->name('payment-methods.verify');
+Route::get('/payment-method/verify', [PaymentMethodController::class, 'verify'])->name('payment-method.verify'); // Additional route
 
 // Success and failure routes for payment methods and subscriptions
 Route::get('/payment-methods/success', function() {
     return view('payment-methods.success');
 })->name('payment-methods.success');
 
+Route::get('/payment-method/success', function() {
+    return view('payment-methods.success');
+})->name('payment-method.success'); // Additional route
+
 Route::get('/payment-methods/failed', function() {
     return view('payment-methods.failed');
 })->name('payment-methods.failed');
+
+Route::get('/payment-method/failed', function() {
+    return view('payment-methods.failed');
+})->name('payment-method.failed'); // Additional route
 
 Route::get('/subscription/success', function() {
     return view('subscription.success');
 })->name('subscription.success');
 
+Route::get('/subscriptions/success', function() {
+    return view('subscription.success');
+})->name('subscriptions.success'); // Additional route
+
 Route::get('/subscription/failed', function() {
     return view('subscription.failed');
 })->name('subscription.failed');
+
+Route::get('/subscriptions/failed', function() {
+    return view('subscription.failed');
+})->name('subscriptions.failed'); // Additional route
