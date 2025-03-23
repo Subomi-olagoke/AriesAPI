@@ -110,8 +110,13 @@ class PostController extends Controller {
             }
         }
 
-        // Save the post and return a response.
+        // Save the post and process mentions if it contains @username
         if ($newPost->save()) {
+            // Process mentions if the post body contains @username
+            if (strpos($newPost->body, '@') !== false) {
+                $newPost->processMentions($newPost->body);
+            }
+            
             return response()->json([
                 'message' => 'New post created successfully',
                 'post' => $newPost,

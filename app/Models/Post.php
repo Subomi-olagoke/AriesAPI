@@ -1,9 +1,10 @@
 <?php
+// app/Models/Post.php
 
 namespace App\Models;
 
 use App\Models\User;
-
+use App\Notifications\MentionNotification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -59,5 +60,46 @@ class Post extends Model {
 
         $parts = explode('.', $this->original_filename);
         return end($parts);
+    }
+    
+    /**
+     * Get mentions in this post.
+     */
+    public function mentions()
+    {
+        return $this->morphMany(Mention::class, 'mentionable');
+    }
+
+    /**
+     * Process and create mentions from post text.
+     *
+     * @param string $text The post text
+     * @return void
+     */
+    public function processMentions($text)
+    {
+        // Extract mentions from text (@username format)
+        preg_match_all('/@([a-zA-Z0-9_]+)/', $text, $matches);
+        
+        if (!empty($matches[1])) {
+            $usernames = array_unique($matches[1]);
+            
+            foreach ($usernames as $username) {
+                // Find the mentioned user
+                $mentionedUser = User::where('username', $username)->first();
+                
+                if ($mentionedUser && $mentionedUser->id !== $this->user_id) {
+                    // Create mention record
+                    $mention = $this->mentions()->create([
+                        'mentioned_user_id' => $mentionedUser->id,
+                        'mentioned_by_user_id' => $this->user_id,
+                        'status' => 'unread'
+                    ]);
+                    
+                    // Send notification to the mentioned user
+                    $mentionedUser->notify(new MentionNotification($mention));
+                }
+            }
+        }
     }
 }

@@ -23,7 +23,7 @@ class FeedController extends Controller
         $followingIds = $user->following()->pluck('followeduser');
         
         // Get all public posts ordered by created_at descending (newest first)
-        $posts = Post::with(['user', 'comments.user'])
+        $posts = Post::with(['user', 'comments.user', 'mentions.mentionedUser'])
             ->where('visibility', 'public')
             ->orderBy('created_at', 'desc')
             ->take(50)
@@ -52,6 +52,17 @@ class FeedController extends Controller
                         'last_name' => $comment->user->last_name,
                         'avatar' => $comment->user->avatar
                     ]
+                ];
+            });
+            
+            // Add mentioned users information
+            $post->mentioned_users = $post->mentions->map(function ($mention) {
+                return [
+                    'id' => $mention->mentionedUser->id,
+                    'username' => $mention->mentionedUser->username,
+                    'first_name' => $mention->mentionedUser->first_name,
+                    'last_name' => $mention->mentionedUser->last_name,
+                    'avatar' => $mention->mentionedUser->avatar
                 ];
             });
         }
