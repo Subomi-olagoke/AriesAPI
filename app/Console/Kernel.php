@@ -1,4 +1,5 @@
 <?php
+// Update app/Console/Kernel.php
 
 namespace App\Console;
 
@@ -14,15 +15,15 @@ class Kernel extends ConsoleKernel {
 	}
 
 	protected $commands = [
-		// ...
+		// Existing commands...
 		\App\Console\Commands\NgrokCommand::class,
+		\App\Console\Commands\BackfillPostShareKeys::class,
 	];
 
 	/**
 	 * Register the commands for the application.
 	 */
 	protected function commands(): void {
-
 		$this->load(__DIR__ . '/Commands');
 
 		require base_path('routes/console.php');

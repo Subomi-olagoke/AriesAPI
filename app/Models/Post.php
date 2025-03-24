@@ -1,5 +1,5 @@
 <?php
-// app/Models/Post.php
+// Modified version of app/Models/Post.php
 
 namespace App\Models;
 
@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Notifications\MentionNotification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Str;
 
 class Post extends Model {
     use HasFactory;
@@ -20,10 +21,23 @@ class Post extends Model {
         'media_thumbnail', 
         'visibility',
         'original_filename',
-        'mime_type'
+        'mime_type',
+        'share_key',
     ];
 
-    protected $appends = ['file_extension'];
+    protected $appends = ['file_extension', 'share_url'];
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Automatically generate a unique share_key when creating a post
+        static::creating(function ($post) {
+            if (!$post->share_key) {
+                $post->share_key = Str::random(10);
+            }
+        });
+    }
 
     public function user() {
         return $this->belongsTo(User::class, 'user_id', 'id');
@@ -68,6 +82,17 @@ class Post extends Model {
     public function mentions()
     {
         return $this->morphMany(Mention::class, 'mentionable');
+    }
+
+    /**
+     * Get the shareable URL for this post
+     */
+    public function getShareUrlAttribute()
+    {
+        if ($this->share_key) {
+            return url("/posts/shared/{$this->share_key}");
+        }
+        return null;
     }
 
     /**

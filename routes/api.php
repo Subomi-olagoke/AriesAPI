@@ -348,6 +348,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/subscription/free', [PaystackController::class, 'createFreeSubscription']); // Additional route
     Route::post('/payment/retry', [PaystackController::class, 'retryPayment']);
     
+    // Tutoring
+    Route::post('/tutoring/request', [HireRequestController::class, 'sendRequest']);
+    Route::get('/tutoring/requests', [HireRequestController::class, 'listRequests']);
+    Route::get('/tutoring/requests/{id}', [HireRequestController::class, 'getRequest']);
+    Route::post('/tutoring/requests/{id}/accept', [HireRequestController::class, 'acceptRequest']);
+    Route::post('/tutoring/requests/{id}/decline', [HireRequestController::class, 'declineRequest']);
+    Route::delete('/tutoring/requests/{id}', [HireRequestController::class, 'cancelRequest']);
+    
+    // Session management
+    Route::post('/tutoring/requests/{id}/schedule', [HireRequestController::class, 'scheduleSession']);
+    Route::post('/tutoring/sessions/{id}/payment', [HireRequestController::class, 'processPayment']);
+    Route::get('/tutoring/sessions/{id}/payment/verify', [HireRequestController::class, 'verifyPayment'])->name('tutoring.payment.verify');
+    Route::post('/tutoring/sessions/{id}/complete', [HireRequestController::class, 'completeSession']);
+    
     // Payment methods routes - add both singular and plural
     Route::prefix('payment-methods')->group(function () {
         Route::get('/', [PaymentMethodController::class, 'index']);

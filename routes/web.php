@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\AuthManager;
+use App\Http\Controllers\SharedPostController;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,9 +16,13 @@ use App\Http\Controllers\AuthManager;
 |
 */
 
+
+
 Route::get('/', function () {
     return view('welcome');
 });
+
+
 
 // Auth routes
 Route::get('/login', [AuthManager::class, 'login'])->name('login');
@@ -43,3 +48,6 @@ Route::view('/subscription/failed', 'subscription.failed')->name('subscription.f
 // Enrollment success/failure pages
 Route::view('/enrollment/success', 'enrollment.success')->name('enrollment.success');
 Route::view('/enrollment/failed', 'enrollment.failed')->name('enrollment.failed');
+
+Route::get('posts/shared/{shareKey}', [SharedPostController::class, 'show'])
+    ->name('posts.shared')

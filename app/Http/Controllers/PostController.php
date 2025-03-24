@@ -1,4 +1,5 @@
 <?php
+// Add to app/Http/Controllers/PostController.php
 
 namespace App\Http\Controllers;
 
@@ -18,6 +19,33 @@ class PostController extends Controller {
     public function viewSinglePost(Post $post) {
         $post['body'] = strip_tags(Str::markdown($post->body), '<p><ul><ol><li><strong><em><h3><br>');
         return response()->json(['post' => $post]);
+    }
+
+    /**
+     * Retrieve a post by its share key, accessible without authentication
+     */
+    public function viewSharedPost($shareKey) {
+        $post = Post::where('share_key', $shareKey)->firstOrFail();
+        
+        // Only public posts should be shareable
+        if ($post->visibility !== 'public') {
+            return response()->json([
+                'message' => 'This post is not available for public viewing'
+            ], 403);
+        }
+        
+        $post['body'] = strip_tags(Str::markdown($post->body), '<p><ul><ol><li><strong><em><h3><br>');
+        
+        // Load basic user info and stats
+        $post->load(['user:id,username,first_name,last_name,avatar']);
+        $likeCount = Like::where('post_id', $post->id)->count();
+        $commentCount = Comment::where('post_id', $post->id)->count();
+        
+        return response()->json([
+            'post' => $post,
+            'like_count' => $likeCount,
+            'comment_count' => $commentCount
+        ]);
     }
 
     /**
@@ -42,6 +70,7 @@ class PostController extends Controller {
         $newPost->user_id = auth()->id(); // Use authenticated user ID for security
         $newPost->media_type = $request->media_type;
         $newPost->visibility = $request->visibility;
+        $newPost->share_key = Str::random(10); // Generate unique share key
 
         if ($request->media_type === 'text') {
             // For text posts, simply use the provided text content.
@@ -120,12 +149,12 @@ class PostController extends Controller {
             return response()->json([
                 'message' => 'New post created successfully',
                 'post' => $newPost,
+                'share_url' => $newPost->share_url,
             ], 201); // 201 Created for resource creation
         } else {
             return response()->json(['message' => 'Failed to create post'], 500);
         }
     }
-    
     /**
      * Delete a post.
      * Only the owner of the post can delete it.
