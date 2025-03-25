@@ -9,23 +9,10 @@ use Illuminate\Support\Facades\DB;
 
 class BackfillPostShareKeys extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
     protected $signature = 'posts:backfill-share-keys';
-
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
+    
     protected $description = 'Backfill share keys for existing posts';
-
-    /**
-     * Execute the console command.
-     */
+    
     public function handle()
     {
         $this->info('Backfilling share keys for posts...');

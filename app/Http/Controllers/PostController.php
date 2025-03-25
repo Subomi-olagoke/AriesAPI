@@ -1,5 +1,5 @@
 <?php
-// Add to app/Http/Controllers/PostController.php
+// app/Http/Controllers/PostController.php
 
 namespace App\Http\Controllers;
 
@@ -9,6 +9,7 @@ use App\Models\Comment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use App\Services\FileUploadService;
 
 class PostController extends Controller {
@@ -155,6 +156,7 @@ class PostController extends Controller {
             return response()->json(['message' => 'Failed to create post'], 500);
         }
     }
+    
     /**
      * Delete a post.
      * Only the owner of the post can delete it.
@@ -210,6 +212,71 @@ class PostController extends Controller {
             'post_id' => $postId,
             'like_count' => $likeCount,
             'comment_count' => $commentCount
+        ]);
+    }
+    
+    /**
+     * Regenerate the share key for a post.
+     * Only the post owner can regenerate the share key.
+     */
+    public function regenerateShareKey(Post $post) {
+        // Check if the authenticated user is the owner of the post
+        if (auth()->id() !== $post->user_id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        
+        $post->share_key = Str::random(10);
+        
+        if ($post->save()) {
+            return response()->json([
+                'message' => 'Share key regenerated successfully',
+                'share_url' => $post->share_url
+            ]);
+        } else {
+            return response()->json(['message' => 'Failed to regenerate share key'], 500);
+        }
+    }
+    
+    /**
+     * Backfill share keys for existing posts that don't have them.
+     * This method is intended for administrative use.
+     */
+    public function backfillShareKeys(Request $request) {
+        // Check if user has admin privileges
+        if (!$request->user()->isAdmin) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        
+        // Find posts without share keys
+        $posts = Post::whereNull('share_key')->get();
+        $count = $posts->count();
+        
+        if ($count === 0) {
+            return response()->json(['message' => 'No posts found without share keys']);
+        }
+        
+        $processed = 0;
+        $errors = 0;
+        
+        // Generate and save share keys
+        foreach ($posts as $post) {
+            DB::beginTransaction();
+            try {
+                $post->share_key = Str::random(10);
+                $post->save();
+                DB::commit();
+                $processed++;
+            } catch (\Exception $e) {
+                DB::rollBack();
+                $errors++;
+            }
+        }
+        
+        return response()->json([
+            'message' => 'Share keys have been generated for posts',
+            'processed' => $processed,
+            'errors' => $errors,
+            'total' => $count
         ]);
     }
 }
