@@ -13,6 +13,13 @@ use Illuminate\Support\Facades\DB;
 use App\Services\FileUploadService;
 
 class PostController extends Controller {
+    protected $fileUploadService;
+
+    public function __construct(FileUploadService $fileUploadService)
+    {
+        $this->fileUploadService = $fileUploadService;
+    }
+
     /**
      * Retrieve a single post with its body converted from Markdown to HTML,
      * while only allowing specific HTML tags.
@@ -35,6 +42,7 @@ class PostController extends Controller {
             ], 403);
         }
         
+        // Convert markdown to safe HTML
         $post['body'] = strip_tags(Str::markdown($post->body), '<p><ul><ol><li><strong><em><h3><br>');
         
         // Load basic user info and stats
@@ -45,7 +53,8 @@ class PostController extends Controller {
         return response()->json([
             'post' => $post,
             'like_count' => $likeCount,
-            'comment_count' => $commentCount
+            'comment_count' => $commentCount,
+            'share_url' => $post->share_url
         ]);
     }
 
@@ -72,7 +81,7 @@ class PostController extends Controller {
         $newPost->media_type = $request->media_type;
         $newPost->visibility = $request->visibility;
         $newPost->share_key = Str::random(10); // Generate unique share key
-
+        
         if ($request->media_type === 'text') {
             // For text posts, simply use the provided text content.
             $newPost->body = $request->text_content;
@@ -81,8 +90,6 @@ class PostController extends Controller {
             $newPost->body = $request->text_content ?? ''; // Use consistent field name
             
             if ($request->hasFile('media_file')) {
-                $fileUploadService = app(FileUploadService::class);
-                
                 if ($request->media_type == 'image') {
                     // Validate image
                     $request->validate([
@@ -90,7 +97,7 @@ class PostController extends Controller {
                     ]);
                     
                     // Upload image to Cloudinary
-                    $newPost->media_link = $fileUploadService->uploadFile(
+                    $newPost->media_link = $this->fileUploadService->uploadFile(
                         $request->file('media_file'),
                         'media/images'
                     );
@@ -102,7 +109,7 @@ class PostController extends Controller {
                     ]);
                     
                     // Upload video to Cloudinary
-                    $newPost->media_link = $fileUploadService->uploadFile(
+                    $newPost->media_link = $this->fileUploadService->uploadFile(
                         $request->file('media_file'),
                         'media/videos'
                     );
@@ -113,20 +120,14 @@ class PostController extends Controller {
                             'media_thumbnail' => 'image|mimes:jpg,jpeg,png,gif,webp|max:5120',
                         ]);
                         
-                        $newPost->media_thumbnail = $fileUploadService->uploadFile(
+                        $newPost->media_thumbnail = $this->fileUploadService->uploadFile(
                             $request->file('media_thumbnail'),
-                            'media/thumbnails',
-                            [
-                                'process_image' => true,
-                                'width' => 500,
-                                'height' => 300,
-                                'fit' => true
-                            ]
+                            'media/thumbnails'
                         );
                     }
                 } else if ($request->media_type == 'file') {
                     // Allow various file types
-                    $newPost->media_link = $fileUploadService->uploadFile(
+                    $newPost->media_link = $this->fileUploadService->uploadFile(
                         $request->file('media_file'),
                         'media/files'
                     );
@@ -168,14 +169,12 @@ class PostController extends Controller {
         }
         
         // Delete associated media files from Cloudinary if they exist
-        $fileUploadService = app(FileUploadService::class);
-        
         if ($post->media_link) {
-            $fileUploadService->deleteFile($post->media_link);
+            $this->fileUploadService->deleteFile($post->media_link);
         }
         
         if ($post->media_thumbnail) {
-            $fileUploadService->deleteFile($post->media_thumbnail);
+            $this->fileUploadService->deleteFile($post->media_thumbnail);
         }
         
         // Delete the post

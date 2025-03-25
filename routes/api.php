@@ -43,6 +43,8 @@ use App\Http\Controllers\SubscriptionController;
 | be assigned to the "api" middleware group. Make something great!
 |
 */
+// Public route to view a shared post
+Route::get('/posts/shared/{shareKey}', [PostController::class, 'viewSharedPost']);
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -347,7 +349,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/subscriptions/free', [PaystackController::class, 'createFreeSubscription']);
     Route::post('/subscription/free', [PaystackController::class, 'createFreeSubscription']); // Additional route
     Route::post('/payment/retry', [PaystackController::class, 'retryPayment']);
-    
+
     // Tutoring
     Route::post('/tutoring/request', [HireRequestController::class, 'sendRequest']);
     Route::get('/tutoring/requests', [HireRequestController::class, 'listRequests']);
