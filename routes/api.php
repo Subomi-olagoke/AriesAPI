@@ -67,6 +67,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/profile/update', [ProfileController::class, 'update']);
     Route::post('/profile/avatar', [ProfileController::class, 'UploadAvatar']);
 
+    Route::get('/files', [App\Http\Controllers\FileController::class, 'index'])->name('files.index');
+    Route::get('/files/download', [App\Http\Controllers\FileController::class, 'download'])->name('files.download');
+
     // Post routes - include both singular and plural paths
     Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
     Route::get('/posts/{post}', [PostController::class, 'viewSinglePost']); // Additional plural route
