@@ -68,10 +68,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/profile/update', [ProfileController::class, 'update']);
     Route::post('/profile/avatar', [ProfileController::class, 'UploadAvatar']);
 
-    Route::get('/files', [App\Http\Controllers\FileController::class, 'index'])->name('files.index');
-    Route::get('/files/download', [App\Http\Controllers\FileController::class, 'download'])->name('files.download');
-    Route::get('/posts/{postId}/view-file', [FileController::class, 'viewPostFile'])->name('posts.view-file');
-    Route::get('/posts/{postId}/download-file', [FileController::class, 'downloadPostFile'])->name('posts.download-file');
+   
 
     // Post routes - include both singular and plural paths
     Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
@@ -216,6 +213,11 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     
     Route::get('/subscription/status', [LiveClassController::class, 'checkSubscriptionStatus']);
+
+    Route::get('/files', [App\Http\Controllers\FileController::class, 'index'])->name('files.index');
+    Route::get('/files/download', [App\Http\Controllers\FileController::class, 'download'])->name('files.download');
+    Route::get('/posts/{postId}/view-file', [FileController::class, 'viewPostFile'])->name('posts.view-file');
+    Route::get('/posts/{postId}/download-file', [FileController::class, 'downloadPostFile'])->name('posts.download-file');
 
     // Educator routes
     Route::post('/create/course', [EducatorsController::class, 'createCourse']);

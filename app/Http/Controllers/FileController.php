@@ -101,7 +101,7 @@ class FileController extends Controller
         
         // Check if it's a Cloudinary URL
         if (Str::contains($fileUrl, 'cloudinary.com')) {
-            // For Cloudinary URLs, just redirect to the file
+            // For Cloudinary URLs, redirect directly to the file
             return redirect($fileUrl);
         }
         
@@ -157,23 +157,9 @@ class FileController extends Controller
         
         // Check if it's a Cloudinary URL
         if (Str::contains($fileUrl, 'cloudinary.com')) {
-            // For Cloudinary URLs, we'll download and serve the file
-            try {
-                $fileContent = file_get_contents($fileUrl);
-                $mimeType = $post->mime_type ?? $this->getMimeTypeFromUrl($fileUrl);
-                
-                $headers = [
-                    'Content-Type' => $mimeType,
-                    'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-                ];
-                
-                return Response::make($fileContent, 200, $headers);
-            } catch (\Exception $e) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to download file from Cloudinary: ' . $e->getMessage()
-                ], 500);
-            }
+            // For Cloudinary URLs, redirect to the file instead of proxying it
+            // This avoids the 401 Unauthorized error
+            return redirect($fileUrl);
         }
         
         // For local storage, extract the path
