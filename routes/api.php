@@ -32,6 +32,7 @@ use App\Http\Controllers\ResetPasswordController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\FileController;
 
 /*
 |--------------------------------------------------------------------------
