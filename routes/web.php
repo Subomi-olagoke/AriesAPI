@@ -49,5 +49,3 @@ Route::view('/subscription/failed', 'subscription.failed')->name('subscription.f
 Route::view('/enrollment/success', 'enrollment.success')->name('enrollment.success');
 Route::view('/enrollment/failed', 'enrollment.failed')->name('enrollment.failed');
 
-Route::get('posts/shared/{shareKey}', [SharedPostController::class, 'show'])
-    ->name('posts.shared')
