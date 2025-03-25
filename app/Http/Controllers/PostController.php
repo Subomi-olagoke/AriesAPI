@@ -32,31 +32,53 @@ class PostController extends Controller {
     /**
      * Retrieve a post by its share key, accessible without authentication
      */
-    public function viewSharedPost($shareKey) {
-        $post = Post::where('share_key', $shareKey)->firstOrFail();
+    public function viewSharedPost($shareKey)
+{
+    try {
+        // Add detailed logging
+        Log::info('Attempting to view shared post', ['share_key' => $shareKey]);
+        
+        $post = Post::where('share_key', $shareKey)->first();
+        
+        if (!$post) {
+            Log::warning('No post found with share key', ['share_key' => $shareKey]);
+            return response()->json([
+                'message' => 'Post not found',
+                'share_key' => $shareKey
+            ], 404);
+        }
         
         // Only public posts should be shareable
         if ($post->visibility !== 'public') {
+            Log::warning('Non-public post access attempted', [
+                'share_key' => $shareKey, 
+                'visibility' => $post->visibility
+            ]);
             return response()->json([
                 'message' => 'This post is not available for public viewing'
             ], 403);
         }
         
-        // Convert markdown to safe HTML
-        $post['body'] = strip_tags(Str::markdown($post->body), '<p><ul><ol><li><strong><em><h3><br>');
+        // Detailed logging for successful retrieval
+        Log::info('Shared post retrieved successfully', [
+            'post_id' => $post->id,
+            'share_key' => $shareKey
+        ]);
         
-        // Load basic user info and stats
-        $post->load(['user:id,username,first_name,last_name,avatar']);
-        $likeCount = Like::where('post_id', $post->id)->count();
-        $commentCount = Comment::where('post_id', $post->id)->count();
+        // Rest of your existing method...
+    } catch (\Exception $e) {
+        Log::error('Error retrieving shared post', [
+            'share_key' => $shareKey,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
         
         return response()->json([
-            'post' => $post,
-            'like_count' => $likeCount,
-            'comment_count' => $commentCount,
-            'share_url' => $post->share_url
-        ]);
+            'message' => 'An unexpected error occurred',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * Store a new post.
