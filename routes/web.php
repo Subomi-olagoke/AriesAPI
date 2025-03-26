@@ -24,6 +24,11 @@ Route::get('/', function () {
 
 
 
+// Add this to your routes/web.php file
+Route::get('/posts/shared/{shareKey}', [PostController::class, 'viewSharedPost'])
+    ->name('posts.shared')
+    ->withoutMiddleware(['auth:sanctum']);
+
 // Auth routes
 Route::get('/login', [AuthManager::class, 'login'])->name('login');
 Route::get('/register', [AuthManager::class, 'register'])->name('register');
