@@ -13,7 +13,12 @@ class PostController extends Controller
 {
     protected $fileUploadService;
 
-    public function __construct(FileUploadService $fileUploadService = null)
+    /**
+     * Create a new controller instance.
+     * 
+     * @param FileUploadService $fileUploadService
+     */
+    public function __construct(FileUploadService $fileUploadService)
     {
         $this->fileUploadService = $fileUploadService;
     }
@@ -45,33 +50,73 @@ class PostController extends Controller
             'media' => 'nullable|file|max:10240',
         ]);
 
-        $post = new Post();
-        $post->title = $request->title;
-        $post->body = $request->body;
-        $post->user_id = auth()->id();
-        $post->visibility = $request->visibility ?? 'public';
-        $post->share_key = Str::random(10);
+        try {
+            $post = new Post();
+            $post->title = $request->title;
+            $post->body = $request->body;
+            $post->user_id = auth()->id();
+            $post->visibility = $request->visibility ?? 'public';
+            $post->share_key = Str::random(10);
 
-        // Handle media upload if provided
-        if ($request->hasFile('media') && $this->fileUploadService) {
-            $file = $request->file('media');
-            $mediaLink = $this->fileUploadService->uploadFile($file, 'media/images');
-            $post->media_link = $mediaLink;
-            $post->media_type = $file->getMimeType();
-            $post->original_filename = $file->getClientOriginalName();
+            // Handle media upload if provided
+            if ($request->hasFile('media')) {
+                try {
+                    Log::info('Media file received', [
+                        'filename' => $request->file('media')->getClientOriginalName(),
+                        'mime_type' => $request->file('media')->getMimeType(),
+                        'size' => $request->file('media')->getSize()
+                    ]);
+                    
+                    $file = $request->file('media');
+                    $mediaLink = $this->fileUploadService->uploadFile($file, 'media/images');
+                    
+                    if (!$mediaLink) {
+                        throw new \Exception('File upload returned empty URL');
+                    }
+                    
+                    $post->media_link = $mediaLink;
+                    $post->media_type = $file->getMimeType();
+                    $post->original_filename = $file->getClientOriginalName();
+                    
+                    Log::info('File upload successful', [
+                        'media_link' => $mediaLink,
+                        'media_type' => $post->media_type,
+                        'original_filename' => $post->original_filename
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('File upload failed', [
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                        'file' => $request->file('media')->getClientOriginalName()
+                    ]);
+                    
+                    return response()->json([
+                        'message' => 'File upload failed: ' . $e->getMessage()
+                    ], 500);
+                }
+            }
+
+            $post->save();
+
+            // Process mentions if any
+            if (Str::contains($post->body, '@')) {
+                $post->processMentions($post->body);
+            }
+
+            return response()->json([
+                'message' => 'Post created successfully',
+                'post' => $post
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Post creation failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Post creation failed: ' . $e->getMessage()
+            ], 500);
         }
-
-        $post->save();
-
-        // Process mentions if any
-        if (Str::contains($post->body, '@')) {
-            $post->processMentions($post->body);
-        }
-
-        return response()->json([
-            'message' => 'Post created successfully',
-            'post' => $post
-        ], 201);
     }
 
     /**
@@ -119,6 +164,7 @@ class PostController extends Controller
             'title' => 'sometimes|required|string|max:255',
             'body' => 'sometimes|required|string',
             'visibility' => 'nullable|in:public,private,followers',
+            'media' => 'nullable|file|max:10240',
         ]);
 
         if ($request->has('title')) {
@@ -136,6 +182,36 @@ class PostController extends Controller
         
         if ($request->has('visibility')) {
             $post->visibility = $request->visibility;
+        }
+        
+        // Handle media update if provided
+        if ($request->hasFile('media')) {
+            try {
+                // Delete old media if it exists
+                if ($post->media_link) {
+                    $this->fileUploadService->deleteFile($post->media_link);
+                }
+                
+                $file = $request->file('media');
+                $mediaLink = $this->fileUploadService->uploadFile($file, 'media/images');
+                
+                if (!$mediaLink) {
+                    throw new \Exception('File upload returned empty URL');
+                }
+                
+                $post->media_link = $mediaLink;
+                $post->media_type = $file->getMimeType();
+                $post->original_filename = $file->getClientOriginalName();
+            } catch (\Exception $e) {
+                Log::error('File update failed', [
+                    'error' => $e->getMessage(),
+                    'post_id' => $post->id
+                ]);
+                
+                return response()->json([
+                    'message' => 'File update failed: ' . $e->getMessage()
+                ], 500);
+            }
         }
 
         $post->save();
@@ -160,9 +236,14 @@ class PostController extends Controller
             ], 403);
         }
 
-        // Delete media if it exists and we have file service
-        if ($post->media_link && $this->fileUploadService) {
-            $this->fileUploadService->deleteFile($post->media_link);
+        // Delete media if it exists
+        if ($post->media_link) {
+            try {
+                $this->fileUploadService->deleteFile($post->media_link);
+            } catch (\Exception $e) {
+                Log::warning('Failed to delete post media: ' . $e->getMessage());
+                // Continue with post deletion even if media deletion fails
+            }
         }
 
         $post->delete();
