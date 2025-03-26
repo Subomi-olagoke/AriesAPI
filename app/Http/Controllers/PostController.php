@@ -92,7 +92,7 @@ class PostController extends Controller {
             'text_content' => 'required_without:media_type|string',
             'media_type'   => 'required|string|in:image,video,text,file',
             // For image, video, or file posts, the 'media_file' field is required.
-            'media_file'   => 'required_if:media_type,image,video,file|file|max:10240', // 10MB
+            'media_file'   => 'required_if:media_type,image,video,file|file|max:102400', // 100MB
             // For video posts, a thumbnail is optional
             'media_thumbnail' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120',
             'visibility'   => 'required|in:public,followers',
@@ -127,7 +127,7 @@ class PostController extends Controller {
                 } else if ($request->media_type == 'video') {
                     // Validate video
                     $request->validate([
-                        'media_file' => 'mimetypes:video/avi,video/mpeg,video/quicktime,video/mp4,video/webm,video/x-matroska|max:10240',
+                        'media_file' => 'mimetypes:video/avi,video/mpeg,video/quicktime,video/mp4,video/webm,video/x-matroska|max:102400',
                     ]);
                     
                     // Upload video to Cloudinary
