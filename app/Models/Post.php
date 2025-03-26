@@ -26,14 +26,38 @@ class Post extends Model {
 
     protected $appends = ['file_extension', 'share_url'];
 
+    // Allow visibility to be added to JSON serialization
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+    ];
+
+    // Define the visibility attribute
+    protected $attributes = [
+        'visibility' => 'public', // Default to public
+    ];
+
     protected static function boot()
     {
         parent::boot();
 
-        // Automatically generate a unique share_key when creating a post
+        // Generate share key only ONCE when creating
         static::creating(function ($post) {
+            // Generate a stable, unique share key if not already set
             if (!$post->share_key) {
-                $post->share_key = Str::random(10);
+                $post->share_key = hash('sha256', 
+                    ($post->user_id ?? 'unknown') . 
+                    now()->timestamp . 
+                    Str::random(16)
+                );
+            }
+        });
+
+        // Prevent modifications to share_key
+        static::updating(function ($post) {
+            // If someone tries to change the share_key, revert it
+            if ($post->isDirty('share_key')) {
+                $post->share_key = $post->getOriginal('share_key');
             }
         });
     }
@@ -84,12 +108,20 @@ class Post extends Model {
     }
 
     /**
+     * Check if the post can be shared
+     */
+    public function canBeShared()
+    {
+        return $this->visibility === 'public';
+    }
+
+    /**
      * Get the shareable URL for this post
      */
     public function getShareUrlAttribute()
     {
-        if ($this->share_key) {
-            return url("/posts/shared/{$this->share_key}");
+        if ($this->share_key && $this->canBeShared()) {
+            return route('posts.shared', ['shareKey' => $this->share_key]);
         }
         return null;
     }
@@ -125,5 +157,24 @@ class Post extends Model {
                 }
             }
         }
+    }
+
+    /**
+     * Scope a query to only include public posts
+     */
+    public function scopePublic($query)
+    {
+        return $query->where('visibility', 'public');
+    }
+
+    /**
+     * Scope a query to only include posts by followed users
+     */
+    public function scopeFollowers($query, User $user)
+    {
+        return $query->where('visibility', 'followers')
+            ->whereHas('user.followers', function($q) use ($user) {
+                $q->where('user_id', $user->id);
+            });
     }
 }

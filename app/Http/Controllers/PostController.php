@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use App\Services\FileUploadService;
 
 class PostController extends Controller {
@@ -33,52 +34,71 @@ class PostController extends Controller {
      * Retrieve a post by its share key, accessible without authentication
      */
     public function viewSharedPost($shareKey)
-{
-    try {
-        // Add detailed logging
-        Log::info('Attempting to view shared post', ['share_key' => $shareKey]);
-        
-        $post = Post::where('share_key', $shareKey)->first();
-        
-        if (!$post) {
-            Log::warning('No post found with share key', ['share_key' => $shareKey]);
-            return response()->json([
-                'message' => 'Post not found',
+    {
+        try {
+            // Log the share key access attempt
+            Log::info('Attempting to view shared post', ['share_key' => $shareKey]);
+            
+            // Find the post with the exact share key
+            $post = Post::where('share_key', $shareKey)->first();
+            
+            // Check if post exists
+            if (!$post) {
+                Log::warning('No post found with share key', ['share_key' => $shareKey]);
+                return response()->json([
+                    'message' => 'Post not found',
+                    'share_key' => $shareKey
+                ], 404);
+            }
+            
+            // Only public posts should be shareable
+            if ($post->visibility !== 'public') {
+                Log::warning('Non-public post access attempted', [
+                    'share_key' => $shareKey, 
+                    'visibility' => $post->visibility
+                ]);
+                return response()->json([
+                    'message' => 'This post is not available for public viewing'
+                ], 403);
+            }
+            
+            // Convert markdown to safe HTML
+            $post->body = strip_tags(Str::markdown($post->body), '<p><ul><ol><li><strong><em><h3><br>');
+            
+            // Detailed logging for successful retrieval
+            Log::info('Shared post retrieved successfully', [
+                'post_id' => $post->id,
                 'share_key' => $shareKey
-            ], 404);
-        }
-        
-        // Only public posts should be shareable
-        if ($post->visibility !== 'public') {
-            Log::warning('Non-public post access attempted', [
-                'share_key' => $shareKey, 
-                'visibility' => $post->visibility
             ]);
+            
+            // Include additional context for shared posts
             return response()->json([
-                'message' => 'This post is not available for public viewing'
-            ], 403);
+                'post' => $post,
+                'user' => $post->user ? [
+                    'id' => $post->user->id,
+                    'username' => $post->user->username,
+                    'avatar' => $post->user->avatar
+                ] : null,
+                'stats' => [
+                    'likes' => $post->likes()->count(),
+                    'comments' => $post->comments()->count()
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            // Comprehensive error logging
+            Log::error('Error retrieving shared post', [
+                'share_key' => $shareKey,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'An unexpected error occurred',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
         }
-        
-        // Detailed logging for successful retrieval
-        Log::info('Shared post retrieved successfully', [
-            'post_id' => $post->id,
-            'share_key' => $shareKey
-        ]);
-        
-        // Rest of your existing method...
-    } catch (\Exception $e) {
-        Log::error('Error retrieving shared post', [
-            'share_key' => $shareKey,
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-        
-        return response()->json([
-            'message' => 'An unexpected error occurred',
-            'error' => $e->getMessage()
-        ], 500);
     }
-}
 
     /**
      * Store a new post.
@@ -102,7 +122,13 @@ class PostController extends Controller {
         $newPost->user_id = auth()->id(); // Use authenticated user ID for security
         $newPost->media_type = $request->media_type;
         $newPost->visibility = $request->visibility;
-        $newPost->share_key = Str::random(10); // Generate unique share key
+        
+        // Generate a stable share key
+        $newPost->share_key = hash('sha256', 
+            $newPost->user_id . 
+            now()->timestamp . 
+            Str::random(16)
+        );
         
         if ($request->media_type === 'text') {
             // For text posts, simply use the provided text content.
@@ -233,71 +259,6 @@ class PostController extends Controller {
             'post_id' => $postId,
             'like_count' => $likeCount,
             'comment_count' => $commentCount
-        ]);
-    }
-    
-    /**
-     * Regenerate the share key for a post.
-     * Only the post owner can regenerate the share key.
-     */
-    public function regenerateShareKey(Post $post) {
-        // Check if the authenticated user is the owner of the post
-        if (auth()->id() !== $post->user_id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-        
-        $post->share_key = Str::random(10);
-        
-        if ($post->save()) {
-            return response()->json([
-                'message' => 'Share key regenerated successfully',
-                'share_url' => $post->share_url
-            ]);
-        } else {
-            return response()->json(['message' => 'Failed to regenerate share key'], 500);
-        }
-    }
-    
-    /**
-     * Backfill share keys for existing posts that don't have them.
-     * This method is intended for administrative use.
-     */
-    public function backfillShareKeys(Request $request) {
-        // Check if user has admin privileges
-        if (!$request->user()->isAdmin) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-        
-        // Find posts without share keys
-        $posts = Post::whereNull('share_key')->get();
-        $count = $posts->count();
-        
-        if ($count === 0) {
-            return response()->json(['message' => 'No posts found without share keys']);
-        }
-        
-        $processed = 0;
-        $errors = 0;
-        
-        // Generate and save share keys
-        foreach ($posts as $post) {
-            DB::beginTransaction();
-            try {
-                $post->share_key = Str::random(10);
-                $post->save();
-                DB::commit();
-                $processed++;
-            } catch (\Exception $e) {
-                DB::rollBack();
-                $errors++;
-            }
-        }
-        
-        return response()->json([
-            'message' => 'Share keys have been generated for posts',
-            'processed' => $processed,
-            'errors' => $errors,
-            'total' => $count
         ]);
     }
 }
