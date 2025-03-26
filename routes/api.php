@@ -73,9 +73,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Post routes - include both singular and plural paths
     Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
     Route::get('/posts/{post}', [PostController::class, 'viewSinglePost']); // Additional plural route
-    Route::post('/post', [PostController::class, 'storePost']); // Add singular route
-    Route::post('/create-post', [PostController::class, 'storePost']);
-    Route::post('/posts', [PostController::class, 'storePost']); // Additional plural route
+    Route::post('/post', [PostController::class, 'store']); // Add singular route
+    Route::post('/create-post', [PostController::class, 'store']);
+    Route::post('/posts', [PostController::class, 'store']); // Additional plural route
     Route::delete('/post/{post}', [PostController::class, 'deletePost']); // Additional singular route
     Route::delete('/posts/{post}', [PostController::class, 'deletePost']);
     Route::get('/post/user/{userId?}', [PostController::class, 'getUserPosts']); // Additional singular route
