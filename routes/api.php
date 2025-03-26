@@ -45,7 +45,8 @@ use App\Http\Controllers\FileController;
 |
 */
 // Public route to view a shared post
-Route::get('/posts/shared/{shareKey}', [PostController::class, 'viewSharedPost']);
+Route::get('/posts/shared/{shareKey}', [PostController::class, 'viewSharedPost'])
+     ->name('shared.post');
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
