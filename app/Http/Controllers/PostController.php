@@ -36,7 +36,7 @@ class PostController extends Controller
     /**
      * Store a newly created post.
      */
-    public function store(Request $request)
+    public function storePost(Request $request)
     {
         $request->validate([
             'title' => 'required|string|max:255',
