@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use App\Services\FileUploadService;
 
 class PostController extends Controller
@@ -39,78 +40,112 @@ class PostController extends Controller
     }
 
     /**
-     * Store a newly created post.
+     * Store a newly created post with comprehensive media support.
      */
     public function store(Request $request)
     {
+        // Validate the incoming request parameters
         $request->validate([
-            'title' => 'nullable|string|max:255',
-            'body' => 'required|string',
-            'visibility' => 'nullable|in:public,private,followers',
-            'media' => 'nullable|file|max:10240',
+            // Either text content is provided or media_type must be specified
+            'text_content' => 'required_without:media_type|string',
+            'media_type'   => 'required_with:media_file|string|in:image,video,text,file',
+            // For media posts, the file is required based on media type
+            'media_file'   => 'required_if:media_type,image,video,file|file|max:10240', // 10MB
+            // For video posts, a thumbnail is optional
+            'media_thumbnail' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120',
+            'visibility'   => 'nullable|in:public,private,followers',
+            'title'        => 'nullable|string|max:255'
         ]);
 
         try {
-            $post = new Post();
-            $post->title = $request->title;
-            $post->body = $request->body;
-            $post->user_id = auth()->id();
-            $post->visibility = $request->visibility ?? 'public';
-            $post->share_key = Str::random(10);
+            $newPost = new Post();
+            $newPost->user_id = auth()->id();
+            $newPost->title = $request->title;
+            
+            // Determine media type and content
+            $newPost->media_type = $request->media_type ?? 'text';
+            $newPost->visibility = $request->visibility ?? 'public';
+            $newPost->share_key = Str::random(10);
 
-            // Handle media upload if provided
-            if ($request->hasFile('media')) {
-                try {
-                    Log::info('Media file received', [
-                        'filename' => $request->file('media')->getClientOriginalName(),
-                        'mime_type' => $request->file('media')->getMimeType(),
-                        'size' => $request->file('media')->getSize()
-                    ]);
+            // Handle different post types
+            if ($newPost->media_type === 'text') {
+                // Text-only post
+                $newPost->body = $request->text_content;
+            } else {
+                // Media post
+                $newPost->body = $request->text_content ?? '';
+                
+                if ($request->hasFile('media_file')) {
+                    $file = $request->file('media_file');
                     
-                    $file = $request->file('media');
-                    $mediaLink = $this->fileUploadService->uploadFile($file, 'media/images');
-                    
-                    if (!$mediaLink) {
-                        throw new \Exception('File upload returned empty URL');
+                    // Specific validations for different media types
+                    switch ($newPost->media_type) {
+                        case 'image':
+                            $request->validate([
+                                'media_file' => 'image|mimes:jpg,jpeg,png,gif,webp|max:5120',
+                            ]);
+                            break;
+                        
+                        case 'video':
+                            $request->validate([
+                                'media_file' => 'mimetypes:video/avi,video/mpeg,video/quicktime,video/mp4,video/webm,video/x-matroska|max:10240',
+                            ]);
+                            
+                            // Handle optional video thumbnail
+                            if ($request->hasFile('media_thumbnail')) {
+                                $thumbnailLink = $this->fileUploadService->uploadFile(
+                                    $request->file('media_thumbnail'),
+                                    'media/thumbnails'
+                                );
+                                $newPost->media_thumbnail = $thumbnailLink;
+                            }
+                            break;
+                        
+                        case 'file':
+                            // Allow various file types
+                            break;
                     }
                     
-                    $post->media_link = $mediaLink;
-                    $post->media_type = $file->getMimeType();
-                    $post->original_filename = $file->getClientOriginalName();
+                    // Upload the main media file
+                    $mediaLink = $this->fileUploadService->uploadFile(
+                        $file,
+                        'media/' . $newPost->media_type . 's'
+                    );
                     
-                    Log::info('File upload successful', [
-                        'media_link' => $mediaLink,
-                        'media_type' => $post->media_type,
-                        'original_filename' => $post->original_filename
-                    ]);
-                } catch (\Exception $e) {
-                    Log::error('File upload failed', [
-                        'error' => $e->getMessage(),
-                        'trace' => $e->getTraceAsString(),
-                        'file' => $request->file('media')->getClientOriginalName()
+                    // Log file upload details
+                    Log::info('File upload details', [
+                        'filename' => $file->getClientOriginalName(),
+                        'mime_type' => $file->getMimeType(),
+                        'size' => $file->getSize(),
+                        'media_link' => $mediaLink
                     ]);
                     
-                    return response()->json([
-                        'message' => 'File upload failed: ' . $e->getMessage()
-                    ], 500);
+                    $newPost->media_link = $mediaLink;
+                    $newPost->media_type = $file->getMimeType();
+                    $newPost->original_filename = $file->getClientOriginalName();
                 }
             }
 
-            $post->save();
+            // Save the post
+            $newPost->save();
 
-            // Process mentions if any
-            if (Str::contains($post->body, '@')) {
-                $post->processMentions($post->body);
+            // Process mentions if the post body contains @username
+            if (Str::contains($newPost->body, '@')) {
+                $newPost->processMentions($newPost->body);
             }
 
             return response()->json([
                 'message' => 'Post created successfully',
-                'post' => $post
+                'post' => $newPost,
+                'share_url' => route('shared.post', ['shareKey' => $newPost->share_key])
             ], 201);
+
         } catch (\Exception $e) {
+            // Comprehensive error logging
             Log::error('Post creation failed', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
             ]);
             
             return response()->json([
@@ -357,6 +392,94 @@ class PostController extends Controller
         
         return response()->json([
             'posts' => $posts
+        ]);
+    }
+
+    /**
+     * Get statistics (like count and comment count) for a specific post.
+     */
+    public function getPostStats($postId)
+    {
+        $post = Post::findOrFail($postId);
+        $likeCount = \App\Models\Like::where('post_id', $postId)->count();
+        $commentCount = \App\Models\Comment::where('post_id', $postId)->count();
+        
+        return response()->json([
+            'post_id' => $postId,
+            'like_count' => $likeCount,
+            'comment_count' => $commentCount
+        ]);
+    }
+
+    /**
+     * Regenerate the share key for a post.
+     * Only the post owner can regenerate the share key.
+     */
+    public function regenerateShareKey(Post $post)
+    {
+        // Check if the authenticated user is the owner of the post
+        if (auth()->id() !== $post->user_id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        
+        $post->share_key = Str::random(10);
+        
+        if ($post->save()) {
+            return response()->json([
+                'message' => 'Share key regenerated successfully',
+                'share_url' => route('shared.post', ['shareKey' => $post->share_key])
+            ]);
+        } else {
+            return response()->json(['message' => 'Failed to regenerate share key'], 500);
+        }
+    }
+
+    /**
+     * Backfill share keys for existing posts that don't have them.
+     * This method is intended for administrative use.
+     */
+    public function backfillShareKeys(Request $request)
+    {
+        // Check if user has admin privileges
+        if (!$request->user()->isAdmin) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        // Find posts without share keys
+        $posts = Post::whereNull('share_key')->get();
+        $count = $posts->count();
+        
+        if ($count === 0) {
+            return response()->json(['message' => 'No posts found without share keys']);
+        }
+        
+        $processed = 0;
+        $errors = 0;
+        
+        // Generate and save share keys
+        foreach ($posts as $post) {
+            DB::beginTransaction();
+            try {
+                $post->share_key = Str::random(10);
+                $post->save();
+                DB::commit();
+                $processed++;
+            } catch (\Exception $e) {
+                DB::rollBack();
+                $errors++;
+                
+                // Log the error for admin review
+                Log::error('Share key generation failed', [
+                    'post_id' => $post->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+        
+        return response()->json([
+            'message' => 'Share keys have been generated for posts',
+            'processed' => $processed,
+            'errors' => $errors,
+            'total' => $count
         ]);
     }
 }
