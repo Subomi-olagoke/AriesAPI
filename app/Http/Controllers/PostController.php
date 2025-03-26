@@ -39,7 +39,7 @@ class PostController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'title' => 'required|string|max:255',
+            'title' => 'nullable|string|max:255',
             'body' => 'required|string',
             'visibility' => 'nullable|in:public,private,followers',
             'media' => 'nullable|file|max:10240',
