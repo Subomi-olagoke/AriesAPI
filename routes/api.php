@@ -114,9 +114,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/followers/{username}', [FollowController::class, 'getFollowers']);
     Route::get('/following/{username}', [FollowController::class, 'getFollowing']);
 
-    // Hire routes
-    Route::post('/hire/{id}', [HireController::class, 'hireInstructor']);
-    Route::delete('/hire/{id?}', [HireController::class, 'endHireSession']);
+    // Hire route
 
     // Hire Request routes
     Route::post('/hire-requests', [HireRequestController::class, 'sendRequest']);
