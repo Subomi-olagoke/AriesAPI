@@ -170,7 +170,7 @@ class ReadlistController extends Controller
                     'item' => [
                         'id' => $post->id,
                         'title' => $post->title,
-                        'body' => mb_strimwidth($post->body, 0, 200, '...'),
+                        'body' => $this->truncateText($post->body, 200, '...'),
                         'media_link' => $post->media_link,
                         'media_type' => $post->media_type,
                         'user_id' => $post->user_id
@@ -251,7 +251,7 @@ class ReadlistController extends Controller
                     'item' => [
                         'id' => $post->id,
                         'title' => $post->title,
-                        'body' => mb_strimwidth($post->body, 0, 200, '...'),
+                        'body' => $this->truncateText($post->body, 200, '...'),
                         'media_link' => $post->media_link,
                         'media_type' => $post->media_type,
                         'user_id' => $post->user_id
@@ -641,5 +641,17 @@ class ReadlistController extends Controller
         return response()->json([
             'readlists' => $readlists
         ]);
+    }
+    
+    /**
+     * Helper function to truncate text safely without mb_strimwidth
+     */
+    private function truncateText($text, $length = 200, $ellipsis = '...')
+    {
+        if (strlen($text) <= $length) {
+            return $text;
+        }
+        
+        return substr($text, 0, $length) . $ellipsis;
     }
 }
