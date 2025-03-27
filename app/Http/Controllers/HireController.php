@@ -9,29 +9,7 @@ use App\Models\HireInstructor;
 
 class HireController extends Controller
 {
-    public function hireInstructor(Request $request, $id) {
-        $user = $request->user();
-        $existCheck = HireInstructor::where([['user_id', '=', $user->id],
-            ['hireduser', '=', $id]])->count();
-            if($existCheck) {
-                return response()->json([
-                    'message' => 'already hired'
-                ], 409);
-            }
-            $newHire = new HireInstructor();
-            $newHire->user_id = $user->id;
-            $newHire->hireduser = $id;
-            $save = $newHire->save();
-
-            if($save) {
-                $notifiable = User::find($newHire->hireduser);
-                $notifiable->notify(new HireInstructorNotification($user));
-
-                return response()->json([
-                    'message' => 'hire request sent'
-                ], 201);
-            }
-    }
+    
     
     /**
      * End a hiring session, making the educator available to be hired again
