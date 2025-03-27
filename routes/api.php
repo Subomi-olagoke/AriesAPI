@@ -45,6 +45,7 @@ use App\Http\Controllers\FileController;
 |
 */
 // Public route to view a shared post
+//
 Route::get('/posts/shared/{shareKey}', [PostController::class, 'viewSharedPost'])
      ->name('shared.post');
 
