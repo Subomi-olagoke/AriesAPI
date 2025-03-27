@@ -78,7 +78,74 @@ class ProfileController extends Controller {
         ]);
     }
 
-    public function UploadAvatar(Request $request) {
+    /**
+     * Update educator-specific profile information
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateEducatorProfile(Request $request)
+    {
+        $user = Auth::user();
+        
+        // Check if the user is an educator
+        if ($user->role != User::ROLE_EDUCATOR) {
+            return response()->json([
+                'message' => 'Only educators can update educator profile'
+            ], 403);
+        }
+        
+        // Validate the request
+        $request->validate([
+            'qualifications' => 'nullable|array',
+            'teaching_style' => 'nullable|string|max:255',
+            'availability' => 'nullable|array',
+            'hire_rate' => 'nullable|numeric|min:0',
+            'hire_currency' => 'nullable|string|size:3',
+            'social_links' => 'nullable|array',
+        ]);
+        
+        // Get or create profile
+        $profile = $user->profile;
+        if (!$profile) {
+            $profile = new Profile();
+            $profile->user_id = $user->id;
+        }
+        
+        // Update the fields if they're provided
+        if ($request->has('qualifications')) {
+            $profile->qualifications = $request->qualifications;
+        }
+        
+        if ($request->has('teaching_style')) {
+            $profile->teaching_style = $request->teaching_style;
+        }
+        
+        if ($request->has('availability')) {
+            $profile->availability = $request->availability;
+        }
+        
+        if ($request->has('hire_rate')) {
+            $profile->hire_rate = $request->hire_rate;
+        }
+        
+        if ($request->has('hire_currency')) {
+            $profile->hire_currency = $request->hire_currency;
+        }
+        
+        if ($request->has('social_links')) {
+            $profile->social_links = $request->social_links;
+        }
+        
+        $profile->save();
+        
+        return response()->json([
+            'message' => 'Educator profile updated successfully',
+            'profile' => $profile
+        ]);
+    }
+
+    public function uploadAvatar(Request $request) {
         $request->validate([
             'avatar' => 'required|image|mimes:jpg,jpeg,png,gif,webp|max:3000'
         ]);
@@ -136,4 +203,4 @@ class ProfileController extends Controller {
             ], 500);
         }
     }
-} 
+}

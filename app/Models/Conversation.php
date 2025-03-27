@@ -20,11 +20,13 @@ class Conversation extends Model
         'user_one_id',
         'user_two_id',
         'last_message_at',
+        'is_archived'
     ];
 
     protected $casts = [
         'id' => 'string',
         'last_message_at' => 'datetime',
+        'is_archived' => 'boolean',
     ];
 
     // Automatically generate UUID when creating a new conversation

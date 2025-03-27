@@ -13,6 +13,7 @@ use App\Http\Controllers\CourseSectionController;
 use App\Http\Controllers\EnhancedCogniController;
 use App\Http\Controllers\EnrollmentController;
 use App\Http\Controllers\EducatorsController;
+use App\Http\Controllers\EducatorProfileController;
 use App\Http\Controllers\FeedController;
 use App\Http\Controllers\ForgotPasswordManager;
 use App\Http\Controllers\FollowController;
@@ -69,8 +70,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile/{user}', [ProfileController::class, 'viewProfile']);
     Route::post('/profile/update', [ProfileController::class, 'update']);
     Route::post('/profile/avatar', [ProfileController::class, 'UploadAvatar']);
-
-   
+    Route::get('/educators/{username}/profile', [EducatorProfileController::class, 'show']);
+    Route::post('/profile/educator', [ProfileController::class, 'updateEducatorProfile']);
 
     // Post routes - include both singular and plural paths
     Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
@@ -128,6 +129,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/hire-request/{id}', [HireRequestController::class, 'cancelRequest']); // Additional route
     Route::get('/hire-requests', [HireRequestController::class, 'listRequests']);
     Route::get('/hire-request', [HireRequestController::class, 'listRequests']); // Additional route
+    
+    // New Hire Request payment endpoints
+    Route::post('/hire/initiate-payment', [HireRequestController::class, 'initiatePayment']);
+    Route::get('/hire/verify-payment', [HireRequestController::class, 'verifyPayment'])->name('hire.payment.verify');
+    Route::post('/hire/sessions/{id}/end', [HireRequestController::class, 'initiateSessionEnd']);
 
     // Setup routes
     Route::post('/setup', [SetupController::class, 'setup']);
@@ -197,24 +203,47 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Duplicate routes with singular "live-class"
-    Route::prefix('live-class')->group(function () {
+    Route::prefix('live-classes')->group(function () {
         Route::get('/', [LiveClassController::class, 'index']);
-        Route::get('/{liveClass}', [LiveClassController::class, 'show']);
         Route::post('/', [LiveClassController::class, 'store']);
+        Route::get('/{liveClass}', [LiveClassController::class, 'show']);
+        Route::put('/{liveClass}', [LiveClassController::class, 'update']);
+        Route::delete('/{liveClass}', [LiveClassController::class, 'destroy']);
+        
+        // Class Participation
         Route::post('/{liveClass}/join', [LiveClassController::class, 'join']);
+        Route::post('/{liveClass}/leave', [LiveClassController::class, 'leave']);
         Route::post('/{liveClass}/end', [LiveClassController::class, 'end']);
+        
+        // WebRTC Signaling
         Route::post('/{classId}/signal', [LiveClassController::class, 'signal']);
         Route::post('/{classId}/ice-candidate', [LiveClassController::class, 'sendIceCandidate']);
-        Route::get('/{liveClass}/status', [LiveClassController::class, 'getRoomStatus']);
-        Route::put('/{liveClass}/participant-settings', [LiveClassController::class, 'updateParticipantSettings']);
-        Route::get('/{liveClass}/participants', [LiveClassController::class, 'getParticipants']);
+        
+        // Stream Control
         Route::post('/{liveClass}/start-stream', [LiveClassController::class, 'startStream']);
         Route::post('/{liveClass}/stop-stream', [LiveClassController::class, 'stopStream']);
-        Route::get('/{liveClass}/stream-info', [LiveClassController::class, 'getStreamInfo']);
-        Route::post('/{liveClass}/report-connection', [LiveClassController::class, 'reportConnectionQuality']);
+        
+        // Status and Settings
+        Route::get('/{liveClass}/status', [LiveClassController::class, 'getRoomStatus']);
+        Route::post('/{liveClass}/settings', [LiveClassController::class, 'updateParticipantSettings']);
+        
+        // User-specific Classes
+        Route::get('/my-classes', [LiveClassController::class, 'getMyClasses']);
+        Route::get('/enrolled-classes', [LiveClassController::class, 'getEnrolledClasses']);
+        
+        // Course-related Classes
+        Route::get('/course/{courseId}', [LiveClassController::class, 'getClassesForCourse']);
     });
     
-    Route::get('/subscription/status', [LiveClassController::class, 'checkSubscriptionStatus']);
+    // Live Class Chat
+    Route::prefix('live-class-chat')->group(function () {
+        Route::post('/{classId}/send', [LiveClassChatController::class, 'sendMessage']);
+        Route::get('/{classId}/history', [LiveClassChatController::class, 'getChatHistory']);
+        Route::delete('/message/{messageId}', [LiveClassChatController::class, 'deleteMessage']);
+    });
+    
+    // Subscription Check
+    Route::get('/check-subscription', [LiveClassController::class, 'checkSubscriptionStatus']);
 
     Route::get('/files', [App\Http\Controllers\FileController::class, 'index'])->name('files.index');
     Route::get('/files/download', [App\Http\Controllers\FileController::class, 'download'])->name('files.download');

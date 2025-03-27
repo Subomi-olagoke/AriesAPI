@@ -23,13 +23,17 @@ class HireRequest extends Model
         'scheduled_at',
         'session_ended_at',
         'payment_status',
-        'transaction_reference'
+        'transaction_reference',
+        'client_end_requested',
+        'tutor_end_requested'
     ];
 
     protected $casts = [
         'scheduled_at' => 'datetime',
         'session_ended_at' => 'datetime',
         'rate_per_session' => 'decimal:2',
+        'client_end_requested' => 'boolean',
+        'tutor_end_requested' => 'boolean',
     ];
 
     // Existing relationships

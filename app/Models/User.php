@@ -149,4 +149,38 @@ class User extends Authenticatable {
                 ->where('is_read', false)
                 ->count();
     }
+    
+    /**
+     * Get the live classes that the user teaches.
+     */
+    public function taughtLiveClasses()
+    {
+        return $this->hasMany(LiveClass::class, 'teacher_id');
+    }
+
+    /**
+     * Get the live class participations for the user.
+     */
+    public function liveClassParticipation()
+    {
+        return $this->hasMany(LiveClassParticipant::class);
+    }
+
+    /**
+     * Get the live classes that the user has participated in.
+     */
+    public function participatedLiveClasses()
+    {
+        return $this->belongsToMany(LiveClass::class, 'live_class_participants')
+            ->withPivot('role', 'preferences', 'joined_at', 'left_at')
+            ->withTimestamps();
+    }
+
+    /**
+     * Get all live class chat messages sent by the user.
+     */
+    public function liveClassChatMessages()
+    {
+        return $this->hasMany(LiveClassChat::class);
+    }
 }
