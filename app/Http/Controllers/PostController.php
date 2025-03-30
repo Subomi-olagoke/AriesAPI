@@ -51,8 +51,6 @@ class PostController extends Controller
             'media_type'   => 'nullable|string|in:image,video,text,file',
             // Media file is required only if media_type is specified
             'media_file'   => 'required_if:media_type,image,video,file|file|max:10240', // 10MB
-            // Thumbnail is already optional
-            'media_thumbnail' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120',
             'visibility'   => 'nullable|in:public,private,followers',
             'title'        => 'nullable|string|max:255'
         ]);
@@ -88,15 +86,6 @@ class PostController extends Controller
                             $request->validate([
                                 'media_file' => 'mimetypes:video/avi,video/mpeg,video/quicktime,video/mp4,video/webm,video/x-matroska|max:10240',
                             ]);
-                            
-                            // Handle optional video thumbnail - already optional, no changes needed
-                            if ($request->hasFile('media_thumbnail')) {
-                                $thumbnailLink = $this->fileUploadService->uploadFile(
-                                    $request->file('media_thumbnail'),
-                                    'media/thumbnails'
-                                );
-                                $newPost->media_thumbnail = $thumbnailLink;
-                            }
                             break;
                         
                         case 'file':
