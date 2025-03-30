@@ -46,12 +46,12 @@ class PostController extends Controller
     {
         // Validate the incoming request parameters
         $request->validate([
-            // Either text content is provided or media_type must be specified
-            'text_content' => 'required_without:media_type|string',
-            'media_type'   => 'required_with:media_file|string|in:image,video,text,file',
-            // For media posts, the file is required based on media type
+            // Text content is now completely optional
+            'text_content' => 'nullable|string',
+            'media_type'   => 'nullable|string|in:image,video,text,file',
+            // Media file is required only if media_type is specified
             'media_file'   => 'required_if:media_type,image,video,file|file|max:10240', // 10MB
-            // For video posts, a thumbnail is optional
+            // Thumbnail is already optional
             'media_thumbnail' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120',
             'visibility'   => 'nullable|in:public,private,followers',
             'title'        => 'nullable|string|max:255'
@@ -67,14 +67,12 @@ class PostController extends Controller
             $newPost->visibility = $request->visibility ?? 'public';
             $newPost->share_key = Str::random(10);
 
+            // Always set body to the text_content or empty string
+            $newPost->body = $request->text_content ?? '';
+
             // Handle different post types
-            if ($newPost->media_type === 'text') {
-                // Text-only post
-                $newPost->body = $request->text_content;
-            } else {
-                // Media post
-                $newPost->body = $request->text_content ?? '';
-                
+            if ($newPost->media_type !== 'text') {
+                // Media post handling
                 if ($request->hasFile('media_file')) {
                     $file = $request->file('media_file');
                     
@@ -91,7 +89,7 @@ class PostController extends Controller
                                 'media_file' => 'mimetypes:video/avi,video/mpeg,video/quicktime,video/mp4,video/webm,video/x-matroska|max:10240',
                             ]);
                             
-                            // Handle optional video thumbnail
+                            // Handle optional video thumbnail - already optional, no changes needed
                             if ($request->hasFile('media_thumbnail')) {
                                 $thumbnailLink = $this->fileUploadService->uploadFile(
                                     $request->file('media_thumbnail'),
