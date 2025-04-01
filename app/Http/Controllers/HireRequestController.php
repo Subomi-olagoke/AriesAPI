@@ -39,8 +39,6 @@ class HireRequestController extends Controller
         ]);
         
         try {
-            DB::beginTransaction();
-            
             $client = auth()->user();
             $tutor = User::findOrFail($validated['tutor_id']);
             
@@ -51,7 +49,44 @@ class HireRequestController extends Controller
                 ], 400);
             }
             
-            // Create the hire request
+            // Get the educator's hire rate
+            $profile = $tutor->profile;
+            if (!$profile || !$profile->hire_rate) {
+                return response()->json([
+                    'message' => 'This educator has not set up their hiring rate yet'
+                ], 400);
+            }
+            
+            $amount = $profile->hire_rate;
+            $currency = $profile->hire_currency ?? 'USD';
+            
+            // Generate payment reference
+            $reference = 'hire_' . uniqid() . '_' . time();
+            
+            // Initialize payment with Paystack
+            $initResponse = $this->paystackService->initializeTransaction(
+                $client->email,
+                $amount,
+                route('hire.payment.verify'),
+                [
+                    'educator_id' => $tutor->id,
+                    'user_id' => $client->id,
+                    'topic' => $validated['topic'],
+                    'duration' => $validated['duration'] ?? '1 hour',
+                    'message' => $validated['message'] ?? '',
+                    'medium' => $validated['medium'] ?? 'online',
+                    'payment_type' => 'educator_hire'
+                ]
+            );
+            
+            if (!$initResponse['success']) {
+                return response()->json([
+                    'message' => 'Payment initialization failed',
+                    'error' => $initResponse['message']
+                ], 500);
+            }
+            
+            // Create a pending hire request
             $hireRequest = new HireRequest([
                 'client_id' => $client->id,
                 'tutor_id' => $tutor->id,
@@ -60,23 +95,22 @@ class HireRequestController extends Controller
                 'message' => $validated['message'] ?? '',
                 'medium' => $validated['medium'] ?? 'online',
                 'duration' => $validated['duration'] ?? '1 hour',
+                'rate_per_session' => $amount,
+                'currency' => $currency,
                 'payment_status' => 'pending',
+                'transaction_reference' => $reference
             ]);
             
             $hireRequest->save();
             
-            // Notify the tutor
-            $tutor->notify(new HireRequestNotification($client, $hireRequest));
-            
-            DB::commit();
-            
             return response()->json([
-                'message' => 'Hire request sent successfully',
+                'message' => 'Hire request created and payment initialized',
+                'payment_url' => $initResponse['data']['data']['authorization_url'],
+                'reference' => $initResponse['data']['data']['reference'],
                 'hire_request' => $hireRequest
             ], 201);
             
         } catch (\Exception $e) {
-            DB::rollBack();
             Log::error('Error sending hire request: ' . $e->getMessage());
             
             return response()->json([
