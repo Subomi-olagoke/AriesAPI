@@ -58,7 +58,7 @@ use Illuminate\Validation\Rules\Password;
             return response()->json([
                 'message' => 'Registration successful',
                 'user' => $user,
-                'access_token' => $token,
+                'token' => $token,
                 'token_type' => 'Bearer',
                 'educator_profile' => $profileData
             ], 201);
@@ -117,7 +117,7 @@ use Illuminate\Validation\Rules\Password;
 
         return response()->json([
             'user' => $user,
-            'access_token' => $token,
+            'token' => $token,
             'token_type' => 'Bearer',
             'educator_profile' => $profileData, // Optional educator profile data
         ], 200)->cookie(
