@@ -32,8 +32,9 @@ class ProfileController extends Controller {
         
         // Get the bio from the profile
         $bio = $user->profile ? $user->profile->bio : null;
-    
-        return response()->json([
+        
+        // Base response data
+        $responseData = [
             'posts' => $posts,
             'username' => $user->username,
             'full_name' => $fullName,
@@ -44,7 +45,51 @@ class ProfileController extends Controller {
             'followers' => $followers,
             'following' => $following,
             'likes' => $likes
-        ]);
+        ];
+        
+        // Add educator-specific information if applicable
+        if ($user->role === User::ROLE_EDUCATOR && $user->profile) {
+            // Get ratings for the educator
+            $ratingsData = $user->ratingsReceived()
+                ->with('user:id,username,first_name,last_name,avatar')
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get()
+                ->map(function ($rating) {
+                    return [
+                        'id' => $rating->id,
+                        'rating' => $rating->rating,
+                        'comment' => $rating->comment,
+                        'created_at' => $rating->created_at,
+                        'user' => [
+                            'username' => $rating->user->username,
+                            'first_name' => $rating->user->first_name,
+                            'last_name' => $rating->user->last_name,
+                            'avatar' => $rating->user->avatar,
+                        ]
+                    ];
+                });
+            
+            // Calculate average rating
+            $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
+            
+            $educatorProfile = [
+                'qualifications' => $user->profile->qualifications,
+                'teaching_style' => $user->profile->teaching_style,
+                'availability' => $user->profile->availability,
+                'hire_rate' => $user->profile->hire_rate,
+                'hire_currency' => $user->profile->hire_currency ?? 'USD',
+                'social_links' => $user->profile->social_links,
+                'average_rating' => round($averageRating, 1),
+                'ratings_count' => $user->ratingsReceived()->count(),
+                'recent_ratings' => $ratingsData
+            ];
+            
+            // Add educator profile info to the response
+            $responseData['educator_profile'] = $educatorProfile;
+        }
+    
+        return response()->json($responseData);
     }
 
     public function update(Request $request) {

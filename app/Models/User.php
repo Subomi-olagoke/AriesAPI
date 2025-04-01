@@ -183,4 +183,48 @@ class User extends Authenticatable {
     {
         return $this->hasMany(LiveClassChat::class);
     }
+    
+    /**
+     * Get all hire requests made by the user (as client)
+     */
+    public function hireRequestsMade()
+    {
+        return $this->hasMany(HireRequest::class, 'client_id');
+    }
+    
+    /**
+     * Get all hire requests received by the user (as educator)
+     */
+    public function hireRequestsReceived()
+    {
+        return $this->hasMany(HireRequest::class, 'tutor_id');
+    }
+    
+    /**
+     * Get all ratings received by the user (as educator)
+     */
+    public function ratingsReceived()
+    {
+        return $this->hasMany(EducatorRating::class, 'educator_id');
+    }
+    
+    /**
+     * Get all ratings given by the user
+     */
+    public function ratingsGiven()
+    {
+        return $this->hasMany(EducatorRating::class, 'user_id');
+    }
+    
+    /**
+     * Get the average rating for this educator
+     */
+    public function getAverageRatingAttribute()
+    {
+        if ($this->role !== self::ROLE_EDUCATOR) {
+            return null;
+        }
+        
+        return $this->ratingsReceived()->avg('rating') ?? 0;
+    }
 }

@@ -402,6 +402,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/tutoring/sessions/{id}/payment/verify', [HireRequestController::class, 'verifyPayment'])->name('tutoring.payment.verify');
     Route::post('/tutoring/sessions/{id}/complete', [HireRequestController::class, 'completeSession']);
     
+    // Hire Sessions and Ratings
+    Route::prefix('hire-sessions')->group(function () {
+        Route::get('/', [HireSessionController::class, 'index']);
+        Route::get('/{id}', [HireSessionController::class, 'show']);
+        Route::post('/{id}/complete', [HireSessionController::class, 'complete']);
+        Route::post('/{id}/rate', [HireSessionController::class, 'rateEducator']);
+    });
+    
     // Payment methods routes - add both singular and plural
     Route::prefix('payment-methods')->group(function () {
         Route::get('/', [PaymentMethodController::class, 'index']);

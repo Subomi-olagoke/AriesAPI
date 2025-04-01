@@ -64,6 +64,43 @@ class EducatorProfileController extends Controller
         $courseCount = $educator->courses()->count();
         $totalHours = $educator->courses()->sum('duration_minutes') / 60;
 
+        // Get ratings from hire sessions
+        $ratingsData = $educator->ratingsReceived()
+            ->with('user:id,username,first_name,last_name,avatar')
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get()
+            ->map(function ($rating) {
+                return [
+                    'id' => $rating->id,
+                    'rating' => $rating->rating,
+                    'comment' => $rating->comment,
+                    'created_at' => $rating->created_at,
+                    'user' => [
+                        'username' => $rating->user->username,
+                        'first_name' => $rating->user->first_name,
+                        'last_name' => $rating->user->last_name,
+                        'avatar' => $rating->user->avatar,
+                    ]
+                ];
+            });
+
+        // Calculate average hire session rating
+        $avgHireRating = $educator->ratingsReceived()->avg('rating') ?? 0;
+        $ratingsCount = $educator->ratingsReceived()->count();
+        
+        // Combine both course enrollments and hire sessions for overall rating
+        $totalRatingCount = $ratingsCount + 
+            DB::table('course_enrollments')
+                ->join('courses', 'course_enrollments.course_id', '=', 'courses.id')
+                ->where('courses.user_id', $educator->id)
+                ->where('course_enrollments.status', 'completed')
+                ->whereNotNull('course_enrollments.feedback_rating')
+                ->count();
+                
+        $overallRating = $totalRatingCount > 0 ? 
+            (($avgRating * $testimonials->count()) + ($avgHireRating * $ratingsCount)) / $totalRatingCount : 0;
+
         // Format the educator's profile for hiring
         $profile = [
             'id' => $educator->id,
@@ -72,14 +109,16 @@ class EducatorProfileController extends Controller
             'avatar' => $educator->avatar,
             'bio' => $educator->profile ? $educator->profile->bio : null,
             'topics' => $educator->topic->pluck('name'),
-            'average_rating' => round($avgRating, 1),
+            'average_rating' => round($overallRating, 1),
             'stats' => [
                 'students' => $studentCount,
                 'courses' => $courseCount,
                 'teaching_hours' => round($totalHours, 1),
                 'followers' => $educator->followers()->count(),
+                'ratings_count' => $ratingsCount
             ],
             'testimonials' => $testimonials,
+            'ratings' => $ratingsData,
             'qualifications' => $educator->profile ? ($educator->profile->qualifications ?? []) : [],
             'teaching_style' => $educator->profile ? ($educator->profile->teaching_style ?? null) : null,
             'availability' => $educator->profile ? ($educator->profile->availability ?? []) : [],
