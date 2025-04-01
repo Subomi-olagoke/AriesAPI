@@ -98,28 +98,10 @@ use Illuminate\Validation\Rules\Password;
             ], 500);
         }
 
-        // Load profile data if user is an educator
-        $profileData = null;
-        if ($user->role === 'educator') {
-            $profile = $user->profile;
-            if ($profile) {
-                $profileData = [
-                    'bio' => $profile->bio,
-                    'qualifications' => $profile->qualifications,
-                    'teaching_style' => $profile->teaching_style,
-                    'availability' => $profile->availability,
-                    'hire_rate' => $profile->hire_rate,
-                    'hire_currency' => $profile->hire_currency,
-                    'social_links' => $profile->social_links
-                ];
-            }
-        }
-
         return response()->json([
             'user' => $user,
             'token' => $token,
             'token_type' => 'Bearer',
-            'educator_profile' => $profileData, // Optional educator profile data
         ], 200)->cookie(
             'access_token', $token, 1440, null, null, false, true // 1440 minutes = 24 hours
         );
