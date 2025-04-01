@@ -34,7 +34,7 @@ class HireRequestController extends Controller
             'tutor_id' => 'required|uuid|exists:users,id',
             'topic' => 'required|string|max:255',
             'message' => 'nullable|string',
-            'medium' => 'nullable|string|in:online,in-person,hybrid',
+            'medium' => 'nullable|string',
             'duration' => 'nullable|string',
         ]);
         
