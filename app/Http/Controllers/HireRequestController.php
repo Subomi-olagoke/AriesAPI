@@ -21,6 +21,70 @@ class HireRequestController extends Controller
     {
         $this->paystackService = $paystackService;
     }
+    
+    /**
+     * Send a request to hire an educator
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function sendRequest(Request $request)
+    {
+        $validated = $request->validate([
+            'tutor_id' => 'required|uuid|exists:users,id',
+            'topic' => 'required|string|max:255',
+            'message' => 'nullable|string',
+            'medium' => 'nullable|string|in:online,in-person,hybrid',
+            'duration' => 'nullable|string',
+        ]);
+        
+        try {
+            DB::beginTransaction();
+            
+            $client = auth()->user();
+            $tutor = User::findOrFail($validated['tutor_id']);
+            
+            // Check if tutor is an educator
+            if ($tutor->role !== User::ROLE_EDUCATOR) {
+                return response()->json([
+                    'message' => 'The selected user is not an educator'
+                ], 400);
+            }
+            
+            // Create the hire request
+            $hireRequest = new HireRequest([
+                'client_id' => $client->id,
+                'tutor_id' => $tutor->id,
+                'status' => 'pending',
+                'topic' => $validated['topic'],
+                'message' => $validated['message'] ?? '',
+                'medium' => $validated['medium'] ?? 'online',
+                'duration' => $validated['duration'] ?? '1 hour',
+                'payment_status' => 'pending',
+            ]);
+            
+            $hireRequest->save();
+            
+            // Notify the tutor
+            $tutor->notify(new HireRequestNotification($client, $hireRequest));
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Hire request sent successfully',
+                'hire_request' => $hireRequest
+            ], 201);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error sending hire request: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'An error occurred while sending the request',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
     /**
      * Initiate a payment for hiring an educator
@@ -231,8 +295,206 @@ class HireRequestController extends Controller
     }
 
     /**
-     * End a hiring session (one party)
+     * Decline a hire request as an educator
      */
+    public function declineRequest($id)
+    {
+        try {
+            DB::beginTransaction();
+            
+            $hireRequest = HireRequest::where('id', $id)
+                ->where('tutor_id', auth()->id())
+                ->where('status', 'pending')
+                ->firstOrFail();
+
+            $hireRequest->status = 'declined';
+            $hireRequest->save();
+            
+            // Get the client user
+            $client = User::find($hireRequest->client_id);
+            
+            // Notify the client
+            $client->notify(new HireRequestNotification(
+                auth()->user(),
+                'Your hire request has been declined.'
+            ));
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Hire request declined successfully',
+                'hire_request' => $hireRequest
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error declining hire request: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'An error occurred while declining the request',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Cancel a hire request as a client
+     */
+    public function cancelRequest($id)
+    {
+        try {
+            $hireRequest = HireRequest::where('id', $id)
+                ->where('client_id', auth()->id())
+                ->whereIn('status', ['pending', 'accepted'])
+                ->firstOrFail();
+            
+            // If the request has been paid for, we might need special handling
+            if ($hireRequest->payment_status === 'paid') {
+                // Here you would implement refund logic if needed
+                // For now, we'll just log that the user cancelled a paid request
+                Log::info('User cancelled a paid hire request: ' . $hireRequest->id);
+            }
+            
+            $hireRequest->status = 'cancelled';
+            $hireRequest->save();
+            
+            // Get the tutor user
+            $tutor = User::find($hireRequest->tutor_id);
+            
+            // Notify the tutor
+            $tutor->notify(new HireRequestNotification(
+                auth()->user(),
+                'A hire request has been cancelled.'
+            ));
+            
+            return response()->json([
+                'message' => 'Hire request cancelled successfully',
+                'hire_request' => $hireRequest
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error cancelling hire request: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'An error occurred while cancelling the request',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * List hire requests for the current user
+     */
+    public function listRequests(Request $request)
+    {
+        $user = auth()->user();
+        $type = $request->query('type', 'all'); // all, sent, received
+        $status = $request->query('status'); // pending, accepted, declined, cancelled, completed
+        
+        $query = HireRequest::query();
+        
+        // Filter by user role
+        if ($type === 'sent' || ($type === 'all' && $user->role !== User::ROLE_EDUCATOR)) {
+            $query->where('client_id', $user->id);
+        } elseif ($type === 'received' || ($type === 'all' && $user->role === User::ROLE_EDUCATOR)) {
+            $query->where('tutor_id', $user->id);
+        } else {
+            // If type is 'all' and the user could be both client and tutor
+            $query->where(function($q) use ($user) {
+                $q->where('client_id', $user->id)
+                  ->orWhere('tutor_id', $user->id);
+            });
+        }
+        
+        // Filter by status if provided
+        if ($status) {
+            $query->where('status', $status);
+        }
+        
+        // Get requests with user info
+        $hireRequests = $query->with(['client', 'tutor'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        return response()->json([
+            'hire_requests' => $hireRequests
+        ]);
+    }
+    
+    /**
+     * Get a specific hire request
+     */
+    public function getRequest($id)
+    {
+        $user = auth()->user();
+        
+        $hireRequest = HireRequest::where('id', $id)
+            ->where(function($query) use ($user) {
+                $query->where('client_id', $user->id)
+                    ->orWhere('tutor_id', $user->id);
+            })
+            ->with(['client', 'tutor'])
+            ->firstOrFail();
+        
+        return response()->json([
+            'hire_request' => $hireRequest
+        ]);
+    }
+    
+    /**
+     * Schedule a tutoring session
+     */
+    public function scheduleSession(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'scheduled_at' => 'required|date|after:now',
+            'google_meet_link' => 'nullable|url',
+        ]);
+        
+        try {
+            DB::beginTransaction();
+            
+            $hireRequest = HireRequest::where('id', $id)
+                ->where(function($query) {
+                    $query->where('client_id', auth()->id())
+                        ->orWhere('tutor_id', auth()->id());
+                })
+                ->where('status', 'accepted')
+                ->firstOrFail();
+            
+            $hireRequest->scheduled_at = $validated['scheduled_at'];
+            
+            if (isset($validated['google_meet_link'])) {
+                $hireRequest->google_meet_link = $validated['google_meet_link'];
+            }
+            
+            $hireRequest->save();
+            
+            // Determine the other party
+            $otherUserId = (auth()->id() == $hireRequest->client_id) 
+                ? $hireRequest->tutor_id 
+                : $hireRequest->client_id;
+            
+            $otherUser = User::find($otherUserId);
+            
+            // Notify the other party
+            $otherUser->notify(new HireRequestNotification(
+                auth()->user(),
+                'A tutoring session has been scheduled.'
+            ));
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Session scheduled successfully',
+                'hire_request' => $hireRequest
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error scheduling session: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'An error occurred while scheduling the session',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function initiateSessionEnd($id)
     {
         $hireRequest = HireRequest::findOrFail($id);
