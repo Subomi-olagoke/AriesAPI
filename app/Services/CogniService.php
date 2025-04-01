@@ -171,4 +171,81 @@ class CogniService
             ];
         }
     }
+    
+    /**
+     * Generate a themed readlist based on a topic
+     *
+     * @param string $topic The topic for the readlist
+     * @param array $availableContent Array of content that can be included in the readlist
+     * @param int $itemCount Maximum number of items to include (default: 5)
+     * @return array Response with success/error status and readlist data
+     */
+    public function generateReadlist(string $topic, array $availableContent, int $itemCount = 5): array
+    {
+        $prompt = "Generate a curated readlist on the topic '{$topic}'. ";
+        
+        // Add available content for the AI to select from
+        $prompt .= "Here is the available content you can choose from:\n\n";
+        
+        foreach ($availableContent as $index => $item) {
+            $type = isset($item['type']) ? $item['type'] : 'unknown';
+            $title = isset($item['title']) ? $item['title'] : (isset($item['name']) ? $item['name'] : 'Untitled');
+            $desc = isset($item['description']) ? $item['description'] : '';
+            $id = isset($item['id']) ? $item['id'] : $index;
+            
+            $prompt .= "ID: {$id} | Type: {$type} | Title: {$title} | Description: {$desc}\n\n";
+        }
+        
+        // Instructions for the AI
+        $prompt .= "Select the {$itemCount} most relevant items for someone learning about '{$topic}'. ";
+        $prompt .= "Organize them in a logical learning sequence. ";
+        $prompt .= "Return your response in JSON format with the following structure:\n";
+        $prompt .= "{\n";
+        $prompt .= "  \"title\": \"An appropriate title for the readlist\",\n";
+        $prompt .= "  \"description\": \"A helpful description of this readlist\",\n";
+        $prompt .= "  \"items\": [\n";
+        $prompt .= "    {\n";
+        $prompt .= "      \"id\": \"The ID of the item\",\n";
+        $prompt .= "      \"notes\": \"Brief notes explaining why this item is included\"\n";
+        $prompt .= "    }\n";
+        $prompt .= "  ]\n";
+        $prompt .= "}";
+        
+        $result = $this->askQuestion($prompt);
+        
+        if (!$result['success']) {
+            return $result;
+        }
+        
+        try {
+            // Extract JSON from the answer
+            $jsonStart = strpos($result['answer'], '{');
+            $jsonEnd = strrpos($result['answer'], '}') + 1;
+            $jsonStr = substr($result['answer'], $jsonStart, $jsonEnd - $jsonStart);
+            
+            $readlistData = json_decode($jsonStr, true);
+            
+            if (json_last_error() === JSON_ERROR_NONE && isset($readlistData['title'], $readlistData['description'], $readlistData['items'])) {
+                return [
+                    'success' => true,
+                    'readlist' => $readlistData,
+                    'code' => 200
+                ];
+            }
+            
+            // Fallback if JSON parsing fails
+            return [
+                'success' => true,
+                'answer' => $result['answer'],
+                'code' => 200
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Readlist generation error: ' . $e->getMessage());
+            return [
+                'success' => true,
+                'answer' => $result['answer'],
+                'code' => 200
+            ];
+        }
+    }
 }

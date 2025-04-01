@@ -353,6 +353,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/cogni/conversation/{conversationId}', [CogniController::class, 'getConversationHistory']); // Additional route
     Route::post('/cogni/explain', [CogniController::class, 'explain']);
     Route::post('/cogni/generate-quiz', [CogniController::class, 'generateQuiz']);
+    Route::post('/cogni/generate-readlist', [CogniController::class, 'generateTopicReadlist']);
     Route::post('/cogni/conversations/clear', [CogniController::class, 'clearConversation']);
     Route::post('/cogni/conversation/clear', [CogniController::class, 'clearConversation']); // Additional route
 

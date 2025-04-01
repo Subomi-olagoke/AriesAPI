@@ -67,11 +67,8 @@ class HireRequestController extends Controller
             // Calculate total amount (base rate * hours)
             $totalAmount = $baseRate * $hours;
             
-            // Convert to Naira if in USD (1500 NGN per USD)
+            // Use the original amount for Paystack (no conversion)
             $paystackAmount = $totalAmount;
-            if ($currency === 'USD') {
-                $paystackAmount = $totalAmount * 1500;
-            }
             
             // Generate payment reference
             $reference = 'hire_' . uniqid() . '_' . time();

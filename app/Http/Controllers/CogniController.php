@@ -344,4 +344,175 @@ class CogniController extends Controller
             'message' => 'Conversation history cleared'
         ]);
     }
+    
+    /**
+     * Generate a readlist for a specific topic
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function generateTopicReadlist(Request $request)
+    {
+        $request->validate([
+            'topic' => 'required|string|max:200',
+            'item_count' => 'nullable|integer|min:1|max:20',
+            'content_types' => 'nullable|array',
+            'content_types.*' => 'string|in:course,post,both'
+        ]);
+
+        $user = Auth::user();
+        $topic = $request->input('topic');
+        $itemCount = $request->input('item_count', 5);
+        $contentTypes = $request->input('content_types', ['both']);
+        
+        // Determine which content types to include
+        $includePosts = in_array('post', $contentTypes) || in_array('both', $contentTypes);
+        $includeCourses = in_array('course', $contentTypes) || in_array('both', $contentTypes);
+        
+        // Collect available content from database
+        $availableContent = [];
+        $availableContentCount = 0;
+        
+        // Get relevant courses if requested
+        if ($includeCourses) {
+            $courses = \App\Models\Course::when($topic, function ($query, $topic) {
+                    return $query->where('name', 'like', "%{$topic}%")
+                        ->orWhere('description', 'like', "%{$topic}%");
+                })
+                ->limit(50)
+                ->get(['id', 'name', 'description', 'user_id', 'created_at']);
+            
+            foreach ($courses as $course) {
+                $availableContent[] = [
+                    'id' => $course->id,
+                    'type' => 'course',
+                    'title' => $course->name,
+                    'description' => $course->description,
+                    'user_id' => $course->user_id,
+                    'created_at' => $course->created_at
+                ];
+                $availableContentCount++;
+            }
+        }
+        
+        // Get relevant posts if requested
+        if ($includePosts) {
+            $posts = \App\Models\Post::when($topic, function ($query, $topic) {
+                    return $query->where('title', 'like', "%{$topic}%")
+                        ->orWhere('body', 'like', "%{$topic}%");
+                })
+                ->limit(50)
+                ->get(['id', 'title', 'body', 'user_id', 'created_at']);
+            
+            foreach ($posts as $post) {
+                $availableContent[] = [
+                    'id' => $post->id,
+                    'type' => 'post',
+                    'title' => $post->title ?? 'Untitled Post',
+                    'description' => substr(strip_tags($post->body), 0, 200),
+                    'user_id' => $post->user_id,
+                    'created_at' => $post->created_at
+                ];
+                $availableContentCount++;
+            }
+        }
+        
+        // If no content is found, return an error
+        if ($availableContentCount === 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No relevant content found for the topic "' . $topic . '"'
+            ], 404);
+        }
+        
+        // Generate readlist using Cogni service
+        $result = $this->cogniService->generateReadlist($topic, $availableContent, $itemCount);
+        
+        if ($result['success'] && isset($result['readlist'])) {
+            // Create the readlist in the database
+            try {
+                \DB::beginTransaction();
+                
+                $readlist = new \App\Models\Readlist([
+                    'user_id' => $user->id,
+                    'title' => $result['readlist']['title'],
+                    'description' => $result['readlist']['description'],
+                    'is_public' => true,
+                ]);
+                
+                $readlist->save();
+                
+                // Add items to the readlist
+                $order = 1;
+                foreach ($result['readlist']['items'] as $item) {
+                    $itemId = $item['id'];
+                    $notes = $item['notes'] ?? null;
+                    
+                    // Determine the item type and get the model
+                    $itemType = null;
+                    $itemModel = null;
+                    
+                    // Check if this is a course
+                    $course = \App\Models\Course::find($itemId);
+                    if ($course) {
+                        $itemType = \App\Models\Course::class;
+                        $itemModel = $course;
+                    } else {
+                        // Check if this is a post
+                        $post = \App\Models\Post::find($itemId);
+                        if ($post) {
+                            $itemType = \App\Models\Post::class;
+                            $itemModel = $post;
+                        }
+                    }
+                    
+                    // If we found a valid item, add it to the readlist
+                    if ($itemModel) {
+                        $readlistItem = new \App\Models\ReadlistItem([
+                            'readlist_id' => $readlist->id,
+                            'item_id' => $itemId,
+                            'item_type' => $itemType,
+                            'order' => $order++,
+                            'notes' => $notes
+                        ]);
+                        
+                        $readlistItem->save();
+                    }
+                }
+                
+                \DB::commit();
+                
+                // Return the created readlist with its items
+                $readlistWithItems = \App\Models\Readlist::with('items.item')->find($readlist->id);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Readlist generated successfully',
+                    'readlist' => $readlistWithItems
+                ]);
+                
+            } catch (\Exception $e) {
+                \DB::rollBack();
+                \Log::error('Error creating readlist: ' . $e->getMessage());
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error creating readlist: ' . $e->getMessage()
+                ], 500);
+            }
+        } elseif ($result['success'] && isset($result['answer'])) {
+            // Return the raw answer if JSON parsing failed
+            return response()->json([
+                'success' => true,
+                'message' => 'Readlist generated, but couldn\'t be automatically created',
+                'cogni_response' => $result['answer']
+            ]);
+        }
+        
+        // Return error if generation failed
+        return response()->json([
+            'success' => false,
+            'message' => $result['message'] ?? 'Failed to generate a readlist'
+        ], $result['code'] ?? 500);
+    }
 }
