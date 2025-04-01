@@ -57,8 +57,21 @@ class HireRequestController extends Controller
                 ], 400);
             }
             
-            $amount = $profile->hire_rate;
+            $baseRate = $profile->hire_rate;
             $currency = $profile->hire_currency ?? 'USD';
+            
+            // Parse duration to calculate total hours
+            $duration = $validated['duration'] ?? '1 hour';
+            $hours = $this->calculateHoursFromDuration($duration);
+            
+            // Calculate total amount (base rate * hours)
+            $totalAmount = $baseRate * $hours;
+            
+            // Convert to Naira if in USD (1500 NGN per USD)
+            $paystackAmount = $totalAmount;
+            if ($currency === 'USD') {
+                $paystackAmount = $totalAmount * 1500;
+            }
             
             // Generate payment reference
             $reference = 'hire_' . uniqid() . '_' . time();
@@ -66,16 +79,20 @@ class HireRequestController extends Controller
             // Initialize payment with Paystack
             $initResponse = $this->paystackService->initializeTransaction(
                 $client->email,
-                $amount,
+                $paystackAmount, // Amount in Naira for Paystack
                 route('hire.payment.verify'),
                 [
                     'educator_id' => $tutor->id,
                     'user_id' => $client->id,
                     'topic' => $validated['topic'],
-                    'duration' => $validated['duration'] ?? '1 hour',
+                    'duration' => $duration,
                     'message' => $validated['message'] ?? '',
                     'medium' => $validated['medium'] ?? 'online',
-                    'payment_type' => 'educator_hire'
+                    'payment_type' => 'educator_hire',
+                    'base_rate' => $baseRate,
+                    'hours' => $hours,
+                    'total_amount' => $totalAmount,
+                    'currency' => $currency
                 ]
             );
             
@@ -94,8 +111,8 @@ class HireRequestController extends Controller
                 'topic' => $validated['topic'],
                 'message' => $validated['message'] ?? '',
                 'medium' => $validated['medium'] ?? 'online',
-                'duration' => $validated['duration'] ?? '1 hour',
-                'rate_per_session' => $amount,
+                'duration' => $duration,
+                'rate_per_session' => $totalAmount, // Store the total amount in original currency
                 'currency' => $currency,
                 'payment_status' => 'pending',
                 'transaction_reference' => $reference
@@ -617,6 +634,43 @@ class HireRequestController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Calculate the number of hours from a duration string
+     * 
+     * @param string $duration Duration string (e.g., "1 hour", "2 hours", "3 days", "4 weeks")
+     * @return float Number of hours
+     */
+    private function calculateHoursFromDuration($duration)
+    {
+        // Default to 1 hour if parsing fails
+        $hours = 1;
+        
+        // Try to extract the numeric value and unit
+        if (preg_match('/(\d+)\s*(\w+)/', $duration, $matches)) {
+            $value = (int) $matches[1];
+            $unit = strtolower(rtrim($matches[2], 's')); // Remove trailing 's' to handle plurals
+            
+            switch ($unit) {
+                case 'hour':
+                    $hours = $value;
+                    break;
+                case 'day':
+                    $hours = $value * 24; // Assuming 24 hours per day
+                    break;
+                case 'week':
+                    $hours = $value * 24 * 7; // Assuming 7 days per week
+                    break;
+                case 'month':
+                    $hours = $value * 24 * 30; // Assuming 30 days per month
+                    break;
+                default:
+                    $hours = $value; // Default to treating as hours
+            }
+        }
+        
+        return $hours;
     }
 
     /**
