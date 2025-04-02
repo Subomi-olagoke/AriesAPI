@@ -48,13 +48,13 @@ class AuthManagerTest extends TestCase
             'password' => Hash::make($rawPassword)
         ]);
 
+        // Login with username
         $data = [
-            'username' => $user->username,
+            'login' => $user->username,
             'password' => $rawPassword
         ];
 
         $response = $this->postJson(route('login'), $data);
-
 
         $response->assertStatus(200)
                  ->assertJsonStructure([
@@ -65,11 +65,44 @@ class AuthManagerTest extends TestCase
                          'first_name',
                          'last_name',
                      ],
-                     'access_token',
+                     'token',
                      'token_type',
                  ]);
 
-         $response->assertCookie('access_token');
+        $response->assertCookie('access_token');
+    }
+    
+    /**
+     * @test
+     */
+    public function loginWithEmailTest() {
+        $rawPassword = 'ValidPassword123!';
+        $user = User::factory()->create([
+            'password' => Hash::make($rawPassword)
+        ]);
+
+        // Login with email
+        $data = [
+            'login' => $user->email,
+            'password' => $rawPassword
+        ];
+
+        $response = $this->postJson(route('login'), $data);
+
+        $response->assertStatus(200)
+                 ->assertJsonStructure([
+                     'user' => [
+                         'id',
+                         'username',
+                         'email',
+                         'first_name',
+                         'last_name',
+                     ],
+                     'token',
+                     'token_type',
+                 ]);
+
+        $response->assertCookie('access_token');
     }
 
     /**
@@ -82,7 +115,7 @@ class AuthManagerTest extends TestCase
         ]);
 
         $loginData = [
-            'username' => $user->username,
+            'login' => $user->username, // Using the new 'login' field
             'password' => $rawPassword
         ];
 
@@ -96,13 +129,13 @@ class AuthManagerTest extends TestCase
                          'first_name',
                          'last_name',
                      ],
-                     'access_token',
+                     'token',
                      'token_type',
                  ]);
 
          $loginResponse->assertCookie('access_token');
 
-         $token = $loginResponse->json('access_token');
+         $token = $loginResponse->json('token');
 
          //dd($loginResponse->json('access_token'));
 

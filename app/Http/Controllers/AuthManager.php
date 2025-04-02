@@ -71,10 +71,19 @@ use Illuminate\Validation\Rules\Password;
     }
 
     public function login(Request $request) {
-        $credentials = $request->validate([
-            'username' => 'required',
+        $request->validate([
+            'login' => 'required|string', // login can be either username or email
             'password' => 'required',
         ]);
+
+        // Determine if the input is an email or username
+        $loginField = filter_var($request->login, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+        
+        // Create credentials array with the correct field name
+        $credentials = [
+            $loginField => $request->login,
+            'password' => $request->password
+        ];
 
         if (!Auth::attempt($credentials)) {
             // Authentication failed
