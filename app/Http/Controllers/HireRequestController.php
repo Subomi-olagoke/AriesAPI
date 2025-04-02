@@ -318,8 +318,13 @@ class HireRequestController extends Controller
             $hireRequest = HireRequest::where('id', $id)
                 ->where('tutor_id', auth()->id())
                 ->where('status', 'pending')
-                ->where('payment_status', 'paid')
-                ->firstOrFail();
+                ->firstOrFail(); // Removed payment_status check to allow accepting with pending payments
+            
+            // Add a warning for pending payments
+            $paymentWarning = '';
+            if ($hireRequest->payment_status !== 'paid') {
+                $paymentWarning = " Note: Payment is still pending for this request.";
+            }
 
             $hireRequest->status = 'accepted';
             $hireRequest->save();
@@ -332,14 +337,24 @@ class HireRequestController extends Controller
             $conversation = $this->createConversationBetween($tutor, $client);
             
             // Send an initial message
+            $messageBody = "Hello! I've accepted your request to tutor you on: {$hireRequest->topic}. I'm looking forward to our sessions.";
+            
+            // Add payment warning to message if payment is pending
+            if ($hireRequest->payment_status !== 'paid') {
+                $messageBody .= " Please note that your payment is still pending. Our session will be confirmed once payment is completed.";
+            }
+            
             $message = Message::create([
                 'conversation_id' => $conversation->id,
                 'sender_id' => $tutor->id,
-                'body' => "Hello! I've accepted your request to tutor you on: {$hireRequest->topic}. I'm looking forward to our sessions."
+                'body' => $messageBody
             ]);
 
             // Notify the client
-            $client->notify(new HireRequestNotification($tutor, 'Your hire request has been accepted!'));
+            $client->notify(new HireRequestNotification(
+                $tutor, 
+                'Your hire request has been accepted!' . $paymentWarning
+            ));
 
             DB::commit();
 
