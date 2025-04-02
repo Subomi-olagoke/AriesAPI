@@ -146,11 +146,11 @@ class LiveClassController extends Controller
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'required|string',
             'scheduled_at' => 'required|date|after:now',
-            'course_id' => 'nullable|exists:courses,id',
-            'lesson_id' => 'nullable|exists:course_lessons,id',
-            'class_type' => 'nullable|in:course-related,standalone',
+            'course_id' => 'sometimes|nullable|exists:courses,id',
+            'lesson_id' => 'sometimes|nullable|exists:course_lessons,id',
+            'class_type' => 'sometimes|nullable|in:course-related,standalone',
             'settings' => 'sometimes|nullable|array',
         ]);
 
@@ -192,18 +192,22 @@ class LiveClassController extends Controller
                 'allow_screen_sharing' => false,
                 'enable_hand_raising' => false,
             ];
+            
+            // Determine class type based on presence of course_id
+            $courseId = $validated['course_id'] ?? null;
+            $classType = $validated['class_type'] ?? ($courseId ? 'course-related' : 'standalone');
 
             $liveClass = LiveClass::create([
                 'title' => $validated['title'],
                 'description' => $validated['description'],
                 'scheduled_at' => $validated['scheduled_at'],
                 'teacher_id' => $user->id,
-                'course_id' => $validated['course_id'] ?? null,
+                'course_id' => $courseId,
                 'lesson_id' => $validated['lesson_id'] ?? null,
                 'meeting_id' => $meetingId,
                 'settings' => $settings,
                 'status' => 'scheduled',
-                'class_type' => $validated['course_id'] ? 'course-related' : 'standalone'
+                'class_type' => $classType
             ]);
             
             DB::commit();
