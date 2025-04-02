@@ -19,124 +19,91 @@ class EnhancedCogniService extends CogniService
 {
     /**
      * Generate a readlist based on a topic or learning goal
-     *
-     * @param array $params Parameters for readlist generation
-     * @param User $user The current user
+     * 
+     * @param string $topic The topic for the readlist
+     * @param array $availableContent Array of content that can be included in the readlist
+     * @param int $itemCount Maximum number of items to include (default: 5)
      * @return array Response with success/error status and readlist data
      */
-    public function generateReadlist(array $params, User $user): array
+    public function generateReadlist(string $topic, array $availableContent, int $itemCount = 5): array
     {
         try {
-            // Extract parameters
-            $topic = $params['topic'] ?? null;
-            $skill = $params['skill'] ?? null;
-            $level = $params['level'] ?? 'intermediate';
-            $title = $params['title'] ?? ($topic ? "Learn $topic" : "Skill building: $skill");
-            $description = $params['description'] ?? "Automatically generated readlist by Cogni";
-            $maxItems = $params['max_items'] ?? 10;
+            // Set default parameters
+            $level = 'intermediate';
+            $title = "Learn $topic";
+            $description = "Automatically generated readlist by Cogni";
+            $maxItems = $itemCount;
             
             // Validate basic parameters
-            if (!$topic && !$skill) {
+            if (!$topic) {
                 return [
                     'success' => false,
-                    'message' => 'Either topic or skill is required',
+                    'message' => 'Topic is required',
                     'code' => 400
                 ];
             }
             
-            // Find relevant content
+            // Use the available content directly from the parameter
             $courses = [];
             $posts = [];
             
-            // Topic-based search
-            if ($topic) {
-                // Find topic by name (case-insensitive)
-                $topicModel = Topic::where(DB::raw('LOWER(name)'), strtolower($topic))->first();
-                
-                if ($topicModel) {
-                    // Filter courses by difficulty level if specified
-                    $coursesQuery = Course::where('topic_id', $topicModel->id);
-                    if ($level && $level !== 'all') {
-                        $coursesQuery->where('difficulty_level', $level);
+            // Process available content
+            foreach ($availableContent as $content) {
+                // Determine content type and add to appropriate array
+                if (isset($content['type'])) {
+                    if ($content['type'] == 'course' || stripos($content['type'], 'course') !== false) {
+                        $courses[] = $content;
+                    } elseif ($content['type'] == 'post' || stripos($content['type'], 'post') !== false) {
+                        $posts[] = $content;
                     }
-                    
-                    // Get courses with their metadata
-                    $courses = $coursesQuery->with('user')
-                        ->limit(max(2, $maxItems / 2))
-                        ->get()
-                        ->toArray();
                 }
-                
-                // Find relevant posts that mention the topic
-                $posts = Post::where('title', 'like', "%$topic%")
-                    ->orWhere('body', 'like', "%$topic%")
-                    ->with('user')
-                    ->limit(max(2, $maxItems / 2))
-                    ->get()
-                    ->toArray();
             }
             
-            // Skill-based search (more generic)
-            if ($skill && (count($courses) + count($posts)) < $maxItems) {
-                // Find additional courses mentioning the skill
-                $additionalCourses = Course::where('title', 'like', "%$skill%")
-                    ->orWhere('description', 'like', "%$skill%")
-                    ->with('user')
-                    ->limit(max(2, $maxItems / 2) - count($courses))
-                    ->get()
-                    ->toArray();
-                
-                $courses = array_merge($courses, $additionalCourses);
-                
-                // Find additional posts mentioning the skill
-                $additionalPosts = Post::where('title', 'like', "%$skill%")
-                    ->orWhere('body', 'like', "%$skill%")
-                    ->with('user')
-                    ->limit(max(2, $maxItems / 2) - count($posts))
-                    ->get()
-                    ->toArray();
-                
-                $posts = array_merge($posts, $additionalPosts);
-            }
+            // Limit to requested count
+            $courses = array_slice($courses, 0, max(2, $maxItems / 2));
+            $posts = array_slice($posts, 0, max(2, $maxItems / 2));
             
-            // If we found enough content, create a readlist
+            // For compatibility with parent class, we'll create a readlist structure
+            // without actually saving to database
             if (count($courses) + count($posts) > 0) {
-                // Create a new readlist
-                $readlist = new Readlist();
-                $readlist->user_id = $user->id;
-                $readlist->title = $title;
-                $readlist->description = $description;
-                $readlist->is_public = true;
-                $readlist->share_key = Str::random(10);
-                $readlist->save();
+                $readlistItems = [];
                 
-                // Add courses to the readlist
+                // Add courses to the readlist items
                 $order = 0;
                 foreach ($courses as $course) {
-                    $this->addItemToReadlist($readlist, Course::find($course['id']), $order, 
-                        "Recommended course for learning " . ($topic ?? $skill));
+                    $readlistItems[] = [
+                        'id' => $course['id'] ?? '',
+                        'type' => 'course',
+                        'title' => $course['title'] ?? '',
+                        'order' => $order,
+                        'notes' => "Recommended course for learning $topic"
+                    ];
                     $order++;
                 }
                 
-                // Add posts to the readlist
+                // Add posts to the readlist items
                 foreach ($posts as $post) {
-                    $this->addItemToReadlist($readlist, Post::find($post['id']), $order,
-                        "Supplementary resource for " . ($topic ?? $skill));
+                    $readlistItems[] = [
+                        'id' => $post['id'] ?? '',
+                        'type' => 'post',
+                        'title' => $post['title'] ?? '',
+                        'order' => $order,
+                        'notes' => "Supplementary resource for $topic"
+                    ];
                     $order++;
                 }
                 
-                // Return the created readlist with share URL
+                // Return the readlist data in the expected format
+                $readlistData = [
+                    'title' => $title,
+                    'description' => $description,
+                    'items' => $readlistItems
+                ];
+                
                 return [
                     'success' => true,
-                    'message' => 'Readlist generated successfully',
-                    'readlist' => [
-                        'id' => $readlist->id,
-                        'title' => $readlist->title,
-                        'description' => $readlist->description,
-                        'items_count' => $readlist->items()->count(),
-                        'share_url' => url("/readlists/shared/{$readlist->share_key}")
-                    ],
-                    'code' => 201
+                    'readlist' => $readlistData,
+                    'code' => 200
                 ];
             }
             
