@@ -151,7 +151,7 @@ class LiveClassController extends Controller
             'course_id' => 'nullable|exists:courses,id',
             'lesson_id' => 'nullable|exists:course_lessons,id',
             'class_type' => 'nullable|in:course-related,standalone',
-            'settings' => 'nullable|array',
+            'settings' => 'sometimes|nullable|array',
         ]);
 
         $user = auth()->user();
@@ -186,11 +186,11 @@ class LiveClassController extends Controller
             
             // Prepare settings with defaults if not provided
             $settings = $request->settings ?? [
-                'enable_chat' => true,
-                'mute_on_join' => true,
-                'video_on_join' => true,
-                'allow_screen_sharing' => true,
-                'enable_hand_raising' => true,
+                'enable_chat' => false,
+                'mute_on_join' => false,
+                'video_on_join' => false,
+                'allow_screen_sharing' => false,
+                'enable_hand_raising' => false,
             ];
 
             $liveClass = LiveClass::create([
@@ -282,7 +282,7 @@ class LiveClassController extends Controller
                 'role' => $role,
                 'joined_at' => now(),
                 'preferences' => [
-                    'video' => $liveClass->settings['video_on_join'] ?? true,
+                    'video' => $liveClass->settings['video_on_join'] ?? false,
                     'audio' => !($liveClass->settings['mute_on_join'] ?? false),
                     'screen_share' => false
                 ]
