@@ -85,6 +85,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/posts/user/{userId?}', [PostController::class, 'getUserPosts']);
     Route::get('/post/{postId}/stats', [PostController::class, 'getPostStats']); // Additional singular route
     Route::get('/posts/{postId}/stats', [PostController::class, 'getPostStats']);
+    Route::get('/post/{postId}/selections', [PostController::class, 'getSelectionCount']); // Additional singular route
+    Route::get('/posts/{postId}/selections', [PostController::class, 'getSelectionCount']);
 
     // Comment routes
     Route::post('/add-comment/{post_id}', [CommentController::class, 'postComment']);

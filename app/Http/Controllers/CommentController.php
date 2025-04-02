@@ -20,6 +20,10 @@ class CommentController extends Controller {
         $comment->post_id = $post_id;
         $comment->user_id = $user->id;
         $comment->content = $request->content;
+        
+        // Check if this is the first comment on the post
+        $isFirstComment = Comment::where('post_id', $post_id)->count() === 0;
+        $comment->is_first = $isFirstComment;
 
         try {
             $comment->save();
@@ -44,17 +48,36 @@ class CommentController extends Controller {
     }
 
     public function deleteComment($commentId) {
-        $deleted = Comment::where(['user_id', '=', auth()->user()->id],
-        ['id', '=', $commentId])->delete();
+        $user = auth()->user();
+        $comment = Comment::find($commentId);
+        
+        if (!$comment) {
+            return response()->json([
+                'message' => 'Comment not found'
+            ], 404);
+        }
+        
+        // Check if user owns the comment or owns the post (post owner can delete any comment)
+        $isCommentOwner = $comment->user_id === $user->id;
+        $isPostOwner = $comment->post->user_id === $user->id;
+        
+        if (!$isCommentOwner && !$isPostOwner) {
+            return response()->json([
+                'message' => 'You do not have permission to delete this comment'
+            ], 403);
+        }
+        
+        $deleted = $comment->delete();
 
         if($deleted) {
             return response()->json([
-                'message' => 'comment deleted'
-            ], 204);
+                'message' => 'Comment deleted successfully'
+            ], 200);
         }
-            return response()->json([
-                'message' => 'error deleting comment'
-            ], 500);
+            
+        return response()->json([
+            'message' => 'Error deleting comment'
+        ], 500);
     }
 
     public function displayComments(Post $post) {

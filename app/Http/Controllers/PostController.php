@@ -383,18 +383,34 @@ class PostController extends Controller
     }
 
     /**
-     * Get statistics (like count and comment count) for a specific post.
+     * Get statistics (like count, comment count, and selection count) for a specific post.
      */
     public function getPostStats($postId)
     {
         $post = Post::findOrFail($postId);
         $likeCount = \App\Models\Like::where('post_id', $postId)->count();
         $commentCount = \App\Models\Comment::where('post_id', $postId)->count();
+        $selectionCount = $post->readlistItems()->count();
         
         return response()->json([
             'post_id' => $postId,
             'like_count' => $likeCount,
-            'comment_count' => $commentCount
+            'comment_count' => $commentCount,
+            'selection_count' => $selectionCount
+        ]);
+    }
+    
+    /**
+     * Get the number of readlists that include this post (selection count)
+     */
+    public function getSelectionCount($postId)
+    {
+        $post = Post::findOrFail($postId);
+        $selectionCount = $post->readlistItems()->count();
+        
+        return response()->json([
+            'post_id' => $postId,
+            'selection_count' => $selectionCount
         ]);
     }
 
