@@ -405,13 +405,27 @@ class PostController extends Controller
      */
     public function getSelectionCount($postId)
     {
-        $post = Post::findOrFail($postId);
-        $selectionCount = $post->readlistItems()->count();
-        
-        return response()->json([
-            'post_id' => $postId,
-            'selection_count' => $selectionCount
-        ]);
+        try {
+            $post = Post::findOrFail($postId);
+            $selectionCount = $post->readlistItems()->count();
+            
+            return response()->json([
+                'post_id' => $postId,
+                'selection_count' => $selectionCount
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'message' => 'Post not found',
+                'post_id' => $postId,
+                'selection_count' => 0
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error retrieving selection count: ' . $e->getMessage(),
+                'post_id' => $postId,
+                'selection_count' => 0
+            ], 500);
+        }
     }
 
     /**
