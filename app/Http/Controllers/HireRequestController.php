@@ -117,6 +117,13 @@ class HireRequestController extends Controller
             
             $hireRequest->save();
             
+            // Notify the educator about the session request (even if payment might fail later)
+            $educator = User::find($tutor->id);
+            $educator->notify(new HireRequestNotification(
+                $client, 
+                "A user has requested a session with you on the topic: {$validated['topic']}. Payment is being processed."
+            ));
+            
             return response()->json([
                 'message' => 'Hire request created and payment initialized',
                 'payment_url' => $initResponse['data']['data']['authorization_url'],
@@ -203,6 +210,12 @@ class HireRequestController extends Controller
                 'transaction_reference' => $reference
             ]);
             $hireRequest->save();
+            
+            // Notify the educator about the session request (even if payment might fail later)
+            $educator->notify(new HireRequestNotification(
+                $user, 
+                "A user has requested a session with you on the topic: {$validated['topic']}. Payment is being processed."
+            ));
 
             return response()->json([
                 'message' => 'Payment initialized',
@@ -270,10 +283,13 @@ class HireRequestController extends Controller
             $hireRequest->payment_status = 'paid';
             $hireRequest->save();
 
-            // Notify the educator
+            // Notify the educator that payment was successful
             $educator = User::find($hireRequest->tutor_id);
             $client = User::find($hireRequest->client_id);
-            $educator->notify(new HireRequestNotification($client, $hireRequest));
+            $educator->notify(new HireRequestNotification(
+                $client, 
+                "Payment for session on '{$hireRequest->topic}' has been successfully processed. You can now accept or decline this request."
+            ));
 
             DB::commit();
 
