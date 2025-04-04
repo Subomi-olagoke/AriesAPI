@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Notifications\ChannelManager;
 use NotificationChannels\Apn\ApnChannel;
 use NotificationChannels\Apn\ApnVapidAdapter;
 use NotificationChannels\Apn\TokenProvider\FileTokenProvider;
@@ -42,6 +43,24 @@ class ApnsServiceProvider extends ServiceProvider
                 $config['team_id'],
                 $config['app_bundle_id']
             );
+        });
+        
+        // Register the APN channel with Laravel's notification system
+        $this->app->extend('Illuminate\Notifications\ChannelManager', function (ChannelManager $service, $app) {
+            $service->extend('apn', function ($app) {
+                return new ApnChannel(
+                    $app->make(TokenProviderInterface::class),
+                    $app->make(ApnVapidAdapter::class),
+                    $app['config']['services.apn.production'] ?? false
+                );
+            });
+            
+            return $service;
+        });
+        
+        // Register the ApnVapidAdapter
+        $this->app->singleton(ApnVapidAdapter::class, function ($app) {
+            return new ApnVapidAdapter();
         });
     }
 
