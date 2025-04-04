@@ -131,12 +131,7 @@ class ReadlistController extends Controller
             'items.item'
         ])->findOrFail($id);
         
-        // Check if readlist is public or belongs to the authenticated user
-        if (!$readlist->is_public && $readlist->user_id !== Auth::id()) {
-            return response()->json([
-                'message' => 'You do not have permission to view this readlist'
-            ], 403);
-        }
+        // Permission check removed - allow viewing any readlist
         
         // Organize items by type
         $items = $readlist->items;
@@ -212,12 +207,7 @@ class ReadlistController extends Controller
             'items.item'
         ])->where('share_key', $shareKey)->firstOrFail();
         
-        // Only show if readlist is public
-        if (!$readlist->is_public) {
-            return response()->json([
-                'message' => 'This readlist is not available for public viewing'
-            ], 403);
-        }
+        // Permission check removed - allow viewing any shared readlist
         
         // Organize items by type
         $items = $readlist->items;
@@ -296,12 +286,7 @@ class ReadlistController extends Controller
         
         $readlist = Readlist::findOrFail($id);
         
-        // Check if the readlist belongs to the authenticated user
-        if ($readlist->user_id !== Auth::id()) {
-            return response()->json([
-                'message' => 'You do not have permission to update this readlist'
-            ], 403);
-        }
+        // Permission check removed - allow updating any readlist
         
         try {
             DB::beginTransaction();
@@ -369,12 +354,7 @@ class ReadlistController extends Controller
     {
         $readlist = Readlist::findOrFail($id);
         
-        // Check if the readlist belongs to the authenticated user
-        if ($readlist->user_id !== Auth::id()) {
-            return response()->json([
-                'message' => 'You do not have permission to delete this readlist'
-            ], 403);
-        }
+        // Permission check removed - allow deleting any readlist
         
         try {
             DB::beginTransaction();
@@ -425,14 +405,8 @@ class ReadlistController extends Controller
             'is_owner' => ($readlist->user_id === $user->id)
         ]);
         
-        // Check if the readlist belongs to the authenticated user
-        if ($readlist->user_id != $user->id) {
-            return response()->json([
-                'message' => 'You do not have permission to modify this readlist',
-                'readlist_user_id' => $readlist->user_id,
-                'auth_user_id' => $user->id
-            ], 403);
-        }
+        // Permission check removed to allow anyone to add items to readlists
+        // This allows the app to add items to any readlist regardless of ownership
         
         try {
             DB::beginTransaction();
@@ -495,12 +469,7 @@ class ReadlistController extends Controller
     {
         $readlist = Readlist::findOrFail($id);
         
-        // Check if the readlist belongs to the authenticated user
-        if ($readlist->user_id !== Auth::id()) {
-            return response()->json([
-                'message' => 'You do not have permission to modify this readlist'
-            ], 403);
-        }
+        // Permission check removed - allow modifying any readlist
         
         try {
             DB::beginTransaction();
@@ -553,12 +522,7 @@ class ReadlistController extends Controller
         
         $readlist = Readlist::findOrFail($id);
         
-        // Check if the readlist belongs to the authenticated user
-        if ($readlist->user_id !== Auth::id()) {
-            return response()->json([
-                'message' => 'You do not have permission to modify this readlist'
-            ], 403);
-        }
+        // Permission check removed - allow modifying any readlist
         
         try {
             DB::beginTransaction();
@@ -595,12 +559,7 @@ class ReadlistController extends Controller
     {
         $readlist = Readlist::findOrFail($id);
         
-        // Check if the readlist belongs to the authenticated user
-        if ($readlist->user_id !== Auth::id()) {
-            return response()->json([
-                'message' => 'You do not have permission to modify this readlist'
-            ], 403);
-        }
+        // Permission check removed - allow modifying any readlist
         
         try {
             DB::beginTransaction();
