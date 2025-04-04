@@ -82,14 +82,29 @@ class BroadcastNotification extends BaseNotification implements ShouldQueue
             'title' => $this->title,
             'body' => $this->body,
             'data' => $this->data,
-            'device_token' => $notifiable->device_token ?? 'none'
+            'device_token' => $notifiable->device_token ?? 'none',
+            'token_length' => strlen($notifiable->device_token ?? ''),
+            'token_is_hex' => ctype_xdigit($notifiable->device_token ?? ''),
+            'app_bundle_id' => config('services.apn.app_bundle_id', env('APNS_APP_BUNDLE_ID')),
+            'production_mode' => config('services.apn.production', env('APNS_PRODUCTION')),
         ]);
         
-        return \NotificationChannels\Apn\ApnMessage::create()
+        // Create the message with all required properties for iOS notification display
+        $message = \NotificationChannels\Apn\ApnMessage::create()
             ->badge(1)
             ->title($this->title)
             ->body($this->body)
             ->sound('default')
-            ->custom($this->data);
+            ->pushType('alert') // Explicitly set push type
+            ->contentAvailable(true) // Ensure notification is delivered
+            ->mutableContent(true) // Allow for notification modification
+            ->priority(10); // High priority for immediate delivery
+        
+        // Add all data as custom payload
+        if (!empty($this->data)) {
+            $message->custom($this->data);
+        }
+        
+        return $message;
     }
 }

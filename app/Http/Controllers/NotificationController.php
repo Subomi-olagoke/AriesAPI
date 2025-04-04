@@ -87,6 +87,14 @@ class NotificationController extends Controller
             ], 404);
         }
 
+        // Log token details for debugging
+        \Log::info('About to send notification', [
+            'user_id' => $user->id,
+            'device_token' => $user->device_token,
+            'token_length' => strlen($user->device_token),
+            'token_format' => ctype_xdigit($user->device_token) ? 'hexadecimal' : 'non-hexadecimal'
+        ]);
+        
         // Send notification to specific user
         try {
             $user->notify(new BroadcastNotification(

@@ -38,13 +38,25 @@ class ApnsServiceProvider extends ServiceProvider
             }
             
             // Add configuration values to the services.apn config
-            Config::set('services.apn.certificate.app', [
+            $certConfig = [
                 'key_id' => $config['key_id'],
                 'team_id' => $config['team_id'],
                 'app_bundle_id' => $config['app_bundle_id'],
                 'private_key_path' => $config['private_key_path'],
                 'production' => $config['production'] ?? false,
-            ]);
+            ];
+            
+            // Log the configuration for debugging
+            \Log::info('Setting APNs certificate configuration', ['config' => array_merge(
+                $certConfig,
+                ['private_key_path_exists' => file_exists($config['private_key_path'])]
+            )]);
+            
+            // Set the configuration in both standard locations to ensure compatibility
+            Config::set('services.apn.certificate.app', $certConfig);
+            
+            // Also set it directly in the root for older package versions
+            Config::set('apn.certificate.app', $certConfig);
             
             return $config;
         });
@@ -56,8 +68,26 @@ class ApnsServiceProvider extends ServiceProvider
                     // Make sure the certificate config is registered
                     $app->make('notificationchannels.apn.certificate.app');
                     
-                    // Let the package's service provider create the channel
-                    return $app->make(ApnChannel::class);
+                    // Create APNs channel with detailed error handling
+                    $channel = $app->make(ApnChannel::class);
+
+                    // Add response listener if available (depends on package version)
+                    try {
+                        if (method_exists($channel, 'onError')) {
+                            $channel->onError(function ($error) {
+                                \Log::error('APNs Error', [
+                                    'error' => $error->getMessage(),
+                                    'device_token' => $error->getDeviceToken(),
+                                    'error_code' => $error->getCode(),
+                                    'notification' => $error->getNotification()
+                                ]);
+                            });
+                        }
+                    } catch (\Exception $e) {
+                        \Log::warning('Could not add APNs error handler: ' . $e->getMessage());
+                    }
+
+                    return $channel;
                 } catch (\Exception $e) {
                     \Log::error('APNs initialization error: ' . $e->getMessage());
                     throw new ConnectionFailed('Could not initialize APNs: ' . $e->getMessage());
