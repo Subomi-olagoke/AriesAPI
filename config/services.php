@@ -48,4 +48,12 @@ return [
         'public_key' => env('PAYSTACK_PUBLIC_KEY'),
     ],
 
+    'apn' => [
+        'key_id' => env('APNS_KEY_ID'),
+        'team_id' => env('APNS_TEAM_ID'),
+        'app_bundle_id' => env('APNS_APP_BUNDLE_ID'),
+        'private_key_content' => env('APNS_PRIVATE_KEY_CONTENT'),
+        'production' => env('APNS_PRODUCTION', false),
+    ],
+
 ];

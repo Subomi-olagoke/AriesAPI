@@ -479,4 +479,10 @@ Route::get('/subscriptions/failed', function() {
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/device/register', [\App\Http\Controllers\DeviceController::class, 'registerDevice']);
     Route::post('/device/unregister', [\App\Http\Controllers\DeviceController::class, 'unregisterDevice']);
+    
+    // Push notification endpoints
+    Route::post('/notifications/broadcast', [NotificationController::class, 'broadcastPushNotification']);
+    Route::post('/notification/broadcast', [NotificationController::class, 'broadcastPushNotification']); // Additional route
+    Route::post('/notifications/send', [NotificationController::class, 'sendPushNotification']);
+    Route::post('/notification/send', [NotificationController::class, 'sendPushNotification']); // Additional route
 });

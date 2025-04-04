@@ -173,6 +173,7 @@ return [
         App\Providers\CloudinaryServiceProvider::class,
         App\Providers\CogniServiceProvider::class,
         App\Providers\EnhancedCogniServiceProvider::class,
+        App\Providers\ApnsServiceProvider::class,
     ])->toArray(),
 
     /*
