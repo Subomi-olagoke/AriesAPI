@@ -53,6 +53,7 @@ return [
         'team_id' => env('APNS_TEAM_ID'),
         'app_bundle_id' => env('APNS_APP_BUNDLE_ID'),
         'private_key_content' => env('APNS_PRIVATE_KEY_CONTENT'),
+        'private_key_path' => env('APNS_PRIVATE_KEY_PATH'),
         'production' => env('APNS_PRODUCTION', false),
     ],
 

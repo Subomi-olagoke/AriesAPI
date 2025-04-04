@@ -71,20 +71,15 @@ class BroadcastNotification extends BaseNotification implements ShouldQueue
      * Get the APNs representation of the notification.
      *
      * @param  mixed  $notifiable
-     * @return array
+     * @return \NotificationChannels\Apn\ApnMessage
      */
     public function toApn($notifiable)
     {
-        return [
-            'aps' => [
-                'alert' => [
-                    'title' => $this->title,
-                    'body' => $this->body,
-                ],
-                'badge' => 1,
-                'sound' => 'default',
-            ],
-            'custom_data' => $this->data,
-        ];
+        return \NotificationChannels\Apn\ApnMessage::create()
+            ->badge(1)
+            ->title($this->title)
+            ->body($this->body)
+            ->sound('default')
+            ->custom($this->data);
     }
 }
