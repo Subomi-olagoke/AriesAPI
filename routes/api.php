@@ -474,3 +474,9 @@ Route::get('/subscription/failed', function() {
 Route::get('/subscriptions/failed', function() {
     return view('subscription.failed');
 })->name('subscriptions.failed'); // Additional route
+
+// Device registration for push notifications
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/device/register', [\App\Http\Controllers\DeviceController::class, 'registerDevice']);
+    Route::post('/device/unregister', [\App\Http\Controllers\DeviceController::class, 'unregisterDevice']);
+});

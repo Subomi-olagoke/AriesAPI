@@ -121,7 +121,8 @@ class HireRequestController extends Controller
             $educator = User::find($tutor->id);
             $educator->notify(new HireRequestNotification(
                 $client, 
-                "A user has requested a session with you on the topic: {$validated['topic']}. Payment is being processed."
+                "A user has requested a session with you on the topic: {$validated['topic']}. Payment is being processed.",
+                'new_request'
             ));
             
             return response()->json([
@@ -214,7 +215,8 @@ class HireRequestController extends Controller
             // Notify the educator about the session request (even if payment might fail later)
             $educator->notify(new HireRequestNotification(
                 $user, 
-                "A user has requested a session with you on the topic: {$validated['topic']}. Payment is being processed."
+                "A user has requested a session with you on the topic: {$validated['topic']}. Payment is being processed.",
+                'new_request'
             ));
 
             return response()->json([
@@ -288,7 +290,8 @@ class HireRequestController extends Controller
             $client = User::find($hireRequest->client_id);
             $educator->notify(new HireRequestNotification(
                 $client, 
-                "Payment for session on '{$hireRequest->topic}' has been successfully processed. You can now accept or decline this request."
+                "Payment for session on '{$hireRequest->topic}' has been successfully processed. You can now accept or decline this request.",
+                'new_request'
             ));
 
             DB::commit();
@@ -353,7 +356,8 @@ class HireRequestController extends Controller
             // Notify the client
             $client->notify(new HireRequestNotification(
                 $tutor, 
-                'Your hire request has been accepted!' . $paymentWarning
+                'Your hire request has been accepted!' . $paymentWarning,
+                'request_accepted'
             ));
 
             DB::commit();
@@ -395,7 +399,8 @@ class HireRequestController extends Controller
             // Notify the client
             $client->notify(new HireRequestNotification(
                 auth()->user(),
-                'Your hire request has been declined.'
+                'Your hire request has been declined.',
+                'request_declined'
             ));
 
             DB::commit();

@@ -5,11 +5,9 @@ namespace App\Notifications;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Notifications\Notification;
 
-class CommentNotification extends Notification
+class CommentNotification extends BaseNotification
 {
-    use Queueable;
 
     protected $comment;
     protected $user;
@@ -23,24 +21,22 @@ class CommentNotification extends Notification
         $this->user = $user;
     }
 
-    /**
-     * Get the notification's delivery channels.
-     *
-     * @return array<int, string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['database'];
-    }
 
     public function toDatabase($notifiable)
     {
+        // Include the comment content, but truncate if it's too long
+        $commentContent = $this->comment->content;
+        $truncatedContent = strlen($commentContent) > 100 
+            ? substr($commentContent, 0, 97) . '...' 
+            : $commentContent;
+            
         return [
-            'message' => "{$this->user->username} commented on your post.",
+            'message' => "{$this->user->username} commented: \"{$truncatedContent}\"",
             'comment_id' => $this->comment->id,
             'avatar' => $this->user->avatar,
             'post_id' => $this->comment->post_id,
             'commented_by' => $this->user->id,
+            'comment_content' => $this->comment->content, // Full comment content for display
         ];
     }
 
@@ -62,8 +58,23 @@ class CommentNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        // Include the comment content, but truncate if it's too long
+        $commentContent = $this->comment->content;
+        $truncatedContent = strlen($commentContent) > 100 
+            ? substr($commentContent, 0, 97) . '...' 
+            : $commentContent;
+            
+        $username = $this->user->username ?? $this->user->first_name ?? 'Someone';
+            
         return [
-            //
+            'title' => 'New Comment',
+            'message' => "{$username} commented: \"{$truncatedContent}\"",
+            'comment_id' => $this->comment->id,
+            'avatar' => $this->user->avatar,
+            'post_id' => $this->comment->post_id,
+            'commented_by' => $this->user->id,
+            'comment_content' => $this->comment->content,
+            'notification_type' => 'comment',
         ];
     }
 }
