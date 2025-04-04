@@ -110,6 +110,8 @@ class NotificationController extends Controller
             'token_format' => ctype_xdigit($user->device_token) ? 'hexadecimal' : 'non-hexadecimal'
         ]);
         
+        // Standard notification attempt
+        $standardSuccess = false;
         try {
             // Try sending through standard notification system
             $user->notify(new BroadcastNotification(
@@ -119,40 +121,43 @@ class NotificationController extends Controller
             ));
             
             Log::info('Notification sent to user through standard channel', ['user_id' => $user->id]);
-            
-            // Now try a direct APNs approach as well
-            $this->sendDirectAppleNotification($user, $request->title, $request->body, $request->data ?? []);
-            
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Push notification sent successfully using both methods',
-            ]);
+            $standardSuccess = true;
         } catch (\Exception $e) {
-            Log::error('Failed to send notification', [
+            Log::error('Failed to send standard notification', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
+        }
             
-            // Try the direct method if standard notification failed
-            try {
-                $this->sendDirectAppleNotification($user, $request->title, $request->body, $request->data ?? []);
-                
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Push notification sent successfully using direct method',
-                ]);
-            } catch (\Exception $directException) {
-                Log::error('Failed to send direct notification', [
-                    'error' => $directException->getMessage(),
-                    'trace' => $directException->getTraceAsString()
-                ]);
-                
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Failed to send notification: ' . $e->getMessage() . 
-                                 ' Direct method also failed: ' . $directException->getMessage(),
-                ], 500);
-            }
+        // Direct notification attempt
+        $directSuccess = false;
+        try {
+            // Try direct APNs approach
+            $this->sendDirectAppleNotification($user, $request->title, $request->body, $request->data ?? []);
+            Log::info('Notification sent to user through direct channel', ['user_id' => $user->id]);
+            $directSuccess = true;
+        } catch (\Exception $directException) {
+            Log::error('Failed to send direct notification', [
+                'error' => $directException->getMessage(),
+                'trace' => $directException->getTraceAsString()
+            ]);
+        }
+            
+        // Return response based on success of either method
+        if ($standardSuccess || $directSuccess) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Push notification sent successfully' . 
+                            ($standardSuccess && $directSuccess ? ' using both methods' : 
+                             ($standardSuccess ? ' using standard method' : ' using direct method')),
+                'standard_success' => $standardSuccess,
+                'direct_success' => $directSuccess
+            ]);
+        } else {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to send push notification through any available method',
+            ], 500);
         }
     }
     
@@ -217,36 +222,96 @@ class NotificationController extends Controller
                 'production' => $production
             ];
             
-            // Use the package's classes directly
-            $client = new \NotificationChannels\Apn\ClientFactory(app(), $options);
+            // Use Firebase JWT directly for a very manual approach
+            Log::info('Attempting manual JWT-based APNs notification');
             
-            // Create message
-            $alert = [
-                'title' => $title,
-                'body' => $body,
-            ];
+            // Get the private key content
+            $privateKeyContent = base64_decode($privateKeyContent);
             
-            $payload = [
-                'aps' => [
-                    'alert' => $alert,
-                    'badge' => 1,
-                    'sound' => 'default',
-                    'content-available' => 1,
-                    'mutable-content' => 1,
-                ],
-            ];
-            
-            // Add custom data
-            if (!empty($data)) {
-                $payload['custom_data'] = $data;
+            try {
+                // Create JWT token for APNs authentication
+                $issuedAt = time();
+                $token = \Firebase\JWT\JWT::encode(
+                    [
+                        'iss' => $teamId,
+                        'iat' => $issuedAt,
+                    ],
+                    $privateKeyContent,
+                    'ES256',
+                    $keyId
+                );
+                
+                // Create message payload
+                $alert = [
+                    'title' => $title,
+                    'body' => $body,
+                ];
+                
+                $payload = [
+                    'aps' => [
+                        'alert' => $alert,
+                        'badge' => 1,
+                        'sound' => 'default',
+                        'content-available' => 1,
+                        'mutable-content' => 1,
+                    ],
+                ];
+                
+                // Add custom data
+                if (!empty($data)) {
+                    $payload['custom_data'] = $data;
+                }
+                
+                // Convert payload to JSON
+                $payloadJson = json_encode($payload);
+                
+                // Determine correct APNs host based on production flag
+                $apnsHost = $production 
+                    ? 'api.push.apple.com' 
+                    : 'api.sandbox.push.apple.com';
+                
+                // Set up curl request to APNs
+                $ch = curl_init("https://{$apnsHost}/3/device/{$user->device_token}");
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
+                curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'Content-Type: application/json',
+                    'Connection: keep-alive',
+                    'Authorization: bearer ' . $token,
+                    'apns-topic: ' . $appBundleId,
+                    'apns-push-type: alert',
+                    'apns-priority: 10',
+                ]);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                
+                // Execute request
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $error = curl_error($ch);
+                curl_close($ch);
+                
+                // Log response
+                Log::info('Manual APNs notification response', [
+                    'http_code' => $httpCode,
+                    'response' => $response,
+                    'curl_error' => $error
+                ]);
+                
+                if ($httpCode === 200) {
+                    return true;
+                } else {
+                    Log::error('APNs error', [
+                        'http_code' => $httpCode,
+                        'response' => $response
+                    ]);
+                    throw new \Exception('APNs error: ' . $httpCode . ' - ' . $response);
+                }
+            } catch (\Exception $e) {
+                Log::error('Failed to create or send APNs JWT', [
+                    'error' => $e->getMessage()
+                ]);
+                throw $e;
             }
-            
-            // Send directly
-            $response = $client->push($user->device_token, $payload, $production);
-            
-            Log::info('Direct APNs notification sent', ['response' => $response]);
-            
-            return true;
         } catch (\Exception $e) {
             Log::error('Failed to send direct APNs notification', [
                 'error' => $e->getMessage(),
