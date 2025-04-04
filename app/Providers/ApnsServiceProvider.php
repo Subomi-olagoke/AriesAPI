@@ -5,7 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Notifications\ChannelManager;
 use NotificationChannels\Apn\ApnChannel;
-use NotificationChannels\Apn\ApnAdapter;
+use NotificationChannels\Apn\ClientFactory;
 use NotificationChannels\Apn\Exceptions\ConnectionFailed;
 
 class ApnsServiceProvider extends ServiceProvider
@@ -21,13 +21,6 @@ class ApnsServiceProvider extends ServiceProvider
                 $config = $app['config']['services.apn'];
 
                 try {
-                    $options = [
-                        'key_id' => $config['key_id'],
-                        'team_id' => $config['team_id'],
-                        'app_bundle_id' => $config['app_bundle_id'],
-                        'production' => $config['production'] ?? false,
-                    ];
-
                     // If using key content from environment variable
                     if (isset($config['private_key_content']) && $config['private_key_content']) {
                         $privateKeyPath = storage_path('app/apns_private_key.p8');
@@ -43,14 +36,19 @@ class ApnsServiceProvider extends ServiceProvider
                             file_put_contents($privateKeyPath, $keyContent);
                         }
                         
-                        $options['private_key_path'] = $privateKeyPath;
-                    } else if (isset($config['private_key_path'])) {
-                        $options['private_key_path'] = $config['private_key_path'];
-                    }
+                        $config['private_key_path'] = $privateKeyPath;
+                    } 
 
-                    $client = new ApnAdapter($options);
+                    // Create a new client factory
+                    $factory = new ClientFactory(
+                        $config['key_id'],
+                        $config['team_id'],
+                        $config['app_bundle_id'],
+                        $config['private_key_path'],
+                        $config['production'] ?? false
+                    );
                     
-                    return new ApnChannel($client);
+                    return new ApnChannel($factory);
                 } catch (\Exception $e) {
                     \Log::error('APNs initialization error: ' . $e->getMessage());
                     throw new ConnectionFailed('Could not initialize APNs: ' . $e->getMessage());
