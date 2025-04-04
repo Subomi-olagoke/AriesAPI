@@ -485,4 +485,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/notification/broadcast', [NotificationController::class, 'broadcastPushNotification']); // Additional route
     Route::post('/notifications/send', [NotificationController::class, 'sendPushNotification']);
     Route::post('/notification/send', [NotificationController::class, 'sendPushNotification']); // Additional route
+    Route::get('/notifications/debug-apns', [NotificationController::class, 'debugApns']);
 });
