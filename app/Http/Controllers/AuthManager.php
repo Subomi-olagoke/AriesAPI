@@ -106,12 +106,29 @@ use Illuminate\Validation\Rules\Password;
                 'message' => 'Failed to create token',
             ], 500);
         }
-
-        return response()->json([
+        
+        // Load the user's profile to include bio and other profile data
+        $user->load('profile');
+        
+        // Create a response array that includes profile information
+        $responseData = [
             'user' => $user,
             'token' => $token,
             'token_type' => 'Bearer',
-        ], 200)->cookie(
+        ];
+        
+        // If profile exists, add bio and description directly to response
+        if ($user->profile) {
+            $responseData['bio'] = $user->profile->bio;
+            $responseData['qualifications'] = $user->profile->qualifications;
+            $responseData['teaching_style'] = $user->profile->teaching_style;
+        } else {
+            $responseData['bio'] = null;
+            $responseData['qualifications'] = null;
+            $responseData['teaching_style'] = null;
+        }
+
+        return response()->json($responseData, 200)->cookie(
             'access_token', $token, 1440, null, null, false, true // 1440 minutes = 24 hours
         );
     }
