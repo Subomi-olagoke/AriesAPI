@@ -27,9 +27,10 @@ class BroadcastNotification extends BaseNotification implements ShouldQueue
     /**
      * Get the notification's delivery channels.
      *
-     * @return array<int, string>
+     * @param  mixed  $notifiable
+     * @return array
      */
-    public function via(object $notifiable): array
+    public function via($notifiable)
     {
         // Use the parent's via method to get the channels
         // This will automatically include APNs if device_token exists
@@ -38,8 +39,11 @@ class BroadcastNotification extends BaseNotification implements ShouldQueue
 
     /**
      * Get the mail representation of the notification.
+     *
+     * @param  mixed  $notifiable
+     * @return array
      */
-    public function toMail(object $notifiable): array
+    public function toMail($notifiable)
     {
         return [
             'title' => $this->title,
@@ -51,9 +55,10 @@ class BroadcastNotification extends BaseNotification implements ShouldQueue
     /**
      * Get the array representation of the notification.
      *
-     * @return array<string, mixed>
+     * @param  mixed  $notifiable
+     * @return array
      */
-    public function toArray(object $notifiable): array
+    public function toArray($notifiable)
     {
         return [
             'title' => $this->title,
@@ -64,8 +69,11 @@ class BroadcastNotification extends BaseNotification implements ShouldQueue
 
     /**
      * Get the APNs representation of the notification.
+     *
+     * @param  mixed  $notifiable
+     * @return array
      */
-    public function toApn(object $notifiable): array
+    public function toApn($notifiable)
     {
         return [
             'aps' => [
