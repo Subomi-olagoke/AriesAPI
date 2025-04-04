@@ -75,6 +75,8 @@ class BroadcastNotification extends BaseNotification implements ShouldQueue
      */
     public function toApn($notifiable)
     {
+        \Log::info('Creating APN message for: ' . $notifiable->id . ' with token: ' . ($notifiable->device_token ?? 'none'));
+        
         return \NotificationChannels\Apn\ApnMessage::create()
             ->badge(1)
             ->title($this->title)
