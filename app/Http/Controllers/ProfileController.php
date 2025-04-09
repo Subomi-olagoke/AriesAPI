@@ -141,37 +141,87 @@ class ProfileController extends Controller
             ->limit(20)  // More posts for user's own profile
             ->get();
             
+        // Map posts to match ProfilePost structure expected by iOS
+        $formattedPosts = $posts->map(function($post) {
+            return [
+                'id' => $post->id,
+                'created_at' => $post->created_at->toISOString(),
+                'updated_at' => $post->updated_at->toISOString(),
+                'title' => $post->title,
+                'body' => $post->body,
+                'media_link' => $post->media_link,
+                'visibility' => $post->visibility,
+                'media_type' => $post->media_type ?? 'text',
+                'media_thumbnail' => $post->media_thumbnail,
+                'user_id' => $post->user_id
+            ];
+        });
+            
         // Get counts for various metrics
-        $followers = $user->followers()->count();
-        $following = $user->following()->count();
+        $followersCount = $user->followers()->count();
+        $followingCount = $user->following()->count();
         $postsCount = $user->posts()->count();
         
-        // Return user data with profile
-        if ($user->profile) {
-            return response()->json([
-                'user' => $user->toArray(),
-                'profile' => $user->profile,
-                'share_url' => $user->profile->share_url ?? null,
-                'posts' => $posts,
-                'counts' => [
-                    'followers' => $followers,
-                    'following' => $following,
-                    'posts' => $postsCount
-                ]
-            ], 200);
-        } else {
-            return response()->json([
-                'user' => $user->toArray(),
-                'profile' => null,
-                'posts' => $posts,
-                'counts' => [
-                    'followers' => $followers,
-                    'following' => $following,
-                    'posts' => $postsCount
-                ],
-                'message' => 'No profile found for this user'
-            ], 200);
+        // Get likes given by the user (post IDs)
+        $likedPostIds = $user->likes()->pluck('post_id')->filter()->map(function($id) {
+            return (string)$id;
+        })->toArray();
+        
+        // Prepare educator profile data if user is an educator
+        $educatorProfile = null;
+        if ($user->role === User::ROLE_EDUCATOR && $user->profile) {
+            // Get ratings data
+            $ratingsReceived = $user->ratingsReceived()
+                ->with('user:id,username,first_name,last_name,avatar')
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get();
+                
+            $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
+            $ratingsCount = $user->ratingsReceived()->count();
+            
+            // Format educator profile according to iOS structure
+            $educatorProfile = [
+                'qualifications' => $user->profile->qualifications ?? [],
+                'teaching_style' => $user->profile->teaching_style,
+                'availability' => $user->profile->availability ?? [],
+                'hire_rate' => (string)($user->profile->hire_rate ?? "0"),
+                'hire_currency' => $user->profile->hire_currency ?? 'USD',
+                'social_links' => $user->profile->social_links ?? [],
+                'average_rating' => (float)$averageRating,
+                'ratings_count' => $ratingsCount,
+                'recent_ratings' => $ratingsReceived->map(function($rating) {
+                    return [
+                        'id' => $rating->id,
+                        'rating' => $rating->rating,
+                        'comment' => $rating->comment,
+                        'created_at' => $rating->created_at->toISOString(),
+                        'user' => [
+                            'username' => $rating->user->username,
+                            'first_name' => $rating->user->first_name,
+                            'last_name' => $rating->user->last_name,
+                            'avatar' => $rating->user->avatar,
+                        ]
+                    ];
+                })->toArray(),
+                'description' => $user->profile->bio ?? ''
+            ];
         }
+        
+        // Return response formatted for iOS app
+        return response()->json([
+            'posts' => $formattedPosts,
+            'username' => $user->username,
+            'full_name' => $user->first_name . ' ' . $user->last_name,
+            'first_name' => $user->first_name,
+            'last_name' => $user->last_name,
+            'avatar' => $user->avatar ?? $user->profile->avatar ?? null,
+            'bio' => $user->profile->bio ?? null,
+            'followers' => $followersCount,
+            'following' => $followingCount, 
+            'likes' => $likedPostIds,
+            'educator_profile' => $educatorProfile
+        ], 200);
     }
     
     /**
