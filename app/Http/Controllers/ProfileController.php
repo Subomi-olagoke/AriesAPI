@@ -138,9 +138,9 @@ class ProfileController extends Controller
         $posts = $user->posts()
             ->with(['user', 'likes', 'comments'])
             ->orderBy('created_at', 'desc')
-            ->limit(20)  // More posts for user's own profile
+            ->limit(20)
             ->get();
-                
+        
         // Get counts for various metrics
         $followersCount = $user->followers()->count();
         $followingCount = $user->following()->count();
@@ -191,9 +191,8 @@ class ProfileController extends Controller
             ];
         }
         
-        // Return flat response structure matching iOS app's expectations exactly
+        // Return directly at the root level, not nested in another object
         return response()->json([
-            'posts' => $posts,
             'username' => $user->username,
             'full_name' => $user->first_name . ' ' . $user->last_name,
             'first_name' => $user->first_name,
@@ -203,10 +202,10 @@ class ProfileController extends Controller
             'followers' => $followersCount,
             'following' => $followingCount,
             'likes' => $likedPostIds,
+            'posts' => $posts,
             'educator_profile' => $educatorProfile
         ], 200);
     }
-      
     
     /**
      * Upload avatar image
@@ -328,44 +327,65 @@ class ProfileController extends Controller
         $following = $user->following()->count();
         $postsCount = $user->posts()->count();
         
-        if (!$profile) {
-            return response()->json([
-                'user' => [
-                    'id' => $user->id,
-                    'username' => $user->username,
-                    'first_name' => $user->first_name,
-                    'last_name' => $user->last_name,
-                    'role' => $user->role,
-                    'avatar' => $user->avatar,
-                ],
-                'profile' => null,
-                'posts' => $posts,
-                'counts' => [
-                    'followers' => $followers,
-                    'following' => $following,
-                    'posts' => $postsCount
-                ],
-                'message' => 'User has no profile'
-            ], 200);
+        // Get likes given by the user (post IDs)
+        $likedPostIds = $user->likes()->pluck('post_id')->filter()->map(function($id) {
+            return (string)$id;
+        })->toArray();
+        
+        // Prepare educator profile data if user is an educator
+        $educatorProfile = null;
+        if ($user->role === User::ROLE_EDUCATOR && $profile) {
+            // Get ratings data
+            $ratingsReceived = $user->ratingsReceived()
+                ->with('user:id,username,first_name,last_name,avatar')
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get();
+                
+            $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
+            $ratingsCount = $user->ratingsReceived()->count();
+            
+            // Format educator profile according to iOS structure
+            $educatorProfile = [
+                'qualifications' => $profile->qualifications ?? [],
+                'teaching_style' => $profile->teaching_style,
+                'availability' => $profile->availability ?? [],
+                'hire_rate' => (string)($profile->hire_rate ?? "0"),
+                'hire_currency' => $profile->hire_currency ?? 'USD',
+                'social_links' => $profile->social_links ?? [],
+                'average_rating' => (float)$averageRating,
+                'ratings_count' => $ratingsCount,
+                'recent_ratings' => $ratingsReceived->map(function($rating) {
+                    return [
+                        'id' => $rating->id,
+                        'rating' => $rating->rating,
+                        'comment' => $rating->comment,
+                        'created_at' => $rating->created_at->toISOString(),
+                        'user' => [
+                            'username' => $rating->user->username,
+                            'first_name' => $rating->user->first_name,
+                            'last_name' => $rating->user->last_name,
+                            'avatar' => $rating->user->avatar,
+                        ]
+                    ];
+                })->toArray(),
+                'description' => $profile->bio ?? ''
+            ];
         }
 
+        // Return in the format expected by iOS
         return response()->json([
-            'user' => [
-                'id' => $user->id,
-                'username' => $user->username,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
-                'role' => $user->role,
-                'avatar' => $user->avatar,
-            ],
-            'profile' => $profile,
+            'username' => $user->username,
+            'full_name' => $user->first_name . ' ' . $user->last_name,
+            'first_name' => $user->first_name,
+            'last_name' => $user->last_name,
+            'avatar' => $user->avatar ?? ($profile ? $profile->avatar : null),
+            'bio' => $profile ? $profile->bio : null,
+            'followers' => $followers,
+            'following' => $following,
+            'likes' => $likedPostIds,
             'posts' => $posts,
-            'counts' => [
-                'followers' => $followers,
-                'following' => $following,
-                'posts' => $postsCount
-            ],
-            'share_url' => $profile->share_url
+            'educator_profile' => $educatorProfile
         ], 200);
     }
     
@@ -404,45 +424,66 @@ class ProfileController extends Controller
         $followers = $user->followers()->count();
         $following = $user->following()->count();
         $postsCount = $user->posts()->count();
+        
+        // Get likes given by the user (post IDs)
+        $likedPostIds = $user->likes()->pluck('post_id')->filter()->map(function($id) {
+            return (string)$id;
+        })->toArray();
+        
+        // Prepare educator profile data if user is an educator
+        $educatorProfile = null;
+        if ($user->role === User::ROLE_EDUCATOR && $profile) {
+            // Get ratings data
+            $ratingsReceived = $user->ratingsReceived()
+                ->with('user:id,username,first_name,last_name,avatar')
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get();
+                
+            $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
+            $ratingsCount = $user->ratingsReceived()->count();
             
-        if (!$profile) {
-            return response()->json([
-                'user' => [
-                    'id' => $user->id,
-                    'username' => $user->username,
-                    'first_name' => $user->first_name,
-                    'last_name' => $user->last_name,
-                    'role' => $user->role,
-                    'avatar' => $user->avatar,
-                ],
-                'profile' => null,
-                'posts' => $posts,
-                'counts' => [
-                    'followers' => $followers,
-                    'following' => $following,
-                    'posts' => $postsCount
-                ],
-                'message' => 'User has no profile'
-            ], 200);
+            // Format educator profile according to iOS structure
+            $educatorProfile = [
+                'qualifications' => $profile->qualifications ?? [],
+                'teaching_style' => $profile->teaching_style,
+                'availability' => $profile->availability ?? [],
+                'hire_rate' => (string)($profile->hire_rate ?? "0"),
+                'hire_currency' => $profile->hire_currency ?? 'USD',
+                'social_links' => $profile->social_links ?? [],
+                'average_rating' => (float)$averageRating,
+                'ratings_count' => $ratingsCount,
+                'recent_ratings' => $ratingsReceived->map(function($rating) {
+                    return [
+                        'id' => $rating->id,
+                        'rating' => $rating->rating,
+                        'comment' => $rating->comment,
+                        'created_at' => $rating->created_at->toISOString(),
+                        'user' => [
+                            'username' => $rating->user->username,
+                            'first_name' => $rating->user->first_name,
+                            'last_name' => $rating->user->last_name,
+                            'avatar' => $rating->user->avatar,
+                        ]
+                    ];
+                })->toArray(),
+                'description' => $profile->bio ?? ''
+            ];
         }
-
+            
+        // Return in the format expected by iOS
         return response()->json([
-            'user' => [
-                'id' => $user->id,
-                'username' => $user->username,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
-                'role' => $user->role,
-                'avatar' => $user->avatar,
-            ],
-            'profile' => $profile,
+            'username' => $user->username,
+            'full_name' => $user->first_name . ' ' . $user->last_name,
+            'first_name' => $user->first_name,
+            'last_name' => $user->last_name,
+            'avatar' => $user->avatar ?? ($profile ? $profile->avatar : null),
+            'bio' => $profile ? $profile->bio : null,
+            'followers' => $followers,
+            'following' => $following,
+            'likes' => $likedPostIds,
             'posts' => $posts,
-            'counts' => [
-                'followers' => $followers,
-                'following' => $following,
-                'posts' => $postsCount
-            ],
-            'share_url' => $profile->share_url
+            'educator_profile' => $educatorProfile
         ], 200);
     }
     
@@ -469,16 +510,76 @@ class ProfileController extends Controller
             ], 403);
         }
 
+        // Get user's posts (public or appropriate visibility level)
+        $posts = $user->posts()
+            ->with(['user', 'likes', 'comments'])
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+            
+        // Get counts for various metrics
+        $followers = $user->followers()->count();
+        $following = $user->following()->count();
+        
+        // Get likes given by the user (post IDs)
+        $likedPostIds = $user->likes()->pluck('post_id')->filter()->map(function($id) {
+            return (string)$id;
+        })->toArray();
+        
+        // Prepare educator profile data if user is an educator
+        $educatorProfile = null;
+        if ($user->role === User::ROLE_EDUCATOR) {
+            // Get ratings data
+            $ratingsReceived = $user->ratingsReceived()
+                ->with('user:id,username,first_name,last_name,avatar')
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get();
+                
+            $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
+            $ratingsCount = $user->ratingsReceived()->count();
+            
+            // Format educator profile according to iOS structure
+            $educatorProfile = [
+                'qualifications' => $profile->qualifications ?? [],
+                'teaching_style' => $profile->teaching_style,
+                'availability' => $profile->availability ?? [],
+                'hire_rate' => (string)($profile->hire_rate ?? "0"),
+                'hire_currency' => $profile->hire_currency ?? 'USD',
+                'social_links' => $profile->social_links ?? [],
+                'average_rating' => (float)$averageRating,
+                'ratings_count' => $ratingsCount,
+                'recent_ratings' => $ratingsReceived->map(function($rating) {
+                    return [
+                        'id' => $rating->id,
+                        'rating' => $rating->rating,
+                        'comment' => $rating->comment,
+                        'created_at' => $rating->created_at->toISOString(),
+                        'user' => [
+                            'username' => $rating->user->username,
+                            'first_name' => $rating->user->first_name,
+                            'last_name' => $rating->user->last_name,
+                            'avatar' => $rating->user->avatar,
+                        ]
+                    ];
+                })->toArray(),
+                'description' => $profile->bio ?? ''
+            ];
+        }
+
+        // Return in the format expected by iOS
         return response()->json([
-            'user' => [
-                'id' => $user->id,
-                'username' => $user->username,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
-                'role' => $user->role,
-                'avatar' => $user->avatar,
-            ],
-            'profile' => $profile
+            'username' => $user->username,
+            'full_name' => $user->first_name . ' ' . $user->last_name,
+            'first_name' => $user->first_name,
+            'last_name' => $user->last_name,
+            'avatar' => $user->avatar ?? $profile->avatar,
+            'bio' => $profile->bio,
+            'followers' => $followers,
+            'following' => $following,
+            'likes' => $likedPostIds,
+            'posts' => $posts,
+            'educator_profile' => $educatorProfile
         ], 200);
     }
     
