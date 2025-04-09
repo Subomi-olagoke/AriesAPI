@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthManager;
+use App\Http\Controllers\BlockController;
 use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\CogniController;
 use App\Http\Controllers\CommentController;
@@ -62,6 +63,12 @@ Route::post('/reset-password/token', [ResetPasswordController::class, 'generateR
 Route::post('/reset-password/reset', [ResetPasswordController::class, 'resetPassword']);
 Route::post('/auth/google', [\App\Http\Controllers\GoogleController::class, 'authenticateWithGoogle']);
 
+// Public profile access by user ID (if not blocked)
+Route::get('/profile/user/{userId}', [ProfileController::class, 'showByUserId']);
+
+// Public profile access by share key
+Route::get('/profile/shared/{shareKey}', [ProfileController::class, 'showByShareKey']);
+
 // Protected routes that require authentication
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthManager::class, 'logout']);
@@ -72,6 +79,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/profile/avatar', [ProfileController::class, 'UploadAvatar']);
     Route::get('/educators/{username}/profile', [EducatorProfileController::class, 'show']);
     Route::post('/profile/educator', [ProfileController::class, 'updateEducatorProfile']);
+    Route::post('/profile/regenerate-share-key', [ProfileController::class, 'regenerateShareKey']);
+    
+    // User Block/Mute APIs
+    Route::post('/users/block', [BlockController::class, 'blockUser']);
+    Route::post('/users/unblock', [BlockController::class, 'unblockUser']);
+    Route::post('/users/mute', [BlockController::class, 'muteUser']);
+    Route::post('/users/unmute', [BlockController::class, 'unmuteUser']);
+    Route::get('/users/blocked', [BlockController::class, 'getBlockedUsers']);
+    Route::get('/users/muted', [BlockController::class, 'getMutedUsers']);
 
     // Post routes - include both singular and plural paths
     Route::get('/post/{post}', [PostController::class, 'viewSinglePost']);
@@ -115,8 +131,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/follow/{username}/status', [FollowController::class, 'checkFollowStatus']);
     Route::get('/followers/{username}', [FollowController::class, 'getFollowers']);
     Route::get('/following/{username}', [FollowController::class, 'getFollowing']);
-
-    // Hire route
 
     // Hire Request routes
     Route::post('/hire-requests', [HireRequestController::class, 'sendRequest']);

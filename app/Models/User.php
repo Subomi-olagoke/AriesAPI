@@ -227,4 +227,56 @@ class User extends Authenticatable {
         
         return $this->ratingsReceived()->avg('rating') ?? 0;
     }
+    
+    /**
+     * Get users that this user has blocked
+     */
+    public function blockedUsers()
+    {
+        return $this->belongsToMany(User::class, 'user_blocks', 'user_id', 'blocked_user_id')
+            ->withTimestamps();
+    }
+    
+    /**
+     * Get users that have blocked this user
+     */
+    public function blockedBy()
+    {
+        return $this->belongsToMany(User::class, 'user_blocks', 'blocked_user_id', 'user_id')
+            ->withTimestamps();
+    }
+    
+    /**
+     * Get users that this user has muted
+     */
+    public function mutedUsers()
+    {
+        return $this->belongsToMany(User::class, 'user_mutes', 'user_id', 'muted_user_id')
+            ->withTimestamps();
+    }
+    
+    /**
+     * Get users that have muted this user
+     */
+    public function mutedBy()
+    {
+        return $this->belongsToMany(User::class, 'user_mutes', 'muted_user_id', 'user_id')
+            ->withTimestamps();
+    }
+    
+    /**
+     * Check if user has blocked another user
+     */
+    public function hasBlocked(User $user)
+    {
+        return $this->blockedUsers()->where('blocked_user_id', $user->id)->exists();
+    }
+    
+    /**
+     * Check if user has muted another user
+     */
+    public function hasMuted(User $user)
+    {
+        return $this->mutedUsers()->where('muted_user_id', $user->id)->exists();
+    }
 }

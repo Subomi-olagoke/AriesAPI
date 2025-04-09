@@ -111,21 +111,25 @@ use Illuminate\Validation\Rules\Password;
         $user->load('profile');
         
         // Create a response array that includes profile information
+        $userData = $user->toArray();
+        
+        // If profile exists, add bio to user object directly
+        if ($user->profile) {
+            $userData['bio'] = $user->profile->bio;
+        } else {
+            $userData['bio'] = null;
+        }
+        
         $responseData = [
-            'user' => $user,
+            'user' => $userData,
             'token' => $token,
             'token_type' => 'Bearer',
         ];
         
-        // If profile exists, add bio and description directly to response
-        if ($user->profile) {
-            $responseData['bio'] = $user->profile->bio;
+        // Only add educator-specific fields if user is an educator
+        if ($user->role === User::ROLE_EDUCATOR && $user->profile) {
             $responseData['qualifications'] = $user->profile->qualifications;
             $responseData['teaching_style'] = $user->profile->teaching_style;
-        } else {
-            $responseData['bio'] = null;
-            $responseData['qualifications'] = null;
-            $responseData['teaching_style'] = null;
         }
 
         return response()->json($responseData, 200)->cookie(
