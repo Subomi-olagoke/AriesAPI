@@ -74,9 +74,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthManager::class, 'logout']);
 
     // User profile routes
-    Route::get('/profile/{user}', [ProfileController::class, 'viewProfile']);
-    Route::post('/profile/update', [ProfileController::class, 'update']);
-    Route::post('/profile/avatar', [ProfileController::class, 'UploadAvatar']);
+    Route::get('/profile', [ProfileController::class, 'show']);
+    Route::post('/profile', [ProfileController::class, 'store']);
+    Route::put('/profile', [ProfileController::class, 'update']);
+    Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar']);
     Route::get('/educators/{username}/profile', [EducatorProfileController::class, 'show']);
     Route::post('/profile/educator', [ProfileController::class, 'updateEducatorProfile']);
     Route::post('/profile/regenerate-share-key', [ProfileController::class, 'regenerateShareKey']);

@@ -130,18 +130,114 @@ class ProfileController extends Controller
     public function show()
     {
         $user = Auth::user();
+        
+        // Load the user with profile relationship for faster retrieval
+        $user->load('profile');
+        
+        // Return user data with profile
+        if ($user->profile) {
+            return response()->json([
+                'user' => $user->toArray(),
+                'profile' => $user->profile,
+                'share_url' => $user->profile->share_url ?? null
+            ], 200);
+        } else {
+            return response()->json([
+                'user' => $user->toArray(),
+                'profile' => null,
+                'message' => 'No profile found for this user'
+            ], 200);
+        }
+    }
+    
+    /**
+     * Upload avatar image
+     */
+    public function uploadAvatar(Request $request)
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048'
+        ]);
+        
+        $user = Auth::user();
         $profile = Profile::where('user_id', $user->id)->first();
         
         if (!$profile) {
-            return response()->json([
-                'message' => 'Profile not found'
-            ], 404);
+            // Create a basic profile if none exists
+            $profile = new Profile();
+            $profile->user_id = $user->id;
+            $profile->save();
         }
-
+        
+        if ($request->hasFile('avatar')) {
+            $avatarUrl = $this->fileUploadService->uploadImage($request->file('avatar'), 'avatars');
+            $profile->avatar = $avatarUrl;
+            
+            if ($profile->save()) {
+                return response()->json([
+                    'message' => 'Avatar uploaded successfully',
+                    'avatar_url' => $avatarUrl
+                ], 200);
+            }
+        }
+        
         return response()->json([
-            'profile' => $profile,
-            'share_url' => $profile->share_url
-        ], 200);
+            'message' => 'Failed to upload avatar'
+        ], 500);
+    }
+    
+    /**
+     * Update educator profile fields
+     */
+    public function updateEducatorProfile(Request $request)
+    {
+        $request->validate([
+            'bio' => 'nullable|string',
+            'qualifications' => 'nullable|array',
+            'teaching_style' => 'nullable|string',
+            'availability' => 'nullable|array',
+            'hire_rate' => 'nullable|numeric',
+            'hire_currency' => 'nullable|string|max:3',
+            'social_links' => 'nullable|array'
+        ]);
+        
+        $user = Auth::user();
+        
+        // Verify user is an educator
+        if ($user->role !== User::ROLE_EDUCATOR) {
+            return response()->json([
+                'message' => 'Only educators can update these profile fields'
+            ], 403);
+        }
+        
+        // Get or create profile
+        $profile = Profile::where('user_id', $user->id)->first();
+        
+        if (!$profile) {
+            $profile = new Profile();
+            $profile->user_id = $user->id;
+        }
+        
+        // Update fields
+        if ($request->has('bio')) $profile->bio = $request->bio;
+        if ($request->has('qualifications')) $profile->qualifications = $request->qualifications;
+        if ($request->has('teaching_style')) $profile->teaching_style = $request->teaching_style;
+        if ($request->has('availability')) $profile->availability = $request->availability;
+        if ($request->has('hire_rate')) $profile->hire_rate = $request->hire_rate;
+        if ($request->has('hire_currency')) $profile->hire_currency = $request->hire_currency;
+        if ($request->has('social_links')) $profile->social_links = $request->social_links;
+        
+        if ($profile->save()) {
+            return response()->json([
+                'message' => 'Educator profile updated successfully',
+                'profile' => $profile,
+                'share_url' => $profile->share_url
+            ], 200);
+        }
+        
+        return response()->json([
+            'message' => 'Error updating educator profile'
+        ], 500);
     }
     
     /**

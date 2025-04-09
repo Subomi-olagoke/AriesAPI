@@ -27,6 +27,7 @@ class MessageController extends Controller
         $conversations = Conversation::where('user_one_id', $user->id)
             ->orWhere('user_two_id', $user->id)
             ->with(['latestMessage'])
+            ->orderBy('last_message_at', 'desc')
             ->get()
             ->map(function ($conversation) use ($user) {
                 $otherUser = $conversation->getOtherUser($user);
@@ -69,10 +70,14 @@ class MessageController extends Controller
 
     public function sendMessage(Request $request)
     {
+        // Improved validation with better error messages
         $request->validate([
             'username' => 'required|exists:users,username',
             'message' => 'required_without:attachment|string|max:5000',
             'attachment' => 'nullable|file|max:10240',
+        ], [
+            'username.exists' => 'User not found',
+            'message.required_without' => 'Please provide either a message or an attachment',
         ]);
 
         $user = Auth::user();
@@ -113,7 +118,6 @@ class MessageController extends Controller
                     'user_one_id' => $user->id,
                     'user_two_id' => $recipient->id,
                     'last_message_at' => now()
-                    // ID will be auto-generated
                 ]);
             }
 
@@ -138,6 +142,11 @@ class MessageController extends Controller
 
             $message = Message::create($messageData);
 
+            // Process mentions in the message body
+            if (!empty($messageData['body'])) {
+                $message->processMentions($messageData['body']);
+            }
+
             $conversation->update([
                 'last_message_at' => now()
             ]);
@@ -146,9 +155,15 @@ class MessageController extends Controller
 
             DB::commit();
 
+            // Load relationships for response
+            $message->load('sender');
+            
             return response()->json([
-                'conversation' => $conversation->load(['messages.sender']),
-                'message' => $message->load('sender')
+                'message' => $message,
+                'conversation' => [
+                    'id' => $conversation->id,
+                    'other_user' => $recipient->only(['id', 'username', 'first_name', 'last_name', 'avatar'])
+                ]
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -179,12 +194,15 @@ class MessageController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $conversation->messages()
+        $updatedCount = $conversation->messages()
             ->where('sender_id', '!=', $user->id)
             ->where('is_read', false)
             ->update(['is_read' => true]);
 
-        return response()->json(['message' => 'Messages marked as read']);
+        return response()->json([
+            'message' => 'Messages marked as read',
+            'updated_count' => $updatedCount
+        ]);
     }
 
     public function deleteMessage($messageId)
