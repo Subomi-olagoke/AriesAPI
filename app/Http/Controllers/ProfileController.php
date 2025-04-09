@@ -170,7 +170,7 @@ class ProfileController extends Controller
                 'availability' => $user->profile->availability ?? [],
                 'hire_rate' => (string)($user->profile->hire_rate ?? "0"),
                 'hire_currency' => $user->profile->hire_currency ?? 'USD',
-                'social_links' => $user->profile->social_links ?? [],
+                'social_links' => $user->profile->social_links ? (object)$user->profile->social_links : (object)[],
                 'average_rating' => (float)$averageRating,
                 'ratings_count' => $ratingsCount,
                 'recent_ratings' => $ratingsReceived->map(function($rating) {
