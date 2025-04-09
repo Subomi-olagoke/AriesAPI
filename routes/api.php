@@ -63,10 +63,9 @@ Route::post('/reset-password/token', [ResetPasswordController::class, 'generateR
 Route::post('/reset-password/reset', [ResetPasswordController::class, 'resetPassword']);
 Route::post('/auth/google', [\App\Http\Controllers\GoogleController::class, 'authenticateWithGoogle']);
 
-// Public profile access by user ID (if not blocked)
+// Public profile access routes
 Route::get('/profile/user/{userId}', [ProfileController::class, 'showByUserId']);
-
-// Public profile access by share key
+Route::get('/profile/username/{username}', [ProfileController::class, 'showByUsername']);
 Route::get('/profile/shared/{shareKey}', [ProfileController::class, 'showByShareKey']);
 
 // Protected routes that require authentication

@@ -277,6 +277,58 @@ class ProfileController extends Controller
     }
     
     /**
+     * Show public profile by username
+     */
+    public function showByUsername($username)
+    {
+        $user = User::where('username', $username)->first();
+        
+        if (!$user) {
+            return response()->json([
+                'message' => 'User not found'
+            ], 404);
+        }
+        
+        $profile = Profile::where('user_id', $user->id)->first();
+        
+        if (!$profile) {
+            return response()->json([
+                'user' => [
+                    'id' => $user->id,
+                    'username' => $user->username,
+                    'first_name' => $user->first_name,
+                    'last_name' => $user->last_name,
+                    'role' => $user->role,
+                    'avatar' => $user->avatar,
+                ],
+                'profile' => null,
+                'message' => 'User has no profile'
+            ], 200);
+        }
+        
+        // Check if requesting user is blocked by profile owner
+        $requestingUser = Auth::user();
+        if ($requestingUser && $user->hasBlocked($requestingUser)) {
+            return response()->json([
+                'message' => 'You cannot view this profile'
+            ], 403);
+        }
+
+        return response()->json([
+            'user' => [
+                'id' => $user->id,
+                'username' => $user->username,
+                'first_name' => $user->first_name,
+                'last_name' => $user->last_name,
+                'role' => $user->role,
+                'avatar' => $user->avatar,
+            ],
+            'profile' => $profile,
+            'share_url' => $profile->share_url
+        ], 200);
+    }
+    
+    /**
      * View a shared profile using share key
      */
     public function showByShareKey($shareKey)
