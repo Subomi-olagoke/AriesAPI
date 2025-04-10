@@ -373,7 +373,7 @@ class ProfileController extends Controller
             ];
         }
 
-        // Return in the format expected by iOS
+        // Return in the desired format with properties at root level
         return response()->json([
             'username' => $user->username,
             'full_name' => $user->first_name . ' ' . $user->last_name,
@@ -471,7 +471,7 @@ class ProfileController extends Controller
             ];
         }
             
-        // Return in the format expected by iOS
+        // Return in the desired format with properties at root level
         return response()->json([
             'username' => $user->username,
             'full_name' => $user->first_name . ' ' . $user->last_name,
@@ -567,7 +567,7 @@ class ProfileController extends Controller
             ];
         }
 
-        // Return in the format expected by iOS
+        // Return in the desired format with properties at root level
         return response()->json([
             'username' => $user->username,
             'full_name' => $user->first_name . ' ' . $user->last_name,
