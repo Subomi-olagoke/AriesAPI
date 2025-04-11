@@ -311,30 +311,39 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/messages/unread-count', [MessageController::class, 'getUnreadCount']);
     Route::get('/message/unread-count', [MessageController::class, 'getUnreadCount']); // Additional route
 
-    // Readlist routes
-    Route::get('/readlists', [ReadlistController::class, 'getUserReadlists']);
-    Route::get('/readlist', [ReadlistController::class, 'getUserReadlists']); // Additional route
-    Route::post('/readlists', [ReadlistController::class, 'store']);
-    Route::post('/readlist', [ReadlistController::class, 'store']); // Additional route
-    Route::get('/readlists/{id}', [ReadlistController::class, 'show']);
-    Route::get('/readlist/{id}', [ReadlistController::class, 'show']); // Additional route
-    Route::put('/readlists/{id}', [ReadlistController::class, 'update']);
-    Route::put('/readlist/{id}', [ReadlistController::class, 'update']); // Additional route
-    Route::delete('/readlists/{id}', [ReadlistController::class, 'destroy']);
-    Route::delete('/readlist/{id}', [ReadlistController::class, 'destroy']); // Additional route
-    Route::post('/readlists/{id}/items', [ReadlistController::class, 'addItem']);
-    Route::post('/readlist/{id}/items', [ReadlistController::class, 'addItem']); // Additional route
-    Route::post('/readlist/{id}/item', [ReadlistController::class, 'addItem']); // Additional route
-    Route::post('/readlists/{id}/item', [ReadlistController::class, 'addItem']); // Additional route
-    Route::delete('/readlists/{id}/items/{itemId}', [ReadlistController::class, 'removeItem']);
-    Route::delete('/readlist/{id}/items/{itemId}', [ReadlistController::class, 'removeItem']); // Additional route
-    Route::delete('/readlist/{id}/item/{itemId}', [ReadlistController::class, 'removeItem']); // Additional route
-    Route::delete('/readlists/{id}/item/{itemId}', [ReadlistController::class, 'removeItem']); // Additional route
-    Route::post('/readlists/{id}/reorder', [ReadlistController::class, 'reorderItems']);
-    Route::post('/readlist/{id}/reorder', [ReadlistController::class, 'reorderItems']); // Additional route
-    Route::post('/readlists/{id}/regenerate-key', [ReadlistController::class, 'regenerateShareKey']);
-    Route::post('/readlist/{id}/regenerate-key', [ReadlistController::class, 'regenerateShareKey']); // Additional route
+    // User-specific readlist routes (must come BEFORE the parameter routes)
+    Route::get('/readlists/user', [ReadlistController::class, 'getUserReadlists']);
+    Route::get('/readlist/user', [ReadlistController::class, 'getUserReadlists']);
 
+    // Shared readlist route by key
+    Route::get('/readlists/shared/{shareKey}', [ReadlistController::class, 'showByShareKey']);
+    Route::get('/readlist/shared/{shareKey}', [ReadlistController::class, 'showByShareKey']);
+
+    // Create readlist routes
+    Route::post('/readlists', [ReadlistController::class, 'store']);
+    Route::post('/readlist', [ReadlistController::class, 'store']);
+
+    // Routes with ID parameters (must come AFTER more specific routes to avoid conflicts)
+    Route::get('/readlists/{id}', [ReadlistController::class, 'show'])->where('id', '[0-9]+');
+    Route::get('/readlist/{id}', [ReadlistController::class, 'show'])->where('id', '[0-9]+');
+    Route::put('/readlists/{id}', [ReadlistController::class, 'update'])->where('id', '[0-9]+');
+    Route::put('/readlist/{id}', [ReadlistController::class, 'update'])->where('id', '[0-9]+');
+    Route::delete('/readlists/{id}', [ReadlistController::class, 'destroy'])->where('id', '[0-9]+');
+    Route::delete('/readlist/{id}', [ReadlistController::class, 'destroy'])->where('id', '[0-9]+');
+
+    // Readlist item management routes
+    Route::post('/readlists/{id}/items', [ReadlistController::class, 'addItem'])->where('id', '[0-9]+');
+    Route::post('/readlist/{id}/items', [ReadlistController::class, 'addItem'])->where('id', '[0-9]+');
+    Route::post('/readlist/{id}/item', [ReadlistController::class, 'addItem'])->where('id', '[0-9]+');
+    Route::post('/readlists/{id}/item', [ReadlistController::class, 'addItem'])->where('id', '[0-9]+');
+    Route::delete('/readlists/{id}/items/{itemId}', [ReadlistController::class, 'removeItem'])->where(['id' => '[0-9]+', 'itemId' => '[0-9]+']);
+    Route::delete('/readlist/{id}/items/{itemId}', [ReadlistController::class, 'removeItem'])->where(['id' => '[0-9]+', 'itemId' => '[0-9]+']);
+    Route::delete('/readlist/{id}/item/{itemId}', [ReadlistController::class, 'removeItem'])->where(['id' => '[0-9]+', 'itemId' => '[0-9]+']);
+    Route::delete('/readlists/{id}/item/{itemId}', [ReadlistController::class, 'removeItem'])->where(['id' => '[0-9]+', 'itemId' => '[0-9]+']);
+    Route::post('/readlists/{id}/reorder', [ReadlistController::class, 'reorderItems'])->where('id', '[0-9]+');
+    Route::post('/readlist/{id}/reorder', [ReadlistController::class, 'reorderItems'])->where('id', '[0-9]+');
+    Route::post('/readlists/{id}/regenerate-key', [ReadlistController::class, 'regenerateShareKey'])->where('id', '[0-9]+');
+    Route::post('/readlist/{id}/regenerate-key', [ReadlistController::class, 'regenerateShareKey'])->where('id', '[0-9]+');
     // Open Library routes
     Route::get('/libraries', [OpenLibraryController::class, 'index']);
     Route::get('/library', [OpenLibraryController::class, 'index']); // Additional route

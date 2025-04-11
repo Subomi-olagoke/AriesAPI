@@ -6,15 +6,16 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Readlist extends Model
 {
     use HasFactory;
 
-    // Allow manual ID assignment by setting incrementing to false
-    public $incrementing = false;
+    // Enable auto-incrementing for consistency with your database
+    public $incrementing = true;
     
-    // Make sure the key type is int
+    // Ensure key type is integer
     protected $keyType = 'int';
     
     protected $fillable = [
@@ -37,7 +38,7 @@ class Readlist extends Model
         // Automatically generate a unique share_key when creating a readlist
         static::creating(function ($model) {
             if (!$model->share_key) {
-                $model->share_key = \Illuminate\Support\Str::random(10);
+                $model->share_key = Str::random(10);
             }
         });
     }
