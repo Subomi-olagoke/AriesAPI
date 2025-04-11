@@ -2,11 +2,15 @@
 
 namespace App\Notifications;
 
+use App\Models\User;
 use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Notification;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\MailMessage;
 
-class HireRequestNotification extends BaseNotification
+class HireRequestNotification extends BaseNotification // Assuming it extends BaseNotification
 {
+    use Queueable;
 
     protected $sender;
     protected $message;
@@ -14,54 +18,46 @@ class HireRequestNotification extends BaseNotification
 
     /**
      * Create a new notification instance.
-     * 
-     * @param User $sender The user sending/creating the notification
-     * @param string|null $message Custom message for the notification
-     * @param string $type Type of notification: 'new_request', 'request_accepted', 'request_declined', 'custom'
+     *
+     * @param User $sender
+     * @param string $message
+     * @param string $type
+     * @return void
      */
-    public function __construct($sender, $message = null, $type = 'new_request')
+    public function __construct(User $sender, $message, $type = 'new_request')
     {
         $this->sender = $sender;
         $this->message = $message;
         $this->type = $type;
     }
 
+    /**
+     * Get the notification's delivery channels.
+     *
+     * @param  mixed  $notifiable
+     * @return array
+     */
+    public function via($notifiable)
+    {
+        return ['database', 'broadcast'];
+    }
 
     /**
      * Get the array representation of the notification.
      *
-     * @return array<string, mixed>
+     * IMPORTANT: Use the same signature as the parent class
+     * 
+     * @param  mixed  $notifiable
+     * @return array
      */
-    public function toArray(object $notifiable): array
+    public function toArray($notifiable)
     {
-        $defaultMessage = '';
-        
-        switch ($this->type) {
-            case 'new_request':
-                $defaultMessage = $this->sender->first_name . ' ' . $this->sender->last_name . ' has sent you a hire request.';
-                break;
-            case 'request_accepted':
-                $defaultMessage = $this->sender->first_name . ' ' . $this->sender->last_name . ' has accepted your hire request.';
-                break;
-            case 'request_declined':
-                $defaultMessage = $this->sender->first_name . ' ' . $this->sender->last_name . ' has declined your hire request.';
-                break;
-            default: // 'custom' or any other type
-                $defaultMessage = $this->message ?? 'You have a new notification related to a hire request.';
-                break;
-        }
-        
-        // Use custom message if provided, otherwise use the default for this type
-        $message = $this->message ?? $defaultMessage;
-        
         return [
-            'title' => 'Edututor Hire Request',
-            'message' => $message,
             'sender_id' => $this->sender->id,
             'sender_name' => $this->sender->first_name . ' ' . $this->sender->last_name,
-            'type' => $this->type,
-            'notification_type' => 'hire_request',
-            'message_content' => $this->message,
+            'sender_avatar' => $this->sender->avatar,
+            'message' => $this->message,
+            'type' => $this->type
         ];
     }
 }
