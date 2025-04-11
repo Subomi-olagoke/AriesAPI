@@ -17,29 +17,46 @@ use Illuminate\Support\Str;
 class MessageController extends Controller
 {
     public function getConversations()
-    {
-        $user = Auth::user();
+{
+    $user = Auth::user();
 
-        if (!$user) {
-            return response()->json(['message' => 'User not authenticated'], 401);
-        }
-
-        $conversations = Conversation::where('user_one_id', $user->id)
-            ->orWhere('user_two_id', $user->id)
-            ->with(['latestMessage'])
-            ->orderBy('last_message_at', 'desc')
-            ->get()
-            ->map(function ($conversation) use ($user) {
-                $otherUser = $conversation->getOtherUser($user);
-                $conversation->other_user = $otherUser;
-                $conversation->unread_count = $conversation->unreadMessagesFor($user);
-                return $conversation;
-            });
-
-        return response()->json([
-            'conversations' => $conversations
-        ]);
+    if (!$user) {
+        return response()->json(['message' => 'User not authenticated'], 401);
     }
+
+    $conversations = Conversation::where('user_one_id', $user->id)
+        ->orWhere('user_two_id', $user->id)
+        ->with(['latestMessage'])
+        ->orderBy('last_message_at', 'desc')
+        ->get()
+        ->map(function ($conversation) use ($user) {
+            $otherUser = $conversation->getOtherUser($user);
+            
+            // Create a new object with an "id" field set to "0"
+            $result = [
+                'id' => '0', // Add this to fix the Swift decoding error
+                'conversation_id' => $conversation->id,
+                'user_one_id' => $conversation->user_one_id,
+                'user_two_id' => $conversation->user_two_id,
+                'last_message_at' => $conversation->last_message_at,
+                'created_at' => $conversation->created_at,
+                'updated_at' => $conversation->updated_at,
+                'other_user' => $otherUser,
+                'unread_count' => $conversation->unreadMessagesFor($user)
+            ];
+            
+            // Include latestMessage if it exists
+            if ($conversation->latestMessage) {
+                $result['latest_message'] = $conversation->latestMessage;
+            }
+            
+            return $result;
+        });
+
+    return response()->json([
+        'conversations' => $conversations
+    ]);
+}
 
     public function getConversation($id)
     {
