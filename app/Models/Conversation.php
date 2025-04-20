@@ -29,14 +29,19 @@ class Conversation extends Model
         'is_archived' => 'boolean',
     ];
 
-    // Automatically generate UUID when creating a new conversation
+    // Generate ID based on user IDs when creating a new conversation
     protected static function boot()
     {
         parent::boot();
         
         static::creating(function ($model) {
             if (empty($model->id)) {
-                $model->id = Str::uuid()->toString();
+                // Sort user IDs to ensure consistency regardless of who initiates the conversation
+                $userIds = [$model->user_one_id, $model->user_two_id];
+                sort($userIds);
+                
+                // Combine them to create a unique but predictable ID
+                $model->id = implode('_', $userIds);
             }
         });
     }

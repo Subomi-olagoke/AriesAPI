@@ -151,13 +151,24 @@ class MessageController extends Controller
         try {
             DB::beginTransaction();
 
-            $conversation = Conversation::where(function ($query) use ($user, $recipient) {
-                $query->where('user_one_id', $user->id)
-                      ->where('user_two_id', $recipient->id);
-            })->orWhere(function ($query) use ($user, $recipient) {
-                $query->where('user_one_id', $recipient->id)
-                      ->where('user_two_id', $user->id);
-            })->first();
+            // Sort user IDs to match the pattern used in the Conversation model
+            $userIds = [$user->id, $recipient->id];
+            sort($userIds);
+            $conversationId = implode('_', $userIds);
+            
+            // Try to find by ID first (more efficient)
+            $conversation = Conversation::find($conversationId);
+            
+            // Fallback to the old query method if not found (for backward compatibility)
+            if (!$conversation) {
+                $conversation = Conversation::where(function ($query) use ($user, $recipient) {
+                    $query->where('user_one_id', $user->id)
+                          ->where('user_two_id', $recipient->id);
+                })->orWhere(function ($query) use ($user, $recipient) {
+                    $query->where('user_one_id', $recipient->id)
+                          ->where('user_two_id', $user->id);
+                })->first();
+            }
 
             if (!$conversation) {
                 $conversation = Conversation::create([
