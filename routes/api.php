@@ -379,6 +379,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/cogni/explain', [CogniController::class, 'explain']);
     Route::post('/cogni/generate-quiz', [CogniController::class, 'generateQuiz']);
     Route::post('/cogni/generate-readlist', [CogniController::class, 'generateTopicReadlist']);
+    Route::post('/cogni/generate-cognition', [CogniController::class, 'generateCognitionReadlist']);
     Route::post('/cogni/conversations/clear', [CogniController::class, 'clearConversation']);
     Route::post('/cogni/conversation/clear', [CogniController::class, 'clearConversation']); // Additional route
 
@@ -449,6 +450,27 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/default', [PaymentMethodController::class, 'setDefault']);
         Route::delete('/{id}', [PaymentMethodController::class, 'destroy']);
     });
+    
+    // Payment Split Test Routes 
+    Route::prefix('payment-split')->group(function () {
+        Route::post('/test-course', [App\Http\Controllers\PaymentSplitController::class, 'testCourseSplit']);
+        Route::post('/test-hire', [App\Http\Controllers\PaymentSplitController::class, 'testHireSplit']);
+        Route::get('/details/{reference}', [App\Http\Controllers\PaymentSplitController::class, 'getSplitDetails']);
+    });
+    
+    // Verification Routes
+    Route::prefix('verification')->group(function () {
+        Route::post('/submit', [App\Http\Controllers\VerificationController::class, 'submitVerification']);
+        Route::get('/status', [App\Http\Controllers\VerificationController::class, 'getVerificationStatus']);
+    });
+    
+    // Educator Earnings Routes
+    Route::prefix('educator/earnings')->group(function () {
+        Route::get('/bank-info', [App\Http\Controllers\EducatorEarningsController::class, 'getBankInfo']);
+        Route::post('/bank-info', [App\Http\Controllers\EducatorEarningsController::class, 'updateBankInfo']);
+        Route::get('/', [App\Http\Controllers\EducatorEarningsController::class, 'getEarnings']);
+        Route::get('/{splitId}', [App\Http\Controllers\EducatorEarningsController::class, 'getEarningDetails']);
+    });
 });
 
 // Webhook routes (no authentication required)
@@ -497,6 +519,50 @@ Route::get('/subscription/failed', function() {
 Route::get('/subscriptions/failed', function() {
     return view('subscription.failed');
 })->name('subscriptions.failed'); // Additional route
+
+// Reporting routes
+Route::middleware('auth:sanctum')->group(function () {
+    // Report endpoints
+    Route::post('/reports/user/{userId}', [App\Http\Controllers\ReportController::class, 'reportUser']);
+    Route::post('/reports/post/{postId}', [App\Http\Controllers\ReportController::class, 'reportPost']);
+    Route::post('/reports/educator/{educatorId}', [App\Http\Controllers\ReportController::class, 'reportEducator']);
+    Route::get('/reports/my', [App\Http\Controllers\ReportController::class, 'myReports']);
+    
+    // Admin only routes for reports
+    Route::middleware('admin')->group(function() {
+        Route::get('/reports', [App\Http\Controllers\ReportController::class, 'index']);
+        Route::get('/reports/{id}', [App\Http\Controllers\ReportController::class, 'show']);
+        Route::put('/reports/{id}/status', [App\Http\Controllers\ReportController::class, 'updateStatus']);
+    });
+    
+    // Admin management routes
+    Route::middleware('admin')->prefix('admin')->group(function() {
+        // User management
+        Route::post('/users/{userId}/ban', [App\Http\Controllers\AdminController::class, 'banUser']);
+        Route::post('/users/{userId}/unban', [App\Http\Controllers\AdminController::class, 'unbanUser']);
+        Route::get('/users/banned', [App\Http\Controllers\AdminController::class, 'getBannedUsers']);
+        
+        // Dashboard metrics
+        Route::get('/overview', [App\Http\Controllers\AdminController::class, 'getAppOverview']);
+        Route::get('/users/growth', [App\Http\Controllers\AdminController::class, 'getUserGrowth']);
+        Route::get('/revenue', [App\Http\Controllers\AdminController::class, 'getRevenueStats']);
+        Route::get('/content/engagement', [App\Http\Controllers\AdminController::class, 'getContentEngagement']);
+        Route::get('/user-activity', [App\Http\Controllers\AdminController::class, 'getUserActivity']);
+        Route::get('/courses/performance', [App\Http\Controllers\AdminController::class, 'getCoursePerformance']);
+        Route::get('/subscriptions/metrics', [App\Http\Controllers\AdminController::class, 'getSubscriptionMetrics']);
+        
+        // Refund management
+        Route::post('/refunds/process', [App\Http\Controllers\AdminController::class, 'processRefund']);
+        Route::get('/refunds', [App\Http\Controllers\AdminController::class, 'getRefunds']);
+        Route::get('/refunds/{id}', [App\Http\Controllers\AdminController::class, 'getRefundDetails']);
+        
+        // Verification management
+        Route::get('/verifications', [App\Http\Controllers\VerificationController::class, 'getAllVerificationRequests']);
+        Route::get('/verifications/{userId}', [App\Http\Controllers\VerificationController::class, 'getVerificationDetails']);
+        Route::put('/verifications/{userId}/status', [App\Http\Controllers\VerificationController::class, 'updateVerificationStatus']);
+        Route::put('/verification-requests/{requestId}/status', [App\Http\Controllers\VerificationController::class, 'updateDocumentStatus']);
+    });
+});
 
 // Device registration for push notifications
 Route::middleware('auth:sanctum')->group(function () {
@@ -564,4 +630,29 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/subscription/cancel', [\App\Http\Controllers\SubscriptionController::class, 'cancel']);
     Route::post('/subscriptions/use-credits', [\App\Http\Controllers\SubscriptionController::class, 'useCredits']);
     Route::post('/subscription/use-credits', [\App\Http\Controllers\SubscriptionController::class, 'useCredits']);
+    
+    // AlexPoints routes
+    Route::prefix('alex-points')->group(function () {
+        Route::get('/summary', [\App\Http\Controllers\AlexPointsController::class, 'summary']);
+        Route::get('/transactions', [\App\Http\Controllers\AlexPointsController::class, 'transactions']);
+        Route::get('/rules', [\App\Http\Controllers\AlexPointsController::class, 'rules']);
+        Route::get('/levels', [\App\Http\Controllers\AlexPointsController::class, 'levels']);
+        Route::get('/leaderboard', [\App\Http\Controllers\AlexPointsController::class, 'leaderboard']);
+        
+        // Admin-only routes
+        Route::middleware('admin')->group(function() {
+            Route::post('/rules', [\App\Http\Controllers\AlexPointsController::class, 'createRule']);
+            Route::put('/rules/{id}', [\App\Http\Controllers\AlexPointsController::class, 'updateRule']);
+            Route::post('/levels', [\App\Http\Controllers\AlexPointsController::class, 'createLevel']);
+            Route::put('/levels/{id}', [\App\Http\Controllers\AlexPointsController::class, 'updateLevel']);
+            Route::post('/adjust', [\App\Http\Controllers\AlexPointsController::class, 'adjustPoints']);
+        });
+    });
+    
+    // Cognition routes
+    Route::prefix('cognition')->group(function () {
+        Route::get('/readlist', [\App\Http\Controllers\CognitionController::class, 'getCognitionReadlist']);
+        Route::post('/readlist/update', [\App\Http\Controllers\CognitionController::class, 'updateCognitionReadlist']);
+        Route::get('/profile', [\App\Http\Controllers\CognitionController::class, 'viewInterestProfile']);
+    });
 });

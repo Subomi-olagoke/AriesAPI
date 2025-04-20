@@ -177,4 +177,12 @@ class Post extends Model {
                 $q->where('user_id', $user->id);
             });
     }
+    
+    /**
+     * Get reports for this post
+     */
+    public function reports()
+    {
+        return $this->morphMany(Report::class, 'reportable');
+    }
 }

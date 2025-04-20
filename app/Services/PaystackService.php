@@ -25,16 +25,24 @@ class PaystackService
      * @param float $amount Amount in naira
      * @param string $callbackUrl URL to redirect after payment
      * @param array $metadata Additional data to store with transaction
+     * @param array $splitConfig Split payment configuration (optional)
      * @return array
      */
-    public function initializeTransaction($email, $amount, $callbackUrl, $metadata = [])
+    public function initializeTransaction($email, $amount, $callbackUrl, $metadata = [], $splitConfig = null)
     {
-        return $this->makeRequest('POST', '/transaction/initialize', [
+        $data = [
             'email' => $email,
             'amount' => $amount * 100, // Convert to kobo
             'callback_url' => $callbackUrl,
             'metadata' => $metadata
-        ]);
+        ];
+        
+        // Add split payment data if provided
+        if ($splitConfig) {
+            $data['split'] = $splitConfig;
+        }
+        
+        return $this->makeRequest('POST', '/transaction/initialize', $data);
     }
 
     /**
@@ -270,6 +278,162 @@ class PaystackService
         }
         
         return $this->makeRequest('POST', '/refund', $data);
+    }
+    
+    /**
+     * Create a split payment configuration
+     *
+     * @param string $name Name of the split payment
+     * @param array $subaccounts Array of subaccount objects with subaccount code and share (percentage)
+     * @param string $type Split type (percentage or flat)
+     * @param string $currency Currency code
+     * @param float $bearerFee Percentage fee to be deducted from main account (optional)
+     * @return array Response from Paystack
+     */
+    public function createSplitConfig($name, $subaccounts, $type = 'percentage', $currency = 'NGN', $bearerFee = 0)
+    {
+        $data = [
+            'name' => $name,
+            'type' => $type,
+            'currency' => $currency,
+            'subaccounts' => $subaccounts
+        ];
+        
+        if ($bearerFee > 0) {
+            $data['bearer_type'] = 'account';
+            $data['bearer_subaccount'] = null;
+        }
+        
+        return $this->makeRequest('POST', '/split', $data);
+    }
+    
+    /**
+     * Get a split payment configuration by ID or code
+     *
+     * @param string $idOrCode Split ID or code
+     * @return array Response from Paystack
+     */
+    public function getSplitConfig($idOrCode)
+    {
+        return $this->makeRequest('GET', "/split/{$idOrCode}");
+    }
+    
+    /**
+     * List all split payment configurations
+     *
+     * @param int $perPage Number of results per page
+     * @param int $page Page number
+     * @return array Response from Paystack
+     */
+    public function listSplitConfigs($perPage = 50, $page = 1)
+    {
+        return $this->makeRequest('GET', "/split?perPage={$perPage}&page={$page}");
+    }
+    
+    /**
+     * Update a split payment configuration
+     *
+     * @param string $idOrCode Split ID or code
+     * @param string $name Name of the split payment (optional)
+     * @param bool $active Status of the split (optional)
+     * @param float $bearerFee Percentage fee to be deducted from main account (optional)
+     * @return array Response from Paystack
+     */
+    public function updateSplitConfig($idOrCode, $name = null, $active = null, $bearerFee = null)
+    {
+        $data = [];
+        
+        if ($name !== null) {
+            $data['name'] = $name;
+        }
+        
+        if ($active !== null) {
+            $data['active'] = $active;
+        }
+        
+        if ($bearerFee !== null) {
+            $data['bearer_type'] = 'account';
+            $data['bearer_subaccount'] = null;
+            $data['bearer_fee'] = $bearerFee;
+        }
+        
+        return $this->makeRequest('PUT', "/split/{$idOrCode}", $data);
+    }
+    
+    /**
+     * Add a subaccount to a split payment configuration
+     *
+     * @param string $idOrCode Split ID or code
+     * @param string $subaccount Subaccount code
+     * @param float $share Share percentage or flat amount
+     * @return array Response from Paystack
+     */
+    public function addSubaccountToSplit($idOrCode, $subaccount, $share)
+    {
+        return $this->makeRequest('POST', "/split/{$idOrCode}/subaccount/add", [
+            'subaccount' => $subaccount,
+            'share' => $share
+        ]);
+    }
+    
+    /**
+     * Remove a subaccount from a split payment configuration
+     *
+     * @param string $idOrCode Split ID or code
+     * @param string $subaccount Subaccount code
+     * @return array Response from Paystack
+     */
+    public function removeSubaccountFromSplit($idOrCode, $subaccount)
+    {
+        return $this->makeRequest('POST', "/split/{$idOrCode}/subaccount/remove", [
+            'subaccount' => $subaccount
+        ]);
+    }
+    
+    /**
+     * Create a subaccount for receiving split payments
+     *
+     * @param string $businessName Business name
+     * @param string $settlementBank Bank code
+     * @param string $accountNumber Bank account number
+     * @param string $percentageCharge Percentage to charge (optional)
+     * @param string $description Description (optional)
+     * @param string $primaryContactEmail Primary contact email (optional)
+     * @param string $primaryContactName Primary contact name (optional)
+     * @param string $primaryContactPhone Primary contact phone (optional)
+     * @param string $metadata Additional metadata (optional)
+     * @return array Response from Paystack
+     */
+    public function createSubaccount($businessName, $settlementBank, $accountNumber, $percentageCharge = '0', $description = '', $primaryContactEmail = '', $primaryContactName = '', $primaryContactPhone = '', $metadata = null)
+    {
+        $data = [
+            'business_name' => $businessName,
+            'settlement_bank' => $settlementBank,
+            'account_number' => $accountNumber,
+            'percentage_charge' => $percentageCharge
+        ];
+        
+        if ($description) {
+            $data['description'] = $description;
+        }
+        
+        if ($primaryContactEmail) {
+            $data['primary_contact_email'] = $primaryContactEmail;
+        }
+        
+        if ($primaryContactName) {
+            $data['primary_contact_name'] = $primaryContactName;
+        }
+        
+        if ($primaryContactPhone) {
+            $data['primary_contact_phone'] = $primaryContactPhone;
+        }
+        
+        if ($metadata) {
+            $data['metadata'] = $metadata;
+        }
+        
+        return $this->makeRequest('POST', '/subaccount', $data);
     }
 
     /**

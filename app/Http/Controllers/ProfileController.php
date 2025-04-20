@@ -85,21 +85,39 @@ class ProfileController extends Controller
             'availability' => 'nullable|array',
             'hire_rate' => 'nullable|numeric',
             'hire_currency' => 'nullable|string|max:3',
-            'social_links' => 'nullable|array'
+            'social_links' => 'nullable|array',
+            'first_name' => 'nullable|string|max:255',
+            'last_name' => 'nullable|string|max:255',
+            'username' => 'nullable|string|max:255|unique:users,username,' . Auth::id(),
         ]);
 
         $user = Auth::user();
+
+        // Update user information if provided
+        if ($request->has('first_name')) {
+            $user->first_name = $request->first_name;
+        }
+        
+        if ($request->has('last_name')) {
+            $user->last_name = $request->last_name;
+        }
+        
+        if ($request->has('username')) {
+            $user->username = $request->username;
+        }
+        
+        $user->save();
 
         // Get user's profile
         $profile = Profile::where('user_id', $user->id)->first();
         
         if (!$profile) {
-            return response()->json([
-                'message' => 'Profile not found'
-            ], 404);
+            // Create a new profile if one doesn't exist
+            $profile = new Profile();
+            $profile->user_id = $user->id;
         }
 
-        // Update profile
+        // Update profile fields
         if ($request->has('bio')) $profile->bio = $request->bio;
         if ($request->has('qualifications')) $profile->qualifications = $request->qualifications;
         if ($request->has('teaching_style')) $profile->teaching_style = $request->teaching_style;
@@ -118,7 +136,12 @@ class ProfileController extends Controller
             return response()->json([
                 'message' => 'Profile updated successfully',
                 'profile' => $profile,
-                'share_url' => $profile->share_url
+                'share_url' => $profile->share_url,
+                'user' => [
+                    'first_name' => $user->first_name,
+                    'last_name' => $user->last_name,
+                    'username' => $user->username,
+                ]
             ], 200);
         }
 

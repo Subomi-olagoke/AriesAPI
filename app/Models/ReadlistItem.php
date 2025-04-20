@@ -16,7 +16,11 @@ class ReadlistItem extends Model
         'item_id',
         'item_type',
         'order',
-        'notes'
+        'notes',
+        'title',
+        'description',
+        'url',
+        'type'
     ];
 
     public function readlist(): BelongsTo

@@ -42,6 +42,12 @@ class User extends Authenticatable {
         'role',
         'avatar',
         'google_id',
+        'is_banned',
+        'banned_at',
+        'ban_reason',
+        'alex_points',
+        'point_level',
+        'points_to_next_level',
     ];
 
     protected $hidden = [
@@ -52,6 +58,11 @@ class User extends Authenticatable {
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'is_banned' => 'boolean',
+        'banned_at' => 'datetime',
+        'alex_points' => 'integer',
+        'point_level' => 'integer',
+        'points_to_next_level' => 'integer',
     ];
 
     /**
@@ -372,5 +383,241 @@ class User extends Authenticatable {
             'status' => 'active',
             'can_message' => true
         ])->exists();
+    }
+    
+    /**
+     * Get reports submitted by this user
+     */
+    public function reports()
+    {
+        return $this->hasMany(Report::class, 'reporter_id');
+    }
+    
+    /**
+     * Get reports about this user
+     */
+    public function reported()
+    {
+        return $this->morphMany(Report::class, 'reportable');
+    }
+    
+    /**
+     * Get verification requests submitted by this user
+     */
+    public function verificationRequests()
+    {
+        return $this->hasMany(VerificationRequest::class);
+    }
+    
+    /**
+     * Check if user is verified
+     */
+    public function isVerified()
+    {
+        return $this->is_verified;
+    }
+    
+    /**
+     * Check if user can be hired (educator must be verified)
+     */
+    public function canBeHired()
+    {
+        return $this->role === self::ROLE_EDUCATOR && $this->is_verified;
+    }
+    
+    /**
+     * Get points transactions for this user
+     */
+    public function pointsTransactions()
+    {
+        return $this->hasMany(AlexPointsTransaction::class);
+    }
+    
+    /**
+     * Add points to the user's account
+     * 
+     * @param integer $points
+     * @param string $actionType
+     * @param string|null $referenceType
+     * @param string|null $referenceId
+     * @param string|null $description
+     * @param array|null $metadata
+     * @return AlexPointsTransaction
+     */
+    public function addPoints($points, $actionType, $referenceType = null, $referenceId = null, $description = null, $metadata = null)
+    {
+        // Create the transaction
+        $transaction = $this->pointsTransactions()->create([
+            'points' => $points,
+            'action_type' => $actionType,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
+            'description' => $description,
+            'metadata' => $metadata
+        ]);
+        
+        // Update the user's points
+        $this->alex_points += $points;
+        
+        // Check if level up is needed
+        $this->checkLevelUp();
+        
+        $this->save();
+        
+        return $transaction;
+    }
+    
+    /**
+     * Deduct points from the user's account
+     * 
+     * @param integer $points
+     * @param string $actionType
+     * @param string|null $referenceType
+     * @param string|null $referenceId
+     * @param string|null $description
+     * @param array|null $metadata
+     * @return AlexPointsTransaction|false
+     */
+    public function deductPoints($points, $actionType, $referenceType = null, $referenceId = null, $description = null, $metadata = null)
+    {
+        // Ensure points is positive
+        $points = abs($points);
+        
+        // Check if user has enough points
+        if ($this->alex_points < $points) {
+            return false;
+        }
+        
+        // Create the transaction with negative points
+        $transaction = $this->pointsTransactions()->create([
+            'points' => -$points,
+            'action_type' => $actionType,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
+            'description' => $description,
+            'metadata' => $metadata
+        ]);
+        
+        // Update the user's points
+        $this->alex_points -= $points;
+        
+        // Check if level down is needed
+        $this->checkLevelDown();
+        
+        $this->save();
+        
+        return $transaction;
+    }
+    
+    /**
+     * Check if the user can level up
+     */
+    public function checkLevelUp()
+    {
+        // If point_level is null, initialize to 1
+        if ($this->point_level === null) {
+            $this->point_level = 1;
+        }
+        
+        // Get the next level
+        $nextLevel = AlexPointsLevel::where('points_required', '<=', $this->alex_points)
+            ->where('level', '>', $this->point_level)
+            ->orderBy('level', 'asc')
+            ->first();
+            
+        if ($nextLevel) {
+            $this->point_level = $nextLevel->level;
+            
+            // Find the threshold for the next level after this one
+            $nextNextLevel = AlexPointsLevel::where('level', '>', $nextLevel->level)
+                ->orderBy('level', 'asc')
+                ->first();
+                
+            if ($nextNextLevel) {
+                $this->points_to_next_level = $nextNextLevel->points_required - $this->alex_points;
+            } else {
+                $this->points_to_next_level = 0; // Max level reached
+            }
+            
+            // Only notify if this is not a new user
+            if ($this->created_at && $this->created_at->diffInHours(now()) > 1) {
+                // Notify the user of level up
+                $this->notify(new \App\Notifications\LevelUpNotification($nextLevel));
+            }
+            
+            return true;
+        }
+        
+        // Calculate points to next level
+        $nextLevelThreshold = AlexPointsLevel::where('level', '>', ($this->point_level ?? 0))
+            ->orderBy('level', 'asc')
+            ->first();
+            
+        if ($nextLevelThreshold) {
+            $this->points_to_next_level = $nextLevelThreshold->points_required - $this->alex_points;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if the user should level down
+     */
+    public function checkLevelDown()
+    {
+        // If point_level is null, initialize to 1
+        if ($this->point_level === null) {
+            $this->point_level = 1;
+            return false;
+        }
+        
+        // Find the highest level the user qualifies for
+        $highestQualifiedLevel = AlexPointsLevel::where('points_required', '<=', $this->alex_points)
+            ->orderBy('level', 'desc')
+            ->first();
+            
+        if ($highestQualifiedLevel && $highestQualifiedLevel->level < $this->point_level) {
+            $this->point_level = $highestQualifiedLevel->level;
+            
+            // Calculate points to next level
+            $nextLevel = AlexPointsLevel::where('level', '>', $this->point_level)
+                ->orderBy('level', 'asc')
+                ->first();
+                
+            if ($nextLevel) {
+                $this->points_to_next_level = $nextLevel->points_required - $this->alex_points;
+            }
+            
+            return true;
+        }
+        
+        // Recalculate points to next level
+        $nextLevel = AlexPointsLevel::where('level', '>', $this->point_level)
+            ->orderBy('level', 'asc')
+            ->first();
+            
+        if ($nextLevel) {
+            $this->points_to_next_level = $nextLevel->points_required - $this->alex_points;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Get the user's current level details
+     */
+    public function getCurrentLevel()
+    {
+        return AlexPointsLevel::where('level', $this->point_level)->first();
+    }
+    
+    /**
+     * Get the next level details
+     */
+    public function getNextLevel()
+    {
+        return AlexPointsLevel::where('level', '>', $this->point_level)
+            ->orderBy('level', 'asc')
+            ->first();
     }
 }

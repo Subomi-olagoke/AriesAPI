@@ -49,6 +49,14 @@ class HireRequestController extends Controller
                 ], 400);
             }
             
+            // Check if educator is verified
+            if (!$tutor->is_verified) {
+                return response()->json([
+                    'message' => 'This educator is not verified yet and cannot be hired',
+                    'verification_status' => $tutor->verification_status
+                ], 400);
+            }
+            
             // Get the educator's hire rate
             $profile = $tutor->profile;
             if (!$profile || !$profile->hire_rate) {

@@ -248,4 +248,63 @@ class CogniService
             ];
         }
     }
+    
+    /**
+     * Analyze a user's interests based on their data
+     * 
+     * @param array $userData User activity and preference data
+     * @return array Response with success/error status and analysis
+     */
+    public function analyzeUserInterests(array $userData): array
+    {
+        $prompt = "Based on the following user activity data, analyze their interests and learning patterns. ";
+        $prompt .= "Identify key topic areas they are interested in, with confidence levels (1-100) for each topic. ";
+        $prompt .= "Also suggest potential related topics they might be interested in exploring, based on their current interests.\n\n";
+        $prompt .= "User data:\n" . json_encode($userData, JSON_PRETTY_PRINT) . "\n\n";
+        $prompt .= "Format your response as a JSON object with the following structure:\n";
+        $prompt .= "{\n";
+        $prompt .= "  \"interests\": [\n";
+        $prompt .= "    {\n";
+        $prompt .= "      \"topic\": \"Topic name\",\n";
+        $prompt .= "      \"confidence\": 85,\n";
+        $prompt .= "      \"subtopics\": [\"Subtopic 1\", \"Subtopic 2\"]\n";
+        $prompt .= "    },\n";
+        $prompt .= "    ...\n";
+        $prompt .= "  ],\n";
+        $prompt .= "  \"recommendations\": [\"Topic 1\", \"Topic 2\", ...]\n";
+        $prompt .= "}";
+        
+        return $this->askQuestion($prompt);
+    }
+    
+    /**
+     * Generate a list of relevant web resources for a set of topics
+     * 
+     * @param array $topics List of topics to find resources for
+     * @param int $maxItems Maximum number of resources to return
+     * @return array Response with success/error status and resources
+     */
+    public function findWebResources(array $topics, int $maxItems = 5): array
+    {
+        $topicsStr = implode(", ", $topics);
+        $prompt = "Generate a list of {$maxItems} high-quality educational resources for the following topics: {$topicsStr}.\n\n";
+        $prompt .= "For each resource, provide:\n";
+        $prompt .= "1. A resource title\n";
+        $prompt .= "2. A brief description of what the resource covers\n";
+        $prompt .= "3. A URL for the resource (must be a real, well-known educational website URL)\n";
+        $prompt .= "4. Brief notes to help the user understand why this resource is valuable\n\n";
+        $prompt .= "Focus on resources from well-known educational platforms like Coursera, Khan Academy, MIT OpenCourseWare, edX, etc.\n\n";
+        $prompt .= "Format your response as a JSON array with the following structure:\n";
+        $prompt .= "[\n";
+        $prompt .= "  {\n";
+        $prompt .= "    \"title\": \"Resource title\",\n";
+        $prompt .= "    \"description\": \"Brief description\",\n";
+        $prompt .= "    \"url\": \"https://example.com/resource\",\n";
+        $prompt .= "    \"notes\": \"Why this resource is valuable\"\n";
+        $prompt .= "  },\n";
+        $prompt .= "  ...\n";
+        $prompt .= "]\n";
+        
+        return $this->askQuestion($prompt);
+    }
 }

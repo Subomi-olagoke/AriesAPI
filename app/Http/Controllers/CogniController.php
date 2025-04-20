@@ -346,6 +346,52 @@ class CogniController extends Controller
     }
     
     /**
+     * Generate a personalized "Cognition" readlist for the user
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function generateCognitionReadlist(Request $request)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated'
+            ], 401);
+        }
+        
+        try {
+            // Use the CognitionService to generate the readlist
+            $cognitionService = app(\App\Services\CognitionService::class);
+            
+            // Get or create the Cognition readlist
+            $readlist = $cognitionService->getCognitionReadlist($user);
+            
+            // Update the readlist with personalized content
+            $maxItems = $request->input('max_items', 5);
+            $result = $cognitionService->updateCognitionReadlist($user, $maxItems);
+            
+            // Get the updated readlist with items
+            $readlist->load('items');
+            
+            return response()->json([
+                'success' => true,
+                'message' => $result ? 'Cognition readlist updated successfully' : 'No new recommendations found',
+                'readlist' => $readlist
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to generate Cognition readlist: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate Cognition readlist: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Generate a readlist for a specific topic
      *
      * @param Request $request

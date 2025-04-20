@@ -2,8 +2,13 @@
 
 namespace App\Providers;
 
+use App\Events\ChatMessage;
+use App\Events\LiveClassChatMessage;
 use App\Events\MessageSent;
+use App\Events\UserJoinedClass;
+use App\Listeners\AwardPointsListener;
 use App\Listeners\SendMessageNotification;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
@@ -19,9 +24,24 @@ class EventServiceProvider extends ServiceProvider
     protected $listen = [
         Registered::class => [
             SendEmailVerificationNotification::class,
+            AwardPointsListener::class.'@handleUserRegistered',
+            \App\Listeners\CreateCognitionReadlistListener::class,
+        ],
+        Login::class => [
+            AwardPointsListener::class.'@handleUserLogin',
         ],
         MessageSent::class => [
             SendMessageNotification::class,
+            AwardPointsListener::class.'@handleMessageSent',
+        ],
+        ChatMessage::class => [
+            AwardPointsListener::class.'@handleChannelMessage',
+        ],
+        LiveClassChatMessage::class => [
+            AwardPointsListener::class.'@handleLiveClassMessage',
+        ],
+        UserJoinedClass::class => [
+            AwardPointsListener::class.'@handleUserJoinedClass',
         ],
     ];
 

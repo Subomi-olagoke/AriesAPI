@@ -24,11 +24,13 @@ class Readlist extends Model
         'description',
         'image_url',
         'is_public',
+        'is_system',
         'share_key'
     ];
 
     protected $casts = [
         'is_public' => 'boolean',
+        'is_system' => 'boolean',
     ];
 
     protected static function boot()

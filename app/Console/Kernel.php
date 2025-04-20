@@ -12,13 +12,17 @@ class Kernel extends ConsoleKernel {
 	 */
 	protected function schedule(Schedule $schedule): void {
 		// $schedule->command('inspire')->hourly();
+		
+		// Update Cognition readlists for all users once a week (every Monday at 1am)
+		$schedule->command('cognition:update --batch=100 --max_items=5')->weekly()->mondays()->at('01:00');
 	}
 
 	protected $commands = [
 		// Existing commands...
 		\App\Console\Commands\NgrokCommand::class,
 		\App\Console\Commands\BackfillPostShareKeys::class,
-		 
+		\App\Console\Commands\SeedAlexPointsSystem::class,
+		\App\Console\Commands\UpdateCognitionReadlists::class,
 	];
 
 	/**

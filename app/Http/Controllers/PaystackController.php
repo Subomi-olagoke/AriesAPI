@@ -378,9 +378,122 @@ class PaystackController extends Controller
                 ]);
             }
         }
+        // Check if this is a split payment
+        else if ($metadata && isset($metadata['is_split']) && $metadata['is_split']) {
+            $this->processSuccessfulSplitPayment($data);
+        }
         // Otherwise, try to process as a standard payment
         else if ($metadata && isset($metadata['user_id'])) {
             $this->processSuccessfulPayment($data);
+        }
+    }
+    
+    /**
+     * Process a successful split payment
+     */
+    private function processSuccessfulSplitPayment($paymentData)
+    {
+        $reference = $paymentData['reference'];
+        $metadata = $paymentData['metadata'] ?? null;
+        
+        if (!$metadata) {
+            return;
+        }
+        
+        try {
+            DB::beginTransaction();
+            
+            // Find the payment log
+            $paymentLog = PaymentLog::where('transaction_reference', $reference)->first();
+            
+            if (!$paymentLog) {
+                Log::error('Split payment log not found for reference: ' . $reference);
+                DB::rollBack();
+                return;
+            }
+            
+            // Update payment log status
+            $paymentLog->status = 'success';
+            $paymentLog->response_data = array_merge($paymentLog->response_data ?? [], ['webhook' => $paymentData]);
+            $paymentLog->save();
+            
+            // Update payment splits status
+            $splits = \App\Models\PaymentSplit::where('payment_log_id', $paymentLog->id)->get();
+            
+            foreach ($splits as $split) {
+                $split->status = 'success';
+                $split->save();
+            }
+            
+            // Process based on payment type
+            if ($paymentLog->payment_type === 'course_enrollment') {
+                // Find the enrollment by reference
+                $enrollment = \App\Models\CourseEnrollment::where('transaction_reference', $reference)->first();
+                
+                if ($enrollment) {
+                    $enrollment->status = 'active';
+                    $enrollment->save();
+                    
+                    // Notify educator
+                    $course = \App\Models\Course::find($enrollment->course_id);
+                    $educator = \App\Models\User::find($course->user_id);
+                    $educator->notify(new \App\Notifications\CourseEnrollmentNotification($enrollment));
+                }
+            } 
+            else if ($paymentLog->payment_type === 'tutoring') {
+                $logMetadata = json_decode($paymentLog->metadata, true);
+                
+                if ($logMetadata && isset($logMetadata['hire_request_id'])) {
+                    $hireRequestId = $logMetadata['hire_request_id'];
+                    
+                    // Update hire request status
+                    DB::table('hire_requests')
+                        ->where('id', $hireRequestId)
+                        ->update([
+                            'status' => 'accepted',
+                            'payment_status' => 'paid',
+                            'updated_at' => now()
+                        ]);
+                    
+                    // Create a hire session
+                    $hireRequest = DB::table('hire_requests')->where('id', $hireRequestId)->first();
+                    
+                    if ($hireRequest) {
+                        DB::table('hire_sessions')->insert([
+                            'learner_id' => $hireRequest->client_id,
+                            'educator_id' => $hireRequest->tutor_id,
+                            'status' => 'scheduled',
+                            'hours' => $hireRequest->hours,
+                            'payment_amount' => $hireRequest->amount,
+                            'payment_reference' => $reference,
+                            'can_message' => true,
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ]);
+                        
+                        // Notify educator
+                        $tutor = \App\Models\User::find($hireRequest->tutor_id);
+                        $client = \App\Models\User::find($hireRequest->client_id);
+                        
+                        if ($tutor && $client) {
+                            $tutor->notify(new \App\Notifications\HireRequestNotification([
+                                'client_name' => $client->first_name . ' ' . $client->last_name,
+                                'client_id' => $client->id,
+                                'hours' => $hireRequest->hours,
+                                'amount' => $hireRequest->amount,
+                                'request_id' => $hireRequest->id,
+                                'status' => 'paid'
+                            ]));
+                        }
+                    }
+                }
+            }
+            
+            DB::commit();
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error processing split payment: ' . $e->getMessage());
         }
     }
 
