@@ -509,4 +509,59 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/notifications/send', [NotificationController::class, 'sendPushNotification']);
     Route::post('/notification/send', [NotificationController::class, 'sendPushNotification']); // Additional route
     Route::get('/notifications/debug-apns', [NotificationController::class, 'debugApns']);
+    
+    // Channel routes
+    Route::prefix('channels')->group(function () {
+        Route::get('/', [\App\Http\Controllers\ChannelController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\ChannelController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\ChannelController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\ChannelController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\ChannelController::class, 'destroy']);
+        Route::post('/{id}/message', [\App\Http\Controllers\ChannelController::class, 'sendMessage']);
+        Route::post('/{id}/members', [\App\Http\Controllers\ChannelController::class, 'addMember']);
+        Route::delete('/{id}/members', [\App\Http\Controllers\ChannelController::class, 'removeMember']);
+        Route::put('/{id}/members/role', [\App\Http\Controllers\ChannelController::class, 'updateMemberRole']);
+        Route::post('/join', [\App\Http\Controllers\ChannelController::class, 'joinWithLink']);
+        Route::post('/{id}/leave', [\App\Http\Controllers\ChannelController::class, 'leave']);
+        Route::post('/{id}/read', [\App\Http\Controllers\ChannelController::class, 'markAsRead']);
+        Route::get('/{id}/share-link', [\App\Http\Controllers\ChannelController::class, 'getShareLink']);
+        Route::post('/{id}/regenerate-link', [\App\Http\Controllers\ChannelController::class, 'regenerateShareLink']);
+    });
+    
+    // Duplicate routes with singular "channel"
+    Route::prefix('channel')->group(function () {
+        Route::get('/', [\App\Http\Controllers\ChannelController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\ChannelController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\ChannelController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\ChannelController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\ChannelController::class, 'destroy']);
+        Route::post('/{id}/message', [\App\Http\Controllers\ChannelController::class, 'sendMessage']);
+        Route::post('/{id}/members', [\App\Http\Controllers\ChannelController::class, 'addMember']);
+        Route::delete('/{id}/members', [\App\Http\Controllers\ChannelController::class, 'removeMember']);
+        Route::put('/{id}/members/role', [\App\Http\Controllers\ChannelController::class, 'updateMemberRole']);
+        Route::post('/join', [\App\Http\Controllers\ChannelController::class, 'joinWithLink']);
+        Route::post('/{id}/leave', [\App\Http\Controllers\ChannelController::class, 'leave']);
+        Route::post('/{id}/read', [\App\Http\Controllers\ChannelController::class, 'markAsRead']);
+        Route::get('/{id}/share-link', [\App\Http\Controllers\ChannelController::class, 'getShareLink']);
+        Route::post('/{id}/regenerate-link', [\App\Http\Controllers\ChannelController::class, 'regenerateShareLink']);
+    });
+    
+    // Enhanced subscription routes
+    Route::prefix('subscription-plans')->group(function () {
+        Route::get('/', [\App\Http\Controllers\SubscriptionController::class, 'getPlans']);
+    });
+    
+    Route::prefix('subscription-plan')->group(function () {
+        Route::get('/', [\App\Http\Controllers\SubscriptionController::class, 'getPlans']);
+    });
+    
+    // Update existing subscription routes to use new controller methods
+    Route::post('/subscriptions/subscribe', [\App\Http\Controllers\SubscriptionController::class, 'subscribe']);
+    Route::post('/subscription/subscribe', [\App\Http\Controllers\SubscriptionController::class, 'subscribe']);
+    Route::get('/subscriptions/verify', [\App\Http\Controllers\SubscriptionController::class, 'verify'])->name('subscriptions.verify');
+    Route::get('/subscription/verify', [\App\Http\Controllers\SubscriptionController::class, 'verify'])->name('subscription.verify');
+    Route::post('/subscriptions/cancel', [\App\Http\Controllers\SubscriptionController::class, 'cancel']);
+    Route::post('/subscription/cancel', [\App\Http\Controllers\SubscriptionController::class, 'cancel']);
+    Route::post('/subscriptions/use-credits', [\App\Http\Controllers\SubscriptionController::class, 'useCredits']);
+    Route::post('/subscription/use-credits', [\App\Http\Controllers\SubscriptionController::class, 'useCredits']);
 });

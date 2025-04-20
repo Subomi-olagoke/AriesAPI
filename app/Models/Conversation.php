@@ -93,4 +93,57 @@ class Conversation extends Model
             ->where('is_read', false)
             ->count();
     }
+    
+    /**
+     * Get the hire session associated with this conversation.
+     */
+    public function hireSession()
+    {
+        return $this->belongsTo(HireSession::class);
+    }
+    
+    /**
+     * Check if this conversation is restricted to users with an active hire session.
+     */
+    public function isRestricted()
+    {
+        return $this->is_restricted;
+    }
+    
+    /**
+     * Check if a user can send messages in this conversation.
+     */
+    public function canSendMessages(User $user)
+    {
+        // If conversation is not restricted, anyone can send messages
+        if (!$this->is_restricted) {
+            return true;
+        }
+        
+        // If no hire session, check if user is an admin
+        if (!$this->hire_session_id) {
+            return $user->isAdmin;
+        }
+        
+        // Get the other user
+        $otherUser = $this->getOtherUser($user);
+        
+        // If user is a learner and other user is an educator, check if they can message
+        if ($user->role === User::ROLE_LEARNER && $otherUser->role === User::ROLE_EDUCATOR) {
+            return $user->canMessageEducator($otherUser);
+        }
+        
+        // If user is an educator and other user is a learner, check the hire session
+        if ($user->role === User::ROLE_EDUCATOR && $otherUser->role === User::ROLE_LEARNER) {
+            return HireSession::where([
+                'educator_id' => $user->id,
+                'learner_id' => $otherUser->id,
+                'status' => 'active',
+                'can_message' => true
+            ])->exists();
+        }
+        
+        // Default to allowing messages
+        return true;
+    }
 }

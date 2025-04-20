@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\Message;
 use App\Models\Conversation;
+use App\Models\HiringSession;
 use App\Services\FileUploadService;
 use Illuminate\Http\Request;
 use App\Events\MessageSent;
@@ -17,46 +18,46 @@ use Illuminate\Support\Str;
 class MessageController extends Controller
 {
     public function getConversations()
-{
-    $user = Auth::user();
+    {
+        $user = Auth::user();
 
-    if (!$user) {
-        return response()->json(['message' => 'User not authenticated'], 401);
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+
+        $conversations = Conversation::where('user_one_id', $user->id)
+            ->orWhere('user_two_id', $user->id)
+            ->with(['latestMessage'])
+            ->orderBy('last_message_at', 'desc')
+            ->get()
+            ->map(function ($conversation) use ($user) {
+                $otherUser = $conversation->getOtherUser($user);
+                
+                // Create a new object with an "id" field set to "0"
+                $result = [
+                    'id' => '0', // Add this to fix the Swift decoding error
+                    'conversation_id' => $conversation->id,
+                    'user_one_id' => $conversation->user_one_id,
+                    'user_two_id' => $conversation->user_two_id,
+                    'last_message_at' => $conversation->last_message_at,
+                    'created_at' => $conversation->created_at,
+                    'updated_at' => $conversation->updated_at,
+                    'other_user' => $otherUser,
+                    'unread_count' => $conversation->unreadMessagesFor($user)
+                ];
+                
+                // Include latestMessage if it exists
+                if ($conversation->latestMessage) {
+                    $result['latest_message'] = $conversation->latestMessage;
+                }
+                
+                return $result;
+            });
+
+        return response()->json([
+            'conversations' => $conversations
+        ]);
     }
-
-    $conversations = Conversation::where('user_one_id', $user->id)
-        ->orWhere('user_two_id', $user->id)
-        ->with(['latestMessage'])
-        ->orderBy('last_message_at', 'desc')
-        ->get()
-        ->map(function ($conversation) use ($user) {
-            $otherUser = $conversation->getOtherUser($user);
-            
-            // Create a new object with an "id" field set to "0"
-            $result = [
-                'id' => '0', // Add this to fix the Swift decoding error
-                'conversation_id' => $conversation->id,
-                'user_one_id' => $conversation->user_one_id,
-                'user_two_id' => $conversation->user_two_id,
-                'last_message_at' => $conversation->last_message_at,
-                'created_at' => $conversation->created_at,
-                'updated_at' => $conversation->updated_at,
-                'other_user' => $otherUser,
-                'unread_count' => $conversation->unreadMessagesFor($user)
-            ];
-            
-            // Include latestMessage if it exists
-            if ($conversation->latestMessage) {
-                $result['latest_message'] = $conversation->latestMessage;
-            }
-            
-            return $result;
-        });
-
-    return response()->json([
-        'conversations' => $conversations
-    ]);
-}
 
     public function getConversation($id)
     {
@@ -117,6 +118,34 @@ class MessageController extends Controller
             return response()->json([
                 'message' => 'You cannot send a message to yourself'
             ], 400);
+        }
+
+        // Check if the sender is a learner and the recipient is an educator
+        if ($user->role === 'learner' && $recipient->role === 'educator') {
+            // Check if they have permission to message this educator
+            if (!$user->canMessageEducator($recipient)) {
+                return response()->json([
+                    'message' => 'You cannot message this educator without an active hiring session'
+                ], 403);
+            }
+        }
+        
+        // Find existing conversation
+        $conversation = Conversation::where(function ($query) use ($user, $recipient) {
+            $query->where('user_one_id', $user->id)
+                  ->where('user_two_id', $recipient->id);
+        })->orWhere(function ($query) use ($user, $recipient) {
+            $query->where('user_one_id', $recipient->id)
+                  ->where('user_two_id', $user->id);
+        })->first();
+        
+        // If conversation exists, check if it's restricted
+        if ($conversation && $conversation->isRestricted()) {
+            if (!$conversation->canSendMessages($user)) {
+                return response()->json([
+                    'message' => 'You do not have permission to send messages in this conversation'
+                ], 403);
+            }
         }
 
         try {

@@ -73,4 +73,38 @@ class HireSession extends Model
     {
         return $this->ratings()->where('user_id', $this->client()->id)->exists();
     }
+    
+    /**
+     * Get the conversation associated with this hire session.
+     */
+    public function conversation()
+    {
+        return $this->belongsTo(Conversation::class);
+    }
+    
+    /**
+     * Check if messaging is allowed for this session.
+     */
+    public function canMessage()
+    {
+        return $this->can_message;
+    }
+    
+    /**
+     * Enable messaging for this session.
+     */
+    public function enableMessaging()
+    {
+        $this->can_message = true;
+        return $this->save();
+    }
+    
+    /**
+     * Disable messaging for this session.
+     */
+    public function disableMessaging()
+    {
+        $this->can_message = false;
+        return $this->save();
+    }
 }

@@ -279,4 +279,98 @@ class User extends Authenticatable {
     {
         return $this->mutedUsers()->where('muted_user_id', $user->id)->exists();
     }
+    
+    /**
+     * Get channels created by this user
+     */
+    public function createdChannels()
+    {
+        return $this->hasMany(Channel::class, 'creator_id');
+    }
+    
+    /**
+     * Get channel memberships
+     */
+    public function channelMemberships()
+    {
+        return $this->hasMany(ChannelMember::class);
+    }
+    
+    /**
+     * Get channels this user is a member of
+     */
+    public function channels()
+    {
+        return $this->belongsToMany(Channel::class, 'channel_members', 'user_id', 'channel_id')
+            ->withPivot('role', 'is_active', 'joined_at', 'last_read_at')
+            ->withTimestamps();
+    }
+    
+    /**
+     * Get channel messages sent by this user
+     */
+    public function channelMessages()
+    {
+        return $this->hasMany(ChannelMessage::class, 'sender_id');
+    }
+    
+    /**
+     * Get the active subscription for this user
+     */
+    public function activeSubscription()
+    {
+        return $this->hasOne(Subscription::class)
+            ->where('is_active', true)
+            ->where('expires_at', '>', now())
+            ->latest();
+    }
+    
+    /**
+     * Get all subscriptions for this user
+     */
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class);
+    }
+    
+    /**
+     * Check if user has an active subscription
+     */
+    public function hasActiveSubscription()
+    {
+        return $this->activeSubscription()->exists();
+    }
+    
+    /**
+     * Check if user can create channels
+     */
+    public function canCreateChannels()
+    {
+        $subscription = $this->activeSubscription;
+        return $subscription && $subscription->canCreateChannels();
+    }
+    
+    /**
+     * Check if user can message an educator
+     */
+    public function canMessageEducator(User $educator)
+    {
+        // If user is an admin, they can message anyone
+        if ($this->isAdmin) {
+            return true;
+        }
+        
+        // If the user is not a learner or the other user is not an educator, no restrictions
+        if ($this->role !== self::ROLE_LEARNER || $educator->role !== self::ROLE_EDUCATOR) {
+            return true;
+        }
+        
+        // Check if they have an active hire session
+        return HireSession::where([
+            'learner_id' => $this->id,
+            'educator_id' => $educator->id,
+            'status' => 'active',
+            'can_message' => true
+        ])->exists();
+    }
 }

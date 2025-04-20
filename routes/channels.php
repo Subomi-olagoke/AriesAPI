@@ -33,3 +33,12 @@ Broadcast::channel('live-class.{id}', function ($user, $id) {
 Broadcast::channel('user.{userId}', function ($user, $userId) {
     return $user->id === $userId;
 });
+
+// Channel for collaboration channels
+Broadcast::channel('channel.{channelId}', function ($user, $channelId) {
+    $channel = \App\Models\Channel::find($channelId);
+    if (!$channel) {
+        return false;
+    }
+    return $channel->isMember($user);
+});

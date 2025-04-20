@@ -8,6 +8,7 @@ class Subscription extends Model
 {
     protected $fillable = [
         'user_id',
+        'subscription_plan_id',
         'paystack_reference',
         'paystack_subscription_code',
         'paystack_email_token',
@@ -18,7 +19,9 @@ class Subscription extends Model
         'starts_at',
         'expires_at',
         'is_active',
-        'is_recurring'
+        'is_recurring',
+        'can_create_channels',
+        'available_credits'
     ];
 
     protected $casts = [
@@ -26,6 +29,8 @@ class Subscription extends Model
         'expires_at' => 'datetime',
         'is_active' => 'boolean',
         'is_recurring' => 'boolean',
+        'can_create_channels' => 'boolean',
+        'available_credits' => 'integer',
         'amount' => 'decimal:2',
     ];
 
@@ -35,6 +40,14 @@ class Subscription extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+    
+    /**
+     * Get the plan for this subscription.
+     */
+    public function plan()
+    {
+        return $this->belongsTo(SubscriptionPlan::class, 'subscription_plan_id');
     }
 
     /**
@@ -83,5 +96,51 @@ class Subscription extends Model
         }
         
         return max(0, now()->diffInDays($this->expires_at));
+    }
+    
+    /**
+     * Check if subscriber can create channels.
+     */
+    public function canCreateChannels()
+    {
+        return $this->isValid() && $this->can_create_channels;
+    }
+    
+    /**
+     * Add credits to the subscription.
+     */
+    public function addCredits($amount)
+    {
+        $this->available_credits += $amount;
+        return $this->save();
+    }
+    
+    /**
+     * Use credits from the subscription.
+     */
+    public function useCredits($amount)
+    {
+        if ($this->available_credits < $amount) {
+            return false;
+        }
+        
+        $this->available_credits -= $amount;
+        return $this->save();
+    }
+    
+    /**
+     * Check if subscription has access to premium content.
+     */
+    public function hasAccessToPremiumContent()
+    {
+        return $this->isValid();
+    }
+    
+    /**
+     * Check if subscription has access to live classes.
+     */
+    public function canJoinLiveClasses()
+    {
+        return $this->isValid();
     }
 }
