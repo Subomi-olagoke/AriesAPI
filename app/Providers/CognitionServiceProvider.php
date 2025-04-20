@@ -25,6 +25,6 @@ class CognitionServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Do nothing in boot to prevent database access before migrations are run
     }
 }

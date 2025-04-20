@@ -24,11 +24,31 @@ class AlexPointsServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Ensure at least one level exists
-        $this->ensureBasicLevelsExist();
-        
-        // Ensure essential rules exist
-        $this->ensureBasicRulesExist();
+        // Only run these if we're not in the console or if we're running a migration
+        if (!$this->app->runningInConsole() || 
+            ($this->app->runningInConsole() && strpos(implode(' ', $_SERVER['argv'] ?? []), 'migrate') !== false)) {
+            
+            // Check if the tables exist first
+            if ($this->tablesExist()) {
+                // Ensure at least one level exists
+                $this->ensureBasicLevelsExist();
+                
+                // Ensure essential rules exist
+                $this->ensureBasicRulesExist();
+            }
+        }
+    }
+    
+    /**
+     * Check if the required tables exist
+     */
+    protected function tablesExist(): bool
+    {
+        try {
+            return \Schema::hasTable('alex_points_levels') && \Schema::hasTable('alex_points_rules');
+        } catch (\Exception $e) {
+            return false;
+        }
     }
     
     /**
