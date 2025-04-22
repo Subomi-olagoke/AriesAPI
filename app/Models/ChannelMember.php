@@ -21,6 +21,9 @@ class ChannelMember extends Model
         'channel_id',
         'user_id',
         'role',
+        'status',
+        'join_message',
+        'rejection_reason',
         'is_active',
         'joined_at',
         'last_read_at'
@@ -40,10 +43,6 @@ class ChannelMember extends Model
         static::creating(function ($model) {
             if (empty($model->id)) {
                 $model->id = Str::uuid()->toString();
-            }
-            
-            if (empty($model->joined_at)) {
-                $model->joined_at = now();
             }
         });
     }
@@ -78,6 +77,54 @@ class ChannelMember extends Model
     public function isAdmin()
     {
         return $this->role === 'admin';
+    }
+    
+    /**
+     * Check if this member is pending approval.
+     */
+    public function isPending()
+    {
+        return $this->status === 'pending';
+    }
+    
+    /**
+     * Check if this member is approved.
+     */
+    public function isApproved()
+    {
+        return $this->status === 'approved';
+    }
+    
+    /**
+     * Check if this member is rejected.
+     */
+    public function isRejected()
+    {
+        return $this->status === 'rejected';
+    }
+    
+    /**
+     * Approve this member.
+     */
+    public function approve()
+    {
+        $this->status = 'approved';
+        $this->joined_at = now();
+        $this->save();
+        
+        return $this;
+    }
+    
+    /**
+     * Reject this member with an optional reason.
+     */
+    public function reject($reason = null)
+    {
+        $this->status = 'rejected';
+        $this->rejection_reason = $reason;
+        $this->save();
+        
+        return $this;
     }
     
     /**

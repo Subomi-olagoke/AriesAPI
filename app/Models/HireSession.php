@@ -17,13 +17,22 @@ class HireSession extends Model
         'duration_minutes',
         'status',
         'payment_status',
-        'transaction_reference'
+        'transaction_reference',
+        'meeting_id',
+        'video_session_started_at',
+        'video_session_ended_at',
+        'video_session_status',
+        'video_session_settings',
+        'recording_url'
     ];
     
     protected $casts = [
         'scheduled_at' => 'datetime',
         'ended_at' => 'datetime',
         'duration_minutes' => 'integer',
+        'video_session_started_at' => 'datetime',
+        'video_session_ended_at' => 'datetime',
+        'video_session_settings' => 'array',
     ];
     
     /**
@@ -106,5 +115,117 @@ class HireSession extends Model
     {
         $this->can_message = false;
         return $this->save();
+    }
+    
+    /**
+     * Get the documents shared in this session.
+     */
+    public function documents()
+    {
+        return $this->hasMany(HireSessionDocument::class)->orderBy('shared_at', 'desc');
+    }
+    
+    /**
+     * Get the participants in this video session.
+     */
+    public function participants()
+    {
+        return $this->hasMany(HireSessionParticipant::class);
+    }
+    
+    /**
+     * Get only active participants (who haven't left).
+     */
+    public function activeParticipants()
+    {
+        return $this->participants()->whereNull('left_at');
+    }
+    
+    /**
+     * Check if a user is part of this session.
+     */
+    public function isParticipant(User $user)
+    {
+        return $this->hireRequest->client_id === $user->id || 
+               $this->hireRequest->tutor_id === $user->id;
+    }
+    
+    /**
+     * Generate a unique meeting ID for the video session.
+     */
+    public static function generateMeetingId()
+    {
+        return strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 8));
+    }
+    
+    /**
+     * Start a video session if not already started.
+     */
+    public function startVideoSession($settings = null)
+    {
+        if ($this->video_session_status !== 'active') {
+            $defaultSettings = [
+                'enable_chat' => true,
+                'mute_on_join' => false,
+                'video_on_join' => true,
+                'allow_screen_sharing' => true,
+                'recording_enabled' => false
+            ];
+            
+            $this->update([
+                'meeting_id' => $this->meeting_id ?: self::generateMeetingId(),
+                'video_session_started_at' => now(),
+                'video_session_status' => 'active',
+                'video_session_settings' => $settings ?: $defaultSettings
+            ]);
+        }
+        
+        return $this;
+    }
+    
+    /**
+     * End a video session if it's active.
+     */
+    public function endVideoSession()
+    {
+        if ($this->video_session_status === 'active') {
+            $this->update([
+                'video_session_ended_at' => now(),
+                'video_session_status' => 'ended'
+            ]);
+            
+            // Mark all active participants as left
+            $this->activeParticipants()->update(['left_at' => now()]);
+        }
+        
+        return $this;
+    }
+    
+    /**
+     * Check if the video session is currently active.
+     */
+    public function isVideoSessionActive()
+    {
+        return $this->video_session_status === 'active';
+    }
+    
+    /**
+     * Get all participants with their user data.
+     */
+    public function getParticipantsWithUsers()
+    {
+        return $this->participants()
+            ->with('user:id,first_name,last_name,username,avatar,role')
+            ->get();
+    }
+    
+    /**
+     * Get only active participants with their user data.
+     */
+    public function getActiveParticipantsWithUsers()
+    {
+        return $this->activeParticipants()
+            ->with('user:id,first_name,last_name,username,avatar,role')
+            ->get();
     }
 }

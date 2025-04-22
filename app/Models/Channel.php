@@ -22,13 +22,16 @@ class Channel extends Model
         'description',
         'creator_id',
         'share_link',
+        'join_code',
         'is_active',
-        'max_members'
+        'max_members',
+        'requires_approval'
     ];
     
     protected $casts = [
         'is_active' => 'boolean',
-        'max_members' => 'integer'
+        'max_members' => 'integer',
+        'requires_approval' => 'boolean'
     ];
     
     // Automatically generate UUID when creating a new channel
@@ -43,6 +46,10 @@ class Channel extends Model
             
             if (empty($model->share_link)) {
                 $model->share_link = 'channel/' . Str::random(12);
+            }
+            
+            if (empty($model->join_code)) {
+                $model->join_code = Str::upper(Str::random(8));
             }
         });
     }
@@ -64,12 +71,31 @@ class Channel extends Model
     }
     
     /**
+     * Get all approved members of the channel.
+     */
+    public function approvedMembers()
+    {
+        return $this->members()
+            ->where('status', 'approved')
+            ->where('is_active', true);
+    }
+    
+    /**
+     * Get all pending members of the channel.
+     */
+    public function pendingMembers()
+    {
+        return $this->members()
+            ->where('status', 'pending');
+    }
+    
+    /**
      * Get all users in the channel.
      */
     public function users()
     {
         return $this->belongsToMany(User::class, 'channel_members', 'channel_id', 'user_id')
-            ->withPivot('role', 'is_active', 'joined_at', 'last_read_at')
+            ->withPivot('role', 'status', 'is_active', 'joined_at', 'last_read_at', 'join_message')
             ->withTimestamps();
     }
     
@@ -96,6 +122,7 @@ class Channel extends Model
     {
         return $this->members()
             ->where('user_id', $user->id)
+            ->where('status', 'approved')
             ->where('is_active', true)
             ->exists();
     }
@@ -108,7 +135,19 @@ class Channel extends Model
         return $this->members()
             ->where('user_id', $user->id)
             ->where('role', 'admin')
+            ->where('status', 'approved')
             ->where('is_active', true)
+            ->exists();
+    }
+    
+    /**
+     * Check if a user has a pending join request for the channel.
+     */
+    public function hasPendingRequest(User $user)
+    {
+        return $this->members()
+            ->where('user_id', $user->id)
+            ->where('status', 'pending')
             ->exists();
     }
     
@@ -134,6 +173,47 @@ class Channel extends Model
      */
     public function hasReachedMaxMembers()
     {
-        return $this->members()->where('is_active', true)->count() >= $this->max_members;
+        return $this->approvedMembers()->count() >= $this->max_members;
+    }
+    
+    /**
+     * Check if the channel has any educator members.
+     */
+    public function hasEducators()
+    {
+        return $this->users()
+            ->where('role', User::ROLE_EDUCATOR)
+            ->where('channel_members.status', 'approved')
+            ->where('channel_members.is_active', true)
+            ->exists();
+    }
+    
+    /**
+     * Get all educator members in the channel.
+     */
+    public function educators()
+    {
+        return $this->users()
+            ->where('role', User::ROLE_EDUCATOR)
+            ->where('channel_members.status', 'approved')
+            ->where('channel_members.is_active', true);
+    }
+    
+    /**
+     * Regenerate join code for the channel.
+     */
+    public function regenerateJoinCode()
+    {
+        $this->join_code = Str::upper(Str::random(8));
+        $this->save();
+        return $this->join_code;
+    }
+    
+    /**
+     * Get all collaborative spaces in the channel.
+     */
+    public function collaborativeSpaces()
+    {
+        return $this->hasMany(CollaborativeSpace::class);
     }
 }

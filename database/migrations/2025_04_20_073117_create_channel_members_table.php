@@ -16,8 +16,11 @@ return new class extends Migration
             $table->uuid('channel_id');
             $table->uuid('user_id');
             $table->enum('role', ['admin', 'member'])->default('member');
+            $table->enum('status', ['pending', 'approved', 'rejected'])->default('approved');
+            $table->text('join_message')->nullable();
+            $table->text('rejection_reason')->nullable();
             $table->boolean('is_active')->default(true);
-            $table->timestamp('joined_at')->useCurrent();
+            $table->timestamp('joined_at')->nullable();
             $table->timestamp('last_read_at')->nullable();
             $table->timestamps();
             

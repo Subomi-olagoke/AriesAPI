@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Channel;
 use App\Models\ChannelMember;
 use App\Models\ChannelMessage;
+use App\Models\HireRequest;
 use App\Events\ChannelMessageSent;
 use App\Services\FileUploadService;
 use Illuminate\Http\Request;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Notification;
+use App\Notifications\BaseNotification;
 
 class ChannelController extends Controller
 {
@@ -31,6 +34,10 @@ class ChannelController extends Controller
             ->with(['latestMessage.sender', 'creator'])
             ->orderBy('updated_at', 'desc')
             ->get()
+            ->filter(function ($channel) {
+                // Only include channels where the user is an approved member
+                return $channel->pivot->status === 'approved';
+            })
             ->map(function ($channel) use ($user) {
                 // Get the user's membership
                 $membership = $channel->members()->where('user_id', $user->id)->first();
@@ -50,6 +57,56 @@ class ChannelController extends Controller
     }
     
     /**
+     * Get pending channel requests for the user
+     */
+    public function pendingRequests()
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Get channels where the user has pending join requests
+        $pendingRequests = $user->channelMemberships()
+            ->with('channel.creator')
+            ->where('status', 'pending')
+            ->get();
+        
+        return response()->json([
+            'pending_requests' => $pendingRequests
+        ]);
+    }
+    
+    /**
+     * Get pending membership requests for channels the user is an admin of
+     */
+    public function pendingMemberRequests()
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Get channels where the user is an admin
+        $adminChannels = $user->channels()
+            ->where('channel_members.role', 'admin')
+            ->where('channel_members.status', 'approved')
+            ->pluck('channels.id');
+        
+        // Get pending member requests for those channels
+        $pendingMembers = ChannelMember::whereIn('channel_id', $adminChannels)
+            ->where('status', 'pending')
+            ->with(['user', 'channel'])
+            ->get();
+        
+        return response()->json([
+            'pending_members' => $pendingMembers
+        ]);
+    }
+    
+    /**
      * Create a new channel
      */
     public function store(Request $request)
@@ -64,7 +121,8 @@ class ChannelController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',
-            'max_members' => 'integer|min:2|max:20'
+            'max_members' => 'integer|min:2|max:20',
+            'requires_approval' => 'boolean'
         ]);
         
         // Check if user has permission to create channels
@@ -83,7 +141,7 @@ class ChannelController extends Controller
                 'description' => $validated['description'] ?? null,
                 'creator_id' => $user->id,
                 'max_members' => $validated['max_members'] ?? 10,
-                'share_link' => 'channel/' . Str::random(12)
+                'requires_approval' => $validated['requires_approval'] ?? false
             ]);
             
             // Add creator as admin member
@@ -91,6 +149,7 @@ class ChannelController extends Controller
                 'channel_id' => $channel->id,
                 'user_id' => $user->id,
                 'role' => 'admin',
+                'status' => 'approved',
                 'is_active' => true,
                 'joined_at' => now(),
                 'last_read_at' => now()
@@ -133,20 +192,36 @@ class ChannelController extends Controller
         $channel = Channel::with(['messages.sender', 'members.user', 'creator'])
             ->findOrFail($id);
         
-        // Check if user is a member
-        if (!$channel->isMember($user)) {
+        // Check if user is a member or has a pending request
+        $membership = $channel->members()->where('user_id', $user->id)->first();
+        
+        if (!$membership) {
             return response()->json(['message' => 'You are not a member of this channel'], 403);
         }
         
-        // Get the user's membership
-        $membership = $channel->members()->where('user_id', $user->id)->first();
+        // If user is not an approved member, they can only see basic channel info
+        if ($membership->status !== 'approved') {
+            $channel->setRelation('messages', collect([]));
+            $channel->setRelation('members', collect([$membership]));
+            $channel->request_status = $membership->status;
+            
+            return response()->json([
+                'channel' => $channel
+            ]);
+        }
         
         // Add user's role in the channel
-        $channel->user_role = $membership ? $membership->role : null;
+        $channel->user_role = $membership->role;
         
         // Mark messages as read
         if ($membership) {
             $membership->markAsRead();
+        }
+        
+        // Check if channel has educators (for learners who might want to hire)
+        if ($user->role === User::ROLE_LEARNER) {
+            $channel->has_educators = $channel->hasEducators();
+            $channel->educators = $channel->educators()->get();
         }
         
         return response()->json([
@@ -177,7 +252,8 @@ class ChannelController extends Controller
         $validated = $request->validate([
             'title' => 'string|max:255',
             'description' => 'nullable|string|max:1000',
-            'max_members' => 'integer|min:2|max:20'
+            'max_members' => 'integer|min:2|max:20',
+            'requires_approval' => 'boolean'
         ]);
         
         try {
@@ -332,7 +408,227 @@ class ChannelController extends Controller
     }
     
     /**
-     * Add a member to the channel
+     * Request to join a channel
+     */
+    public function requestToJoin(Request $request, $id)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Validate request
+        $validated = $request->validate([
+            'join_message' => 'nullable|string|max:1000'
+        ]);
+        
+        // Get channel
+        $channel = Channel::findOrFail($id);
+        
+        // Check if user is already a member or has a pending request
+        $existingMembership = $channel->members()->where('user_id', $user->id)->first();
+        
+        if ($existingMembership) {
+            if ($existingMembership->status === 'approved') {
+                return response()->json(['message' => 'You are already a member of this channel'], 400);
+            } elseif ($existingMembership->status === 'pending') {
+                return response()->json(['message' => 'Your join request is already pending approval'], 400);
+            } elseif ($existingMembership->status === 'rejected') {
+                // If previously rejected, update the request
+                $existingMembership->status = 'pending';
+                $existingMembership->join_message = $validated['join_message'] ?? null;
+                $existingMembership->rejection_reason = null;
+                $existingMembership->save();
+                
+                // Notify channel admins
+                $this->notifyChannelAdmins($channel, $user, 'join_request');
+                
+                return response()->json([
+                    'message' => 'Join request submitted successfully',
+                    'membership' => $existingMembership
+                ], 200);
+            }
+        }
+        
+        // Check if channel has reached maximum members
+        if ($channel->hasReachedMaxMembers()) {
+            return response()->json(['message' => 'Channel has reached maximum number of members'], 400);
+        }
+        
+        try {
+            // If channel requires approval, create pending membership
+            if ($channel->requires_approval) {
+                $membership = ChannelMember::create([
+                    'channel_id' => $channel->id,
+                    'user_id' => $user->id,
+                    'role' => 'member',
+                    'status' => 'pending',
+                    'join_message' => $validated['join_message'] ?? null,
+                    'is_active' => false
+                ]);
+                
+                // Notify channel admins
+                $this->notifyChannelAdmins($channel, $user, 'join_request');
+                
+                return response()->json([
+                    'message' => 'Join request submitted successfully',
+                    'membership' => $membership
+                ], 201);
+            } else {
+                // If channel doesn't require approval, add as member immediately
+                $membership = ChannelMember::create([
+                    'channel_id' => $channel->id,
+                    'user_id' => $user->id,
+                    'role' => 'member',
+                    'status' => 'approved',
+                    'is_active' => true,
+                    'joined_at' => now()
+                ]);
+                
+                // Load relations for response
+                $channel->load(['messages.sender', 'members.user', 'creator']);
+                $channel->user_role = 'member';
+                
+                return response()->json([
+                    'message' => 'Successfully joined the channel',
+                    'channel' => $channel
+                ], 201);
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to join channel: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to join channel',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Approve a member's join request
+     */
+    public function approveMember(Request $request, $id, $memberId)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Get channel
+        $channel = Channel::findOrFail($id);
+        
+        // Check if user is an admin of the channel
+        if (!$channel->isAdmin($user)) {
+            return response()->json(['message' => 'Only channel admins can approve join requests'], 403);
+        }
+        
+        // Get the member
+        $membership = ChannelMember::where('id', $memberId)
+            ->where('channel_id', $channel->id)
+            ->where('status', 'pending')
+            ->firstOrFail();
+        
+        try {
+            // Approve the member
+            $membership->approve();
+            
+            // Load user relationship
+            $membership->load('user');
+            
+            // Notify the user
+            $memberUser = $membership->user;
+            $memberUser->notify(new BaseNotification(
+                'Your request to join channel ' . $channel->title . ' has been approved',
+                'channel_join_approved',
+                'success',
+                [
+                    'channel_id' => $channel->id,
+                    'channel_title' => $channel->title
+                ]
+            ));
+            
+            return response()->json([
+                'message' => 'Member approved successfully',
+                'member' => $membership
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to approve member: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to approve member',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Reject a member's join request
+     */
+    public function rejectMember(Request $request, $id, $memberId)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Validate request
+        $validated = $request->validate([
+            'rejection_reason' => 'nullable|string|max:1000'
+        ]);
+        
+        // Get channel
+        $channel = Channel::findOrFail($id);
+        
+        // Check if user is an admin of the channel
+        if (!$channel->isAdmin($user)) {
+            return response()->json(['message' => 'Only channel admins can reject join requests'], 403);
+        }
+        
+        // Get the member
+        $membership = ChannelMember::where('id', $memberId)
+            ->where('channel_id', $channel->id)
+            ->where('status', 'pending')
+            ->firstOrFail();
+        
+        try {
+            // Reject the member
+            $membership->reject($validated['rejection_reason'] ?? null);
+            
+            // Load user relationship
+            $membership->load('user');
+            
+            // Notify the user
+            $memberUser = $membership->user;
+            $memberUser->notify(new BaseNotification(
+                'Your request to join channel ' . $channel->title . ' has been rejected',
+                'channel_join_rejected',
+                'error',
+                [
+                    'channel_id' => $channel->id,
+                    'channel_title' => $channel->title,
+                    'rejection_reason' => $validated['rejection_reason'] ?? 'No reason provided'
+                ]
+            ));
+            
+            return response()->json([
+                'message' => 'Member rejected successfully',
+                'member' => $membership
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to reject member: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to reject member',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Add a member to the channel (admin only)
      */
     public function addMember(Request $request, $id)
     {
@@ -365,8 +661,29 @@ class ChannelController extends Controller
         $newMember = User::findOrFail($validated['user_id']);
         
         // Check if user is already a member
-        if ($channel->isMember($newMember)) {
-            return response()->json(['message' => 'User is already a member of this channel'], 400);
+        $existingMembership = $channel->members()
+            ->where('user_id', $newMember->id)
+            ->first();
+            
+        if ($existingMembership) {
+            if ($existingMembership->status === 'approved') {
+                return response()->json(['message' => 'User is already a member of this channel'], 400);
+            } else {
+                // Update existing membership to approved
+                $existingMembership->status = 'approved';
+                $existingMembership->role = $validated['role'] ?? 'member';
+                $existingMembership->is_active = true;
+                $existingMembership->joined_at = now();
+                $existingMembership->save();
+                
+                // Load user relationship
+                $existingMembership->load('user');
+                
+                return response()->json([
+                    'message' => 'Member added successfully',
+                    'member' => $existingMembership
+                ], 200);
+            }
         }
         
         try {
@@ -375,12 +692,25 @@ class ChannelController extends Controller
                 'channel_id' => $channel->id,
                 'user_id' => $newMember->id,
                 'role' => $validated['role'] ?? 'member',
+                'status' => 'approved',
                 'is_active' => true,
                 'joined_at' => now()
             ]);
             
             // Load user relationship
             $membership->load('user');
+            
+            // Notify the user
+            $newMember->notify(new BaseNotification(
+                'You have been added to channel ' . $channel->title,
+                'channel_added',
+                'info',
+                [
+                    'channel_id' => $channel->id,
+                    'channel_title' => $channel->title,
+                    'added_by' => $user->username
+                ]
+            ));
             
             return response()->json([
                 'message' => 'Member added successfully',
@@ -503,6 +833,114 @@ class ChannelController extends Controller
     }
     
     /**
+     * Join a channel using a join code
+     */
+    public function joinWithCode(Request $request)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Validate request
+        $validated = $request->validate([
+            'join_code' => 'required|string',
+            'join_message' => 'nullable|string|max:1000'
+        ]);
+        
+        // Find channel by join code
+        $channel = Channel::where('join_code', $validated['join_code'])->first();
+        
+        if (!$channel) {
+            return response()->json(['message' => 'Invalid join code'], 404);
+        }
+        
+        // Check if channel is active
+        if (!$channel->is_active) {
+            return response()->json(['message' => 'This channel is no longer active'], 400);
+        }
+        
+        // Check if user is already a member
+        $existingMembership = $channel->members()->where('user_id', $user->id)->first();
+        
+        if ($existingMembership) {
+            if ($existingMembership->status === 'approved') {
+                return response()->json(['message' => 'You are already a member of this channel'], 400);
+            } elseif ($existingMembership->status === 'pending') {
+                return response()->json(['message' => 'Your join request is already pending approval'], 400);
+            } elseif ($existingMembership->status === 'rejected') {
+                // If previously rejected, update the request
+                $existingMembership->status = 'pending';
+                $existingMembership->join_message = $validated['join_message'] ?? null;
+                $existingMembership->rejection_reason = null;
+                $existingMembership->save();
+                
+                // Notify channel admins
+                $this->notifyChannelAdmins($channel, $user, 'join_request');
+                
+                return response()->json([
+                    'message' => 'Join request submitted successfully',
+                    'membership' => $existingMembership
+                ], 200);
+            }
+        }
+        
+        // Check if channel has reached maximum members
+        if ($channel->hasReachedMaxMembers()) {
+            return response()->json(['message' => 'Channel has reached maximum number of members'], 400);
+        }
+        
+        try {
+            // If channel requires approval, create pending membership
+            if ($channel->requires_approval) {
+                $membership = ChannelMember::create([
+                    'channel_id' => $channel->id,
+                    'user_id' => $user->id,
+                    'role' => 'member',
+                    'status' => 'pending',
+                    'join_message' => $validated['join_message'] ?? null,
+                    'is_active' => false
+                ]);
+                
+                // Notify channel admins
+                $this->notifyChannelAdmins($channel, $user, 'join_request');
+                
+                return response()->json([
+                    'message' => 'Join request submitted successfully',
+                    'membership' => $membership
+                ], 201);
+            } else {
+                // If channel doesn't require approval, add as member immediately
+                $membership = ChannelMember::create([
+                    'channel_id' => $channel->id,
+                    'user_id' => $user->id,
+                    'role' => 'member',
+                    'status' => 'approved',
+                    'is_active' => true,
+                    'joined_at' => now()
+                ]);
+                
+                // Load relations for response
+                $channel->load(['messages.sender', 'members.user', 'creator']);
+                $channel->user_role = 'member';
+                
+                return response()->json([
+                    'message' => 'Successfully joined the channel',
+                    'channel' => $channel
+                ], 201);
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to join channel: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to join channel',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
      * Join a channel using a share link
      */
     public function joinWithLink(Request $request)
@@ -515,7 +953,8 @@ class ChannelController extends Controller
         
         // Validate request
         $validated = $request->validate([
-            'share_link' => 'required|string'
+            'share_link' => 'required|string',
+            'join_message' => 'nullable|string|max:1000'
         ]);
         
         // Find channel by share link
@@ -525,48 +964,9 @@ class ChannelController extends Controller
             return response()->json(['message' => 'Invalid share link'], 404);
         }
         
-        // Check if channel is active
-        if (!$channel->is_active) {
-            return response()->json(['message' => 'This channel is no longer active'], 400);
-        }
-        
-        // Check if user is already a member
-        if ($channel->isMember($user)) {
-            return response()->json(['message' => 'You are already a member of this channel'], 400);
-        }
-        
-        // Check if channel has reached maximum members
-        if ($channel->hasReachedMaxMembers()) {
-            return response()->json(['message' => 'Channel has reached maximum number of members'], 400);
-        }
-        
-        try {
-            // Add member
-            $membership = ChannelMember::create([
-                'channel_id' => $channel->id,
-                'user_id' => $user->id,
-                'role' => 'member',
-                'is_active' => true,
-                'joined_at' => now()
-            ]);
-            
-            // Load relationships for response
-            $channel->load(['messages.sender', 'members.user', 'creator']);
-            $channel->user_role = 'member';
-            $channel->unread_count = $channel->unreadMessagesCount($user);
-            
-            return response()->json([
-                'message' => 'Successfully joined the channel',
-                'channel' => $channel
-            ], 201);
-        } catch (\Exception $e) {
-            Log::error('Failed to join channel: ' . $e->getMessage());
-            
-            return response()->json([
-                'message' => 'Failed to join channel',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+        // Use the same logic as join with code
+        $request->merge(['join_code' => $channel->join_code]);
+        return $this->joinWithCode($request);
     }
     
     /**
@@ -670,7 +1070,8 @@ class ChannelController extends Controller
         }
         
         return response()->json([
-            'share_link' => $channel->share_link
+            'share_link' => $channel->share_link,
+            'join_code' => $channel->join_code
         ]);
     }
     
@@ -709,6 +1110,156 @@ class ChannelController extends Controller
                 'message' => 'Failed to regenerate share link',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+    
+    /**
+     * Regenerate the join code for a channel
+     */
+    public function regenerateJoinCode($id)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Get channel
+        $channel = Channel::findOrFail($id);
+        
+        // Check if user is an admin
+        if (!$channel->isAdmin($user)) {
+            return response()->json(['message' => 'Only channel admins can regenerate the join code'], 403);
+        }
+        
+        try {
+            // Generate new join code
+            $joinCode = $channel->regenerateJoinCode();
+            
+            return response()->json([
+                'message' => 'Join code regenerated',
+                'join_code' => $joinCode
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to regenerate join code: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to regenerate join code',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Hire an educator from the channel
+     */
+    public function hireEducator(Request $request, $id, $educatorId)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Check if user is a learner
+        if ($user->role !== User::ROLE_LEARNER) {
+            return response()->json(['message' => 'Only learners can hire educators'], 403);
+        }
+        
+        // Validate request
+        $validated = $request->validate([
+            'message' => 'required|string|max:1000',
+            'rate' => 'required|numeric|min:0',
+            'hours' => 'required|integer|min:1',
+            'schedule' => 'required|string|max:1000',
+            'subject' => 'required|string|max:255'
+        ]);
+        
+        // Get channel
+        $channel = Channel::findOrFail($id);
+        
+        // Check if user is a member
+        if (!$channel->isMember($user)) {
+            return response()->json(['message' => 'You are not a member of this channel'], 403);
+        }
+        
+        // Get the educator
+        $educator = User::findOrFail($educatorId);
+        
+        // Check if educator is a member of the channel
+        if (!$channel->isMember($educator)) {
+            return response()->json(['message' => 'The educator is not a member of this channel'], 403);
+        }
+        
+        // Check if educator is actually an educator
+        if ($educator->role !== User::ROLE_EDUCATOR) {
+            return response()->json(['message' => 'The selected user is not an educator'], 400);
+        }
+        
+        // Check if educator can be hired
+        if (!$educator->canBeHired()) {
+            return response()->json(['message' => 'This educator cannot be hired. They may need to be verified first.'], 400);
+        }
+        
+        try {
+            // Create hire request
+            $hireRequest = HireRequest::create([
+                'client_id' => $user->id,
+                'tutor_id' => $educator->id,
+                'message' => $validated['message'],
+                'amount' => $validated['rate'],
+                'hours' => $validated['hours'],
+                'schedule' => $validated['schedule'],
+                'subject' => $validated['subject'],
+                'status' => 'pending',
+                'reference' => 'channel_' . $channel->id
+            ]);
+            
+            // Notify educator about the request
+            $educator->notify(new \App\Notifications\HireRequestNotification($hireRequest));
+            
+            return response()->json([
+                'message' => 'Hire request sent successfully',
+                'hire_request' => $hireRequest
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Failed to send hire request: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to send hire request',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Notify all channel admins about an event
+     */
+    private function notifyChannelAdmins(Channel $channel, User $user, $type)
+    {
+        // Get all channel admins
+        $admins = $channel->members()
+            ->where('role', 'admin')
+            ->where('status', 'approved')
+            ->where('is_active', true)
+            ->with('user')
+            ->get()
+            ->pluck('user');
+        
+        $notificationData = [
+            'channel_id' => $channel->id,
+            'channel_title' => $channel->title,
+            'user_id' => $user->id,
+            'username' => $user->username
+        ];
+        
+        if ($type === 'join_request') {
+            Notification::send($admins, new BaseNotification(
+                $user->username . ' has requested to join your channel ' . $channel->title,
+                'channel_join_request',
+                'info',
+                $notificationData
+            ));
         }
     }
 }

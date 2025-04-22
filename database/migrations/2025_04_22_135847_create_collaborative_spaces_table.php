@@ -11,19 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('channels', function (Blueprint $table) {
+        Schema::create('collaborative_spaces', function (Blueprint $table) {
             $table->uuid('id')->primary();
+            $table->uuid('channel_id');
             $table->string('title');
             $table->text('description')->nullable();
-            $table->uuid('creator_id');
-            $table->string('share_link')->unique();
-            $table->string('join_code', 12)->unique();
-            $table->boolean('is_active')->default(true);
-            $table->integer('max_members')->default(10);
-            $table->boolean('requires_approval')->default(false);
+            $table->string('type'); // document, whiteboard, video_project, code, etc.
+            $table->json('settings')->nullable();
+            $table->uuid('created_by');
             $table->timestamps();
             
-            $table->foreign('creator_id')->references('id')->on('users')->onDelete('cascade');
+            $table->foreign('channel_id')->references('id')->on('channels')->onDelete('cascade');
+            $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
         });
     }
 
@@ -32,6 +31,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('channels');
+        Schema::dropIfExists('collaborative_spaces');
     }
 };

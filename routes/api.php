@@ -434,6 +434,39 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}', [HireSessionController::class, 'show']);
         Route::post('/{id}/complete', [HireSessionController::class, 'complete']);
         Route::post('/{id}/rate', [HireSessionController::class, 'rateEducator']);
+        
+        // Session messaging
+        Route::post('/{id}/toggle-messaging', [HireSessionController::class, 'toggleMessaging']);
+        Route::get('/{id}/conversation', [HireSessionController::class, 'getConversation']);
+        Route::post('/{id}/message', [HireSessionController::class, 'sendMessage']);
+        
+        // Document sharing
+        Route::get('/{id}/documents', [HireSessionDocumentController::class, 'index']);
+        Route::post('/{id}/documents', [HireSessionDocumentController::class, 'store']);
+        Route::get('/{id}/documents/{documentId}', [HireSessionDocumentController::class, 'show']);
+        Route::get('/{id}/documents/{documentId}/download', [HireSessionDocumentController::class, 'download']);
+        Route::delete('/{id}/documents/{documentId}', [HireSessionDocumentController::class, 'destroy']);
+        
+        // Attachment handling (for messages)
+        Route::get('/{id}/attachments/{filename}', [HireSessionController::class, 'downloadAttachment']);
+        
+        // 1:1 Video session routes
+        Route::prefix('{id}/video')->group(function () {
+            // Session management
+            Route::post('/start', [HireSessionVideoController::class, 'startSession']);
+            Route::post('/join', [HireSessionVideoController::class, 'joinSession']);
+            Route::post('/leave', [HireSessionVideoController::class, 'leaveSession']);
+            Route::post('/end', [HireSessionVideoController::class, 'endSession']);
+            Route::get('/status', [HireSessionVideoController::class, 'getSessionStatus']);
+            
+            // WebRTC signaling
+            Route::post('/signal', [HireSessionVideoController::class, 'signal']);
+            Route::post('/ice-candidate', [HireSessionVideoController::class, 'sendIceCandidate']);
+            
+            // Participant settings
+            Route::post('/preferences', [HireSessionVideoController::class, 'updatePreferences']);
+            Route::post('/connection-quality', [HireSessionVideoController::class, 'reportConnectionQuality']);
+        });
     });
     
     // Payment methods routes - add both singular and plural
@@ -580,41 +613,127 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('channels')->group(function () {
         Route::get('/', [\App\Http\Controllers\ChannelController::class, 'index']);
         Route::post('/', [\App\Http\Controllers\ChannelController::class, 'store']);
+        Route::get('/pending-requests', [\App\Http\Controllers\ChannelController::class, 'pendingRequests']);
+        Route::get('/pending-member-requests', [\App\Http\Controllers\ChannelController::class, 'pendingMemberRequests']);
         Route::get('/{id}', [\App\Http\Controllers\ChannelController::class, 'show']);
         Route::put('/{id}', [\App\Http\Controllers\ChannelController::class, 'update']);
         Route::delete('/{id}', [\App\Http\Controllers\ChannelController::class, 'destroy']);
         Route::post('/{id}/message', [\App\Http\Controllers\ChannelController::class, 'sendMessage']);
+        Route::post('/{id}/request-to-join', [\App\Http\Controllers\ChannelController::class, 'requestToJoin']);
+        Route::post('/{id}/members/{memberId}/approve', [\App\Http\Controllers\ChannelController::class, 'approveMember']);
+        Route::post('/{id}/members/{memberId}/reject', [\App\Http\Controllers\ChannelController::class, 'rejectMember']);
         Route::post('/{id}/members', [\App\Http\Controllers\ChannelController::class, 'addMember']);
         Route::delete('/{id}/members', [\App\Http\Controllers\ChannelController::class, 'removeMember']);
         Route::put('/{id}/members/role', [\App\Http\Controllers\ChannelController::class, 'updateMemberRole']);
-        Route::post('/join', [\App\Http\Controllers\ChannelController::class, 'joinWithLink']);
+        Route::post('/join-link', [\App\Http\Controllers\ChannelController::class, 'joinWithLink']);
+        Route::post('/join-code', [\App\Http\Controllers\ChannelController::class, 'joinWithCode']);
         Route::post('/{id}/leave', [\App\Http\Controllers\ChannelController::class, 'leave']);
         Route::post('/{id}/read', [\App\Http\Controllers\ChannelController::class, 'markAsRead']);
         Route::get('/{id}/share-link', [\App\Http\Controllers\ChannelController::class, 'getShareLink']);
         Route::post('/{id}/regenerate-link', [\App\Http\Controllers\ChannelController::class, 'regenerateShareLink']);
+        Route::post('/{id}/regenerate-code', [\App\Http\Controllers\ChannelController::class, 'regenerateJoinCode']);
+        Route::post('/{id}/hire-educator/{educatorId}', [\App\Http\Controllers\ChannelController::class, 'hireEducator']);
     });
     
     // Duplicate routes with singular "channel"
     Route::prefix('channel')->group(function () {
         Route::get('/', [\App\Http\Controllers\ChannelController::class, 'index']);
         Route::post('/', [\App\Http\Controllers\ChannelController::class, 'store']);
+        Route::get('/pending-requests', [\App\Http\Controllers\ChannelController::class, 'pendingRequests']);
+        Route::get('/pending-member-requests', [\App\Http\Controllers\ChannelController::class, 'pendingMemberRequests']);
         Route::get('/{id}', [\App\Http\Controllers\ChannelController::class, 'show']);
         Route::put('/{id}', [\App\Http\Controllers\ChannelController::class, 'update']);
         Route::delete('/{id}', [\App\Http\Controllers\ChannelController::class, 'destroy']);
         Route::post('/{id}/message', [\App\Http\Controllers\ChannelController::class, 'sendMessage']);
+        Route::post('/{id}/request-to-join', [\App\Http\Controllers\ChannelController::class, 'requestToJoin']);
+        Route::post('/{id}/members/{memberId}/approve', [\App\Http\Controllers\ChannelController::class, 'approveMember']);
+        Route::post('/{id}/members/{memberId}/reject', [\App\Http\Controllers\ChannelController::class, 'rejectMember']);
         Route::post('/{id}/members', [\App\Http\Controllers\ChannelController::class, 'addMember']);
         Route::delete('/{id}/members', [\App\Http\Controllers\ChannelController::class, 'removeMember']);
         Route::put('/{id}/members/role', [\App\Http\Controllers\ChannelController::class, 'updateMemberRole']);
-        Route::post('/join', [\App\Http\Controllers\ChannelController::class, 'joinWithLink']);
+        Route::post('/join-link', [\App\Http\Controllers\ChannelController::class, 'joinWithLink']);
+        Route::post('/join-code', [\App\Http\Controllers\ChannelController::class, 'joinWithCode']);
         Route::post('/{id}/leave', [\App\Http\Controllers\ChannelController::class, 'leave']);
         Route::post('/{id}/read', [\App\Http\Controllers\ChannelController::class, 'markAsRead']);
         Route::get('/{id}/share-link', [\App\Http\Controllers\ChannelController::class, 'getShareLink']);
         Route::post('/{id}/regenerate-link', [\App\Http\Controllers\ChannelController::class, 'regenerateShareLink']);
+        Route::post('/{id}/regenerate-code', [\App\Http\Controllers\ChannelController::class, 'regenerateJoinCode']);
+        Route::post('/{id}/hire-educator/{educatorId}', [\App\Http\Controllers\ChannelController::class, 'hireEducator']);
     });
     
     // Enhanced subscription routes
     Route::prefix('subscription-plans')->group(function () {
         Route::get('/', [\App\Http\Controllers\SubscriptionController::class, 'getPlans']);
+    });
+    
+    // Collaboration routes for channels
+    Route::prefix('channels/{channelId}/collaboration')->group(function () {
+        // Spaces
+        Route::get('/spaces', [\App\Http\Controllers\CollaborationController::class, 'getSpaces']);
+        Route::post('/spaces', [\App\Http\Controllers\CollaborationController::class, 'createSpace']);
+        Route::get('/spaces/{spaceId}', [\App\Http\Controllers\CollaborationController::class, 'getSpace']);
+        Route::put('/spaces/{spaceId}', [\App\Http\Controllers\CollaborationController::class, 'updateSpace']);
+        Route::delete('/spaces/{spaceId}', [\App\Http\Controllers\CollaborationController::class, 'deleteSpace']);
+        
+        // Content
+        Route::get('/spaces/{spaceId}/content/{contentId}', [\App\Http\Controllers\CollaborationController::class, 'getContent']);
+        Route::post('/spaces/{spaceId}/content', [\App\Http\Controllers\CollaborationController::class, 'createContent']);
+        Route::put('/spaces/{spaceId}/content/{contentId}', [\App\Http\Controllers\CollaborationController::class, 'updateContent']);
+        Route::delete('/spaces/{spaceId}/content/{contentId}', [\App\Http\Controllers\CollaborationController::class, 'deleteContent']);
+        
+        // Versions
+        Route::get('/spaces/{spaceId}/content/{contentId}/versions', [\App\Http\Controllers\CollaborationController::class, 'getContentVersions']);
+        Route::post('/spaces/{spaceId}/content/{contentId}/restore', [\App\Http\Controllers\CollaborationController::class, 'restoreVersion']);
+        
+        // Comments
+        Route::get('/spaces/{spaceId}/content/{contentId}/comments', [\App\Http\Controllers\CollaborationController::class, 'getComments']);
+        Route::post('/spaces/{spaceId}/content/{contentId}/comments', [\App\Http\Controllers\CollaborationController::class, 'addComment']);
+        Route::put('/spaces/{spaceId}/content/{contentId}/comments/{commentId}', [\App\Http\Controllers\CollaborationController::class, 'updateComment']);
+        Route::delete('/spaces/{spaceId}/content/{contentId}/comments/{commentId}', [\App\Http\Controllers\CollaborationController::class, 'deleteComment']);
+        Route::put('/spaces/{spaceId}/content/{contentId}/comments/{commentId}/resolve', [\App\Http\Controllers\CollaborationController::class, 'resolveComment']);
+        
+        // Permissions
+        Route::put('/spaces/{spaceId}/content/{contentId}/permissions', [\App\Http\Controllers\CollaborationController::class, 'updatePermissions']);
+        
+        // Real-time collaboration
+        Route::post('/spaces/{spaceId}/content/{contentId}/operation', [\App\Http\Controllers\CollaborationController::class, 'processOperation']);
+        Route::get('/spaces/{spaceId}/content/{contentId}/cursors', [\App\Http\Controllers\CollaborationController::class, 'getCursors']);
+        Route::post('/spaces/{spaceId}/content/{contentId}/cursor', [\App\Http\Controllers\CollaborationController::class, 'updateCursor']);
+    });
+    
+    // Also support the singular form
+    Route::prefix('channel/{channelId}/collaboration')->group(function () {
+        // Spaces
+        Route::get('/spaces', [\App\Http\Controllers\CollaborationController::class, 'getSpaces']);
+        Route::post('/spaces', [\App\Http\Controllers\CollaborationController::class, 'createSpace']);
+        Route::get('/spaces/{spaceId}', [\App\Http\Controllers\CollaborationController::class, 'getSpace']);
+        Route::put('/spaces/{spaceId}', [\App\Http\Controllers\CollaborationController::class, 'updateSpace']);
+        Route::delete('/spaces/{spaceId}', [\App\Http\Controllers\CollaborationController::class, 'deleteSpace']);
+        
+        // Content
+        Route::get('/spaces/{spaceId}/content/{contentId}', [\App\Http\Controllers\CollaborationController::class, 'getContent']);
+        Route::post('/spaces/{spaceId}/content', [\App\Http\Controllers\CollaborationController::class, 'createContent']);
+        Route::put('/spaces/{spaceId}/content/{contentId}', [\App\Http\Controllers\CollaborationController::class, 'updateContent']);
+        Route::delete('/spaces/{spaceId}/content/{contentId}', [\App\Http\Controllers\CollaborationController::class, 'deleteContent']);
+        
+        // Versions
+        Route::get('/spaces/{spaceId}/content/{contentId}/versions', [\App\Http\Controllers\CollaborationController::class, 'getContentVersions']);
+        Route::post('/spaces/{spaceId}/content/{contentId}/restore', [\App\Http\Controllers\CollaborationController::class, 'restoreVersion']);
+        
+        // Comments
+        Route::get('/spaces/{spaceId}/content/{contentId}/comments', [\App\Http\Controllers\CollaborationController::class, 'getComments']);
+        Route::post('/spaces/{spaceId}/content/{contentId}/comments', [\App\Http\Controllers\CollaborationController::class, 'addComment']);
+        Route::put('/spaces/{spaceId}/content/{contentId}/comments/{commentId}', [\App\Http\Controllers\CollaborationController::class, 'updateComment']);
+        Route::delete('/spaces/{spaceId}/content/{contentId}/comments/{commentId}', [\App\Http\Controllers\CollaborationController::class, 'deleteComment']);
+        Route::put('/spaces/{spaceId}/content/{contentId}/comments/{commentId}/resolve', [\App\Http\Controllers\CollaborationController::class, 'resolveComment']);
+        
+        // Permissions
+        Route::put('/spaces/{spaceId}/content/{contentId}/permissions', [\App\Http\Controllers\CollaborationController::class, 'updatePermissions']);
+        
+        // Real-time collaboration
+        Route::post('/spaces/{spaceId}/content/{contentId}/operation', [\App\Http\Controllers\CollaborationController::class, 'processOperation']);
+        Route::get('/spaces/{spaceId}/content/{contentId}/cursors', [\App\Http\Controllers\CollaborationController::class, 'getCursors']);
+        Route::post('/spaces/{spaceId}/content/{contentId}/cursor', [\App\Http\Controllers\CollaborationController::class, 'updateCursor']);
     });
     
     Route::prefix('subscription-plan')->group(function () {
