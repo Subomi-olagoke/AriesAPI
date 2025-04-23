@@ -126,12 +126,13 @@ class ChannelController extends Controller
             'requires_approval' => 'boolean'
         ]);
         
-        // Check if user has permission to create channels
-        if (!$user->canCreateChannels() && !$user->isAdmin) {
-            return response()->json([
-                'message' => 'You need an active subscription to create channels'
-            ], 403);
-        }
+        // All users can create channels now
+        // Previous check removed:
+        // if (!$user->canCreateChannels() && !$user->isAdmin) {
+        //     return response()->json([
+        //         'message' => 'You need an active subscription to create channels'
+        //     ], 403);
+        // }
         
         try {
             DB::beginTransaction();

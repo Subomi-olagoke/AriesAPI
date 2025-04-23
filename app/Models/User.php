@@ -357,8 +357,12 @@ class User extends Authenticatable {
      */
     public function canCreateChannels()
     {
-        $subscription = $this->activeSubscription;
-        return $subscription && $subscription->canCreateChannels();
+        // Allow all users to create channels regardless of subscription status
+        return true;
+        
+        // Previous logic that required subscription:
+        // $subscription = $this->activeSubscription;
+        // return $subscription && $subscription->canCreateChannels();
     }
     
     /**
