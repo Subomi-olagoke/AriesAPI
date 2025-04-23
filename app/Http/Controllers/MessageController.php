@@ -7,6 +7,7 @@ use App\Models\Message;
 use App\Models\Conversation;
 use App\Models\HiringSession;
 use App\Services\FileUploadService;
+use App\Services\ContentModerationService;
 use Illuminate\Http\Request;
 use App\Events\MessageSent;
 use Illuminate\Support\Facades\Auth;
@@ -146,6 +147,19 @@ class MessageController extends Controller
                     'message' => 'You do not have permission to send messages in this conversation'
                 ], 403);
             }
+        }
+        
+        // Moderate content before processing
+        $contentModerationService = app(ContentModerationService::class);
+        $moderationResult = $contentModerationService->moderateMessage(
+            $request->message,
+            $request->hasFile('attachment') ? $request->file('attachment') : null
+        );
+        
+        if (!$moderationResult['isAllowed']) {
+            return response()->json([
+                'message' => $moderationResult['reason'] ?? 'Your message contains inappropriate content that is not allowed'
+            ], 422);
         }
 
         try {

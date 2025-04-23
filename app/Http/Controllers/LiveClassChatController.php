@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\LiveClass;
 use App\Models\LiveClassChat;
 use App\Events\LiveClassChatMessage;
+use App\Services\ContentModerationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -39,6 +40,16 @@ class LiveClassChatController extends Controller
             return response()->json([
                 'message' => 'You are not a participant in this class'
             ], 403);
+        }
+        
+        // Moderate content before processing
+        $contentModerationService = app(ContentModerationService::class);
+        $moderationResult = $contentModerationService->analyzeText($request->message);
+        
+        if (!$moderationResult['isAllowed']) {
+            return response()->json([
+                'message' => $moderationResult['reason'] ?? 'Your message contains inappropriate content that is not allowed'
+            ], 422);
         }
         
         try {

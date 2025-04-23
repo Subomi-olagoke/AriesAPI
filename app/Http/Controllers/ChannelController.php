@@ -9,6 +9,7 @@ use App\Models\ChannelMessage;
 use App\Models\HireRequest;
 use App\Events\ChannelMessageSent;
 use App\Services\FileUploadService;
+use App\Services\ContentModerationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -342,6 +343,19 @@ class ChannelController extends Controller
         // Check if user is a member
         if (!$channel->isMember($user)) {
             return response()->json(['message' => 'You are not a member of this channel'], 403);
+        }
+        
+        // Moderate content before processing
+        $contentModerationService = app(ContentModerationService::class);
+        $moderationResult = $contentModerationService->moderateMessage(
+            $request->message,
+            $request->hasFile('attachment') ? $request->file('attachment') : null
+        );
+        
+        if (!$moderationResult['isAllowed']) {
+            return response()->json([
+                'message' => $moderationResult['reason'] ?? 'Your message contains inappropriate content that is not allowed'
+            ], 422);
         }
         
         try {
