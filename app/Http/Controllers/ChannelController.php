@@ -143,7 +143,9 @@ class ChannelController extends Controller
                 'description' => $validated['description'] ?? null,
                 'creator_id' => $user->id,
                 'max_members' => $validated['max_members'] ?? 10,
-                'requires_approval' => $validated['requires_approval'] ?? false
+                'requires_approval' => $validated['requires_approval'] ?? false,
+                'share_link' => 'channel/' . Str::random(12),
+                'join_code' => strtoupper(Str::random(8))
             ]);
             
             // Add creator as admin member
