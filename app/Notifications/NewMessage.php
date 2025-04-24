@@ -42,6 +42,7 @@ class NewMessage extends Notification implements ShouldQueue
             'sender_id' => $sender->id,
             'sender_name' => $sender->username,
             'sender_avatar' => $sender->avatar,
+            'message' => $this->message->body,
             'preview' => substr($this->message->body, 0, 100),
         ];
     }

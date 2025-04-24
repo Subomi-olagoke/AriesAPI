@@ -29,9 +29,12 @@ class CommentNotification extends BaseNotification
         $truncatedContent = strlen($commentContent) > 100 
             ? substr($commentContent, 0, 97) . '...' 
             : $commentContent;
+        
+        $username = $this->user->username ?? $this->user->first_name ?? 'Someone';
             
         return [
-            'message' => "{$this->user->username} commented: \"{$truncatedContent}\"",
+            'message' => $commentContent,
+            'sender_name' => $username,
             'comment_id' => $this->comment->id,
             'avatar' => $this->user->avatar,
             'post_id' => $this->comment->post_id,
@@ -68,7 +71,8 @@ class CommentNotification extends BaseNotification
             
         return [
             'title' => 'New Comment',
-            'message' => "{$username} commented: \"{$truncatedContent}\"",
+            'message' => $commentContent,
+            'sender_name' => $username,
             'comment_id' => $this->comment->id,
             'avatar' => $this->user->avatar,
             'post_id' => $this->comment->post_id,
