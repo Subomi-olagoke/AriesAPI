@@ -313,7 +313,7 @@ class User extends Authenticatable {
     public function channels()
     {
         return $this->belongsToMany(Channel::class, 'channel_members', 'user_id', 'channel_id')
-            ->withPivot('role', 'is_active', 'joined_at', 'last_read_at')
+            ->withPivot('role', 'status', 'is_active', 'joined_at', 'last_read_at')
             ->withTimestamps();
     }
     
