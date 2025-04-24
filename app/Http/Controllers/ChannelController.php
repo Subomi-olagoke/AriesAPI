@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Notification;
-use App\Notifications\BaseNotification;
+use App\Notifications\GeneralNotification;
 
 class ChannelController extends Controller
 {
@@ -556,7 +556,7 @@ class ChannelController extends Controller
             
             // Notify the user
             $memberUser = $membership->user;
-            $memberUser->notify(new BaseNotification(
+            $memberUser->notify(new GeneralNotification(
                 'Your request to join channel ' . $channel->title . ' has been approved',
                 'channel_join_approved',
                 'success',
@@ -619,7 +619,7 @@ class ChannelController extends Controller
             
             // Notify the user
             $memberUser = $membership->user;
-            $memberUser->notify(new BaseNotification(
+            $memberUser->notify(new GeneralNotification(
                 'Your request to join channel ' . $channel->title . ' has been rejected',
                 'channel_join_rejected',
                 'error',
@@ -718,7 +718,7 @@ class ChannelController extends Controller
             $membership->load('user');
             
             // Notify the user
-            $newMember->notify(new BaseNotification(
+            $newMember->notify(new GeneralNotification(
                 'You have been added to channel ' . $channel->title,
                 'channel_added',
                 'info',
@@ -1271,7 +1271,7 @@ class ChannelController extends Controller
         ];
         
         if ($type === 'join_request') {
-            Notification::send($admins, new BaseNotification(
+            Notification::send($admins, new GeneralNotification(
                 $user->username . ' has requested to join your channel ' . $channel->title,
                 'channel_join_request',
                 'info',
