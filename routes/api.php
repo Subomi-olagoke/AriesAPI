@@ -263,6 +263,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/files/download', [App\Http\Controllers\FileController::class, 'download'])->name('files.download');
     Route::get('/posts/{postId}/view-file', [FileController::class, 'viewPostFile'])->name('posts.view-file');
     Route::get('/posts/{postId}/download-file', [FileController::class, 'downloadPostFile'])->name('posts.download-file');
+    Route::get('/fetch-post/{id}', [PostController::class, 'show']);
 
     // Educator routes
     Route::post('/create/course', [EducatorsController::class, 'createCourse']);
