@@ -47,9 +47,34 @@ use App\Http\Controllers\FileController;
 |
 */
 // Public route to view a shared post
+Route::post('/cloudinary/notification', function (Request $request) {
+    Log::info('Cloudinary notification received', ['data' => $request->all()]);
+    return response()->json(['status' => 'success']);
+});
 //
 Route::get('/posts/shared/{shareKey}', [PostController::class, 'viewSharedPost'])
      ->name('shared.post');
+
+// Define file upload routes with specific throttling middleware
+Route::middleware(['auth:sanctum', 'file.upload'])->group(function () {
+    // Posts with file uploads
+    Route::post('/posts', [PostController::class, 'store']);
+    
+    // File uploads
+    Route::post('/files/upload', [FileController::class, 'upload']);
+    
+    // Profile picture uploads
+    Route::post('/profile/avatar', [ProfileController::class, 'updateAvatar']);
+    
+    // Course media uploads
+    Route::post('/courses/{course}/media', [CoursesController::class, 'uploadMedia']);
+    
+    // Lesson media uploads
+    Route::post('/lessons/{lesson}/media', [CourseLessonController::class, 'uploadMedia']);
+    
+    // Message attachments
+    Route::post('/messages/{conversation}/attachment', [MessageController::class, 'sendWithAttachment']);
+});
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();

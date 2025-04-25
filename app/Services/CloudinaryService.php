@@ -50,6 +50,8 @@ class CloudinaryService
                 'public_id' => $publicId,
                 'resource_type' => 'auto', // auto-detect if it's an image or video
                 'overwrite' => true,
+                'chunk_size' => 20000000, // 20MB chunks for larger files
+                'timeout' => 600000, // 10 minutes timeout for large uploads
             ];
             
             // Apply transformations if configured for this type
@@ -112,6 +114,9 @@ class CloudinaryService
         $options = [
             'resource_type' => 'video',
             'eager_async' => true,
+            'chunk_size' => 20000000, // 20MB chunks for large uploads
+            'timeout' => 600000, // 10 minutes timeout for large uploads
+            'eager_notification_url' => config('app.url') . '/api/cloudinary/notification',
         ];
         
         if (!empty($transformations)) {

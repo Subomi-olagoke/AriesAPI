@@ -50,7 +50,7 @@ class PostController extends Controller
             'text_content' => 'nullable|string',
             'media_type'   => 'nullable|string|in:image,video,text,file',
             // Media file is required only if media_type is specified
-            'media_file'   => 'required_if:media_type,image,video,file|file|max:10240', // 10MB
+            'media_file'   => 'required_if:media_type,image,video,file|file|max:102400', // 100MB
             'visibility'   => 'nullable|in:public,private,followers',
             'title'        => 'nullable|string|max:255'
         ]);
@@ -78,13 +78,13 @@ class PostController extends Controller
                     switch ($newPost->media_type) {
                         case 'image':
                             $request->validate([
-                                'media_file' => 'image|mimes:jpg,jpeg,png,gif,webp|max:5120',
+                                'media_file' => 'image|mimes:jpg,jpeg,png,gif,webp|max:51200', // 50MB
                             ]);
                             break;
                         
                         case 'video':
                             $request->validate([
-                                'media_file' => 'mimetypes:video/avi,video/mpeg,video/quicktime,video/mp4,video/webm,video/x-matroska|max:10240',
+                                'media_file' => 'mimetypes:video/avi,video/mpeg,video/quicktime,video/mp4,video/webm,video/x-matroska|max:102400', // 100MB
                             ]);
                             break;
                         
@@ -186,7 +186,7 @@ class PostController extends Controller
             'title' => 'sometimes|required|string|max:255',
             'body' => 'sometimes|required|string',
             'visibility' => 'nullable|in:public,private,followers',
-            'media' => 'nullable|file|max:10240',
+            'media' => 'nullable|file|max:102400', // 100MB
         ]);
 
         if ($request->has('title')) {
