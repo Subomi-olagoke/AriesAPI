@@ -83,6 +83,7 @@ class FileUploadService
         $mapping = [
             'avatars' => 'avatar',
             'profile_images' => 'avatar',
+            'channel_pictures' => 'channel_picture',
             'course_thumbnails' => 'course_thumbnail',
             'course_videos' => 'course_video',
             'course_files' => 'course_image',

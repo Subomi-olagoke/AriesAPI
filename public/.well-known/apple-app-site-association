@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "BMBR5BDGDM.com.Oubomi.Ariess",
+        "paths": [
+          "/channel/*"
+        ]
+      }
+    ]
+  }
+}

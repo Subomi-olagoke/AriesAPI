@@ -20,6 +20,7 @@ class Channel extends Model
         'id',
         'title',
         'description',
+        'picture',
         'creator_id',
         'share_link',
         'join_code',
@@ -45,7 +46,7 @@ class Channel extends Model
             }
             
             if (empty($model->share_link)) {
-                $model->share_link = 'channel/' . Str::random(12);
+                $model->share_link = 'https://ariesmvp-9903a26b3095.herokuapp.com/channel/' . $model->id;
             }
             
             if (empty($model->join_code)) {

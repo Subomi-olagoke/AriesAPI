@@ -122,6 +122,7 @@ class ChannelController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',
+            'picture' => 'nullable|image|max:5120', // 5MB max
             'max_members' => 'integer|min:2|max:20',
             'requires_approval' => 'boolean'
         ]);
@@ -137,16 +138,35 @@ class ChannelController extends Controller
         try {
             DB::beginTransaction();
             
-            // Create channel
-            $channel = Channel::create([
+            // Create channel data
+            $channelData = [
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
                 'creator_id' => $user->id,
                 'max_members' => $validated['max_members'] ?? 10,
                 'requires_approval' => $validated['requires_approval'] ?? false,
-                'share_link' => 'channel/' . Str::random(12),
                 'join_code' => strtoupper(Str::random(8))
-            ]);
+                // share_link will be generated in the model using the channel's ID
+            ];
+            
+            // Handle channel picture if uploaded
+            if ($request->hasFile('picture')) {
+                $fileUploadService = app(FileUploadService::class);
+                $pictureUrl = $fileUploadService->uploadFile(
+                    $request->file('picture'),
+                    'channel_pictures',
+                    [
+                        'process_image' => true,
+                        'width' => 400,
+                        'height' => 400,
+                        'fit' => true
+                    ]
+                );
+                $channelData['picture'] = $pictureUrl;
+            }
+            
+            // Create channel
+            $channel = Channel::create($channelData);
             
             // Add creator as admin member
             $member = ChannelMember::create([
@@ -256,13 +276,46 @@ class ChannelController extends Controller
         $validated = $request->validate([
             'title' => 'string|max:255',
             'description' => 'nullable|string|max:1000',
+            'picture' => 'nullable|image|max:5120', // 5MB max
             'max_members' => 'integer|min:2|max:20',
-            'requires_approval' => 'boolean'
+            'requires_approval' => 'boolean',
+            'remove_picture' => 'nullable|boolean'
         ]);
         
         try {
+            // Create update data
+            $updateData = collect($validated)->except(['picture', 'remove_picture'])->toArray();
+            
+            // Handle picture update
+            if ($request->hasFile('picture')) {
+                $fileUploadService = app(FileUploadService::class);
+                
+                // Delete old picture if exists
+                if ($channel->picture) {
+                    $fileUploadService->deleteFile($channel->picture);
+                }
+                
+                // Upload new picture
+                $pictureUrl = $fileUploadService->uploadFile(
+                    $request->file('picture'),
+                    'channel_pictures',
+                    [
+                        'process_image' => true,
+                        'width' => 400,
+                        'height' => 400,
+                        'fit' => true
+                    ]
+                );
+                $updateData['picture'] = $pictureUrl;
+            } elseif (isset($validated['remove_picture']) && $validated['remove_picture'] && $channel->picture) {
+                // Remove existing picture if requested
+                $fileUploadService = app(FileUploadService::class);
+                $fileUploadService->deleteFile($channel->picture);
+                $updateData['picture'] = null;
+            }
+            
             // Update channel
-            $channel->update($validated);
+            $channel->update($updateData);
             
             return response()->json([
                 'message' => 'Channel updated successfully',
@@ -299,6 +352,12 @@ class ChannelController extends Controller
         
         try {
             DB::beginTransaction();
+            
+            // Delete channel picture if exists
+            if ($channel->picture) {
+                $fileUploadService = app(FileUploadService::class);
+                $fileUploadService->deleteFile($channel->picture);
+            }
             
             // Delete all messages and members
             $channel->messages()->delete();
@@ -1112,19 +1171,20 @@ class ChannelController extends Controller
         }
         
         try {
-            // Generate new share link
-            $channel->share_link = 'channel/' . Str::random(12);
+            // Since share link is now based on channel ID, we don't actually need to regenerate it
+            // But we can refresh it to ensure it has the correct format
+            $channel->share_link = 'https://ariesmvp-9903a26b3095.herokuapp.com/channel/' . $channel->id;
             $channel->save();
             
             return response()->json([
-                'message' => 'Share link regenerated',
+                'message' => 'Share link refreshed',
                 'share_link' => $channel->share_link
             ]);
         } catch (\Exception $e) {
-            Log::error('Failed to regenerate share link: ' . $e->getMessage());
+            Log::error('Failed to refresh share link: ' . $e->getMessage());
             
             return response()->json([
-                'message' => 'Failed to regenerate share link',
+                'message' => 'Failed to refresh share link',
                 'error' => $e->getMessage()
             ], 500);
         }
