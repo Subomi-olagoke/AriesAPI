@@ -1145,8 +1145,24 @@ class ChannelController extends Controller
             return response()->json(['message' => 'You are not a member of this channel'], 403);
         }
         
+        // Ensure we always return a full URL, regardless of what's in the database
+        // This handles legacy data that might still use the old format
+        $shareLink = $channel->share_link;
+        
+        // Check if the share link is already a full URL
+        if (!str_starts_with($shareLink, 'http')) {
+            // Convert to full URL format
+            $shareLink = 'https://ariesmvp-9903a26b3095.herokuapp.com/channel/' . $channel->id;
+            
+            // Update the database record if it's using old format
+            if ($shareLink !== $channel->share_link) {
+                $channel->share_link = $shareLink;
+                $channel->save();
+            }
+        }
+        
         return response()->json([
-            'share_link' => $channel->share_link,
+            'share_link' => $shareLink,
             'join_code' => $channel->join_code
         ]);
     }
