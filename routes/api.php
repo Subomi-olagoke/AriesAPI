@@ -299,6 +299,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/educator', [EducatorsController::class, 'getAllEducators']); // Additional route
     Route::get('/educators/with-follow-status', [EducatorsController::class, 'getAllEducatorsWithFollowStatus']);
     Route::get('/educator/with-follow-status', [EducatorsController::class, 'getAllEducatorsWithFollowStatus']); // Additional route
+    Route::get('/educators/verified', [EducatorsController::class, 'getVerifiedEducators']);
+    Route::get('/educator/verified', [EducatorsController::class, 'getVerifiedEducators']); // Additional route
 
     // Enrollment routes
     Route::post('/courses/{courseId}/enroll', [EnrollmentController::class, 'enrollInCourse']);

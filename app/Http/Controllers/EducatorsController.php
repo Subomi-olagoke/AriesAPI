@@ -179,7 +179,7 @@ class EducatorsController extends Controller {
         // Query for all users with educator role
         $educators = User::where('role', User::ROLE_EDUCATOR)
             ->with(['profile', 'topic']) // Include relationships
-            ->select(['id', 'username', 'first_name', 'last_name', 'avatar', 'created_at'])
+            ->select(['id', 'username', 'first_name', 'last_name', 'avatar', 'created_at', 'is_verified', 'verification_status'])
             ->withCount(['courses', 'followers']) // Count relationships
             ->orderBy('followers_count', 'desc') // Order by popularity
             ->paginate($perPage);
@@ -189,6 +189,8 @@ class EducatorsController extends Controller {
             // Add profile data if available
             if ($user->profile) {
                 $user->bio = $user->profile->bio;
+                $user->hire_rate = $user->profile->hire_rate;
+                $user->hire_currency = $user->profile->hire_currency;
             }
             
             // Add topics/interests
@@ -203,9 +205,141 @@ class EducatorsController extends Controller {
             // Is this the current user?
             $user->is_current_user = ($user->id === $currentUserId);
             
+            // Can be hired?
+            $user->can_be_hired = $user->is_verified && 
+                                 ($user->profile && !empty($user->profile->hire_rate));
+            
             // Remove unnecessary relationship data
             unset($user->profile);
             unset($user->topic);
+            
+            return $user;
+        });
+        
+        return response()->json([
+            'educators' => $educators,
+            'total' => $educators->total(),
+            'per_page' => $educators->perPage(),
+            'current_page' => $educators->currentPage(),
+            'last_page' => $educators->lastPage()
+        ]);
+    }
+    
+    /**
+     * Get all verified educators that can be hired
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getVerifiedEducators(Request $request)
+    {
+        // Define pagination parameters with defaults
+        $perPage = $request->get('per_page', 15);
+        $page = $request->get('page', 1);
+        
+        // Get the current user's ID
+        $currentUserId = auth()->id();
+        
+        // Get the IDs of users the current user follows
+        $followedUserIds = auth()->user()->following()->pluck('followeduser')->toArray();
+        
+        // Base query for verified educators with hire rates
+        $query = User::where('role', User::ROLE_EDUCATOR)
+            ->where('is_verified', true)
+            ->whereHas('profile', function($q) {
+                $q->whereNotNull('hire_rate')
+                  ->where('hire_rate', '>', 0);
+            })
+            ->with(['profile', 'topic', 'ratingsReceived']) // Include relationships
+            ->select(['id', 'username', 'first_name', 'last_name', 'avatar', 'created_at', 'is_verified'])
+            ->withCount(['courses', 'followers']); // Count relationships
+            
+        // Apply filters if provided
+        if ($request->has('topic_id')) {
+            $query->whereHas('topic', function($q) use ($request) {
+                $q->where('topics.id', $request->topic_id);
+            });
+        }
+        
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('username', 'like', "%{$search}%")
+                  ->orWhereHas('profile', function($subQ) use ($search) {
+                      $subQ->where('bio', 'like', "%{$search}%");
+                  });
+            });
+        }
+        
+        // Apply sorting
+        if ($request->has('sort_by')) {
+            switch ($request->sort_by) {
+                case 'price_low':
+                    $query->join('profiles', 'users.id', '=', 'profiles.user_id')
+                          ->orderBy('profiles.hire_rate', 'asc')
+                          ->select('users.*');
+                    break;
+                case 'price_high':
+                    $query->join('profiles', 'users.id', '=', 'profiles.user_id')
+                          ->orderBy('profiles.hire_rate', 'desc')
+                          ->select('users.*');
+                    break;
+                case 'rating':
+                    $query->withCount(['ratingsReceived as average_rating' => function($q) {
+                        $q->select(DB::raw('coalesce(avg(rating), 0)'));
+                    }])
+                    ->orderBy('average_rating', 'desc');
+                    break;
+                case 'popularity':
+                    $query->orderBy('followers_count', 'desc');
+                    break;
+                default:
+                    $query->orderBy('created_at', 'desc');
+            }
+        } else {
+            // Default sort by popularity
+            $query->orderBy('followers_count', 'desc');
+        }
+        
+        // Execute the query with pagination
+        $educators = $query->paginate($perPage);
+        
+        // Transform the data to include additional info
+        $educators->getCollection()->transform(function($user) use ($followedUserIds, $currentUserId) {
+            // Calculate average rating
+            $ratingsCount = $user->ratingsReceived->count();
+            $averageRating = $ratingsCount > 0 ? 
+                             $user->ratingsReceived->avg('rating') : 0;
+            
+            // Add profile data
+            if ($user->profile) {
+                $user->bio = $user->profile->bio;
+                $user->hire_rate = $user->profile->hire_rate;
+                $user->hire_currency = $user->profile->hire_currency ?? 'NGN';
+            }
+            
+            // Add topics/interests
+            $user->topics = $user->topic->pluck('name');
+            
+            // Add calculated fields
+            $user->full_name = $user->first_name . ' ' . $user->last_name;
+            
+            // Add follow status
+            $user->is_followed = in_array($user->id, $followedUserIds);
+            
+            // Is this the current user?
+            $user->is_current_user = ($user->id === $currentUserId);
+            
+            // Add rating info
+            $user->average_rating = round($averageRating, 1);
+            $user->ratings_count = $ratingsCount;
+            
+            // Remove unnecessary relationship data
+            unset($user->profile);
+            unset($user->topic);
+            unset($user->ratingsReceived);
             
             return $user;
         });
