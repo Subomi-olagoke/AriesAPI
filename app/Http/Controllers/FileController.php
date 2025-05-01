@@ -228,4 +228,84 @@ class FileController extends Controller
         
         return $mimeTypes[$extension] ?? 'application/octet-stream';
     }
+    
+    /**
+     * Handle Cloudinary notification webhook
+     * This endpoint is used by Cloudinary to notify the application
+     * when a video has been processed or when an error occurs
+     * 
+     * @param Request $request The webhook request from Cloudinary
+     * @return \Illuminate\Http\JsonResponse Response to Cloudinary
+     */
+    public function cloudinaryNotification(Request $request)
+    {
+        // Log the notification for debugging
+        \Log::info('Cloudinary notification received', $request->all());
+        
+        // Extract the upload information from the request
+        $data = $request->all();
+        $resourceType = $data['resource_type'] ?? '';
+        $publicId = $data['public_id'] ?? '';
+        $status = $data['notification_type'] ?? '';
+        
+        // For video processing notifications
+        if ($resourceType === 'video' && !empty($publicId)) {
+            // Store the status in cache for frontend to query
+            \Cache::put("cloudinary_status:{$publicId}", [
+                'status' => $status,
+                'data' => $data,
+                'timestamp' => now()->toIso8601String()
+            ], 24 * 60); // Store for 24 hours
+            
+            // If it's an eager notification (processing complete)
+            if ($status === 'eager_notification') {
+                // You could update database records here or trigger events
+                // For example, finding a video record by public_id and updating it
+                // with streaming URLs or marking it as processed
+                
+                // Example event broadcast (create this event if needed)
+                if (class_exists('\App\Events\VideoProcessingCompleted')) {
+                    event(new \App\Events\VideoProcessingCompleted($publicId, $data));
+                }
+            }
+        }
+        
+        // Always return success to Cloudinary
+        return response()->json(['success' => true]);
+    }
+    
+    /**
+     * Get the status of a Cloudinary video processing job
+     * 
+     * @param Request $request The request containing the public_id
+     * @return \Illuminate\Http\JsonResponse The status of the video processing
+     */
+    public function getCloudinaryStatus(Request $request)
+    {
+        $publicId = $request->public_id;
+        
+        if (empty($publicId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Public ID is required'
+            ], 400);
+        }
+        
+        $status = \Cache::get("cloudinary_status:{$publicId}");
+        
+        if (!$status) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No status found for this video',
+                'status' => 'unknown'
+            ]);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'status' => $status['status'],
+            'timestamp' => $status['timestamp'],
+            'data' => $status['data']
+        ]);
+    }
 }

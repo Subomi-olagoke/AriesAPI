@@ -44,9 +44,9 @@ class CourseLessonController extends Controller
             'duration_minutes' => 'nullable|integer|min:1',
             'order' => 'nullable|integer|min:0',
             'is_preview' => 'nullable|boolean',
-            'video' => 'required_if:content_type,video|file|mimes:mp4,mov,avi,webm,mkv|max:2097152', // 2GB max
-            'file' => 'required_if:content_type,document|file|mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,zip|max:102400', // 100MB max
-            'thumbnail' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
+            'video' => 'required_if:content_type,video|file|mimes:mp4,mov,avi,webm,mkv|max:5242880', // 5GB max
+            'file' => 'required_if:content_type,document|file|mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,zip|max:204800', // 200MB max
+            'thumbnail' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:10240', // 10MB max
             'quiz_data' => 'required_if:content_type,quiz|array',
             'assignment_data' => 'required_if:content_type,assignment|array'
         ]);
@@ -254,9 +254,9 @@ class CourseLessonController extends Controller
             'duration_minutes' => 'nullable|integer|min:1',
             'order' => 'nullable|integer|min:0',
             'is_preview' => 'nullable|boolean',
-            'video' => 'nullable|file|mimes:mp4,mov,avi,webm,mkv|max:2097152',
-            'file' => 'nullable|file|mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,zip|max:102400',
-            'thumbnail' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120',
+            'video' => 'nullable|file|mimes:mp4,mov,avi,webm,mkv|max:5242880', // 5GB max
+            'file' => 'nullable|file|mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,zip|max:204800', // 200MB max
+            'thumbnail' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:10240', // 10MB max
             'quiz_data' => 'nullable|array',
             'assignment_data' => 'nullable|array'
         ]);

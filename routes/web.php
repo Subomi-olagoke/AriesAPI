@@ -33,21 +33,115 @@ Route::get('/posts/shared/{shareKey}', [PostController::class, 'viewSharedPost']
 
 // Channel deep linking route
 Route::get('/channel/{id}', function($id) {
+    // Fetch channel data to display details
+    $channel = \App\Models\Channel::with(['creator', 'members.user'])->find($id);
+    
     // For web, redirect to the app or web version as needed
     $userAgent = request()->header('User-Agent');
     $isMobile = str_contains($userAgent, 'iPhone') || str_contains($userAgent, 'Android');
     
     if ($isMobile) {
-        // Redirect to app store or app using universal links
-        // iOS: return redirect("aries://channel/{$id}");
-        // OR
         // Show a landing page with deep link, app store buttons
-        return view('channel.deep-link', ['channelId' => $id]);
+        return view('channel.deep-link', [
+            'channelId' => $id,
+            'channel' => $channel
+        ]);
     } else {
-        // Web app version - could be a landing page or SPA route
-        return view('channel.view', ['channelId' => $id]);
+        // Web app version with channel details
+        return view('channel.view', [
+            'channelId' => $id,
+            'channel' => $channel
+        ]);
     }
 })->name('channel.deep-link');
+
+// Post deep linking route
+Route::get('/post/{id}', function($id) {
+    // Fetch post data to display details
+    $post = \App\Models\Post::with(['user'])->find($id);
+    
+    // For web, redirect to the app or web version as needed
+    $userAgent = request()->header('User-Agent');
+    $isMobile = str_contains($userAgent, 'iPhone') || str_contains($userAgent, 'Android');
+    
+    // Get like and comment counts
+    $likesCount = 0;
+    $commentsCount = 0;
+    
+    if ($post) {
+        $likesCount = \App\Models\Like::where('post_id', $post->id)->count();
+        $commentsCount = \App\Models\Comment::where('post_id', $post->id)->count();
+        
+        // Add counts to post object
+        $post->likes_count = $likesCount;
+        $post->comments_count = $commentsCount;
+    }
+    
+    // Show a landing page with deep link, app store buttons
+    return view('post.deep-link', [
+        'postId' => $id,
+        'post' => $post
+    ]);
+})->name('post.deep-link');
+
+// Profile deep linking route
+Route::get('/profile/{username}', function($username) {
+    // Fetch profile data to display details
+    $profile = \App\Models\User::with(['profile'])->where('username', $username)->first();
+    
+    if (!$profile) {
+        // Try to find by ID if username not found (for numeric usernames or IDs)
+        $profile = \App\Models\User::with(['profile'])->find($username);
+    }
+    
+    // Get follower and following counts
+    $followersCount = 0;
+    $followingCount = 0;
+    $postsCount = 0;
+    
+    if ($profile) {
+        $followersCount = \App\Models\Follow::where('followed_id', $profile->id)->count();
+        $followingCount = \App\Models\Follow::where('follower_id', $profile->id)->count();
+        $postsCount = \App\Models\Post::where('user_id', $profile->id)->count();
+        
+        // Combine user and profile data
+        $profileData = $profile->toArray();
+        if ($profile->profile) {
+            $profileData = array_merge($profileData, $profile->profile->toArray());
+        }
+        
+        // Add counts
+        $profileData['followers_count'] = $followersCount;
+        $profileData['following_count'] = $followingCount;
+        $profileData['posts_count'] = $postsCount;
+        
+        // Convert to object
+        $profile = (object)$profileData;
+    }
+    
+    // Show a landing page with deep link, app store buttons
+    return view('profile.deep-link', [
+        'profileId' => $username,
+        'profile' => $profile
+    ]);
+})->name('profile.deep-link');
+
+// Readlist deep linking route
+Route::get('/readlist/{id}', function($id) {
+    // Try to find by share key first
+    $readlist = \App\Models\Readlist::with(['user', 'items'])->where('share_key', $id)->first();
+    
+    // If not found by share key, try to find by ID
+    if (!$readlist) {
+        $readlist = \App\Models\Readlist::with(['user', 'items'])->find($id);
+    }
+    
+    // Show a landing page with deep link, app store buttons
+    return view('readlist.deep-link', [
+        'readlistId' => $id,
+        'readlist' => $readlist
+    ]);
+})->name('readlist.deep-link');
 
 // Apple App Site Association routes
 Route::get('/apple-app-site-association', function() {

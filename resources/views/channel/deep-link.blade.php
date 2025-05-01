@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Open in Aries App</title>
+    <title>Open in Alexandria App</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
             padding: 20px;
             text-align: center;
-            background-color: #f5f8fa;
+            background-color: #1a1a1a;
+            color: #f1f1f1;
             margin: 0;
             display: flex;
             flex-direction: column;
@@ -19,63 +20,82 @@
         .container {
             max-width: 500px;
             margin: 0 auto;
-            background-color: white;
+            background-color: #2a2a2a;
             border-radius: 12px;
             padding: 30px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
         h1 {
-            color: #333;
+            color: #f1f1f1;
             margin-bottom: 20px;
+            font-weight: 600;
         }
         p {
-            color: #666;
+            color: #aaaaaa;
             margin-bottom: 30px;
             font-size: 16px;
             line-height: 1.5;
         }
         .button {
             display: block;
-            background-color: #5965e0;
+            background-color: #000000;
             color: white;
             font-weight: bold;
             padding: 15px 20px;
             border-radius: 8px;
             text-decoration: none;
             margin-bottom: 15px;
-            transition: background-color 0.2s;
+            transition: all 0.2s;
+            border: 1px solid #333;
         }
         .button:hover {
-            background-color: #4c56c5;
-        }
-        .button.secondary {
-            background-color: #f3f3f3;
-            color: #333;
-        }
-        .button.secondary:hover {
-            background-color: #e6e6e6;
+            background-color: #1a1a1a;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
         .logo {
             width: 80px;
             height: 80px;
             border-radius: 20px;
-            margin: 0 auto 20px;
+            margin: 0 auto 30px;
             display: block;
+            background-color: #333;
+            padding: 10px;
+        }
+        .channel-preview {
+            background-color: #333333;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: left;
+            margin-bottom: 30px;
+            border-left: 3px solid #555;
+        }
+        .channel-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #f1f1f1;
+        }
+        .channel-description {
+            font-size: 14px;
+            color: #aaaaaa;
+            margin-bottom: 0;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <img src="/img/app-icon.png" alt="Aries Logo" class="logo">
-        <h1>Open this channel in the Aries app</h1>
-        <p>Get the best experience by viewing this channel in our mobile app. If you already have the app installed, tap the button below to open it directly.</p>
+        <img src="/img/Pompeyy.jpeg" alt="Alexandria Logo" class="logo">
+        <h1>Join the conversation in Alexandria</h1>
         
-        <a href="aries://channel/{{ $channelId }}" class="button">Open in Aries App</a>
+        <div class="channel-preview">
+            <div class="channel-title">{{ $channel->title ?? 'Channel' }}</div>
+            <p class="channel-description">{{ $channel->description ?? 'No description available.' }}</p>
+        </div>
         
-        <p>Don't have the app yet?</p>
+        <a href="aries://channel/{{ $channelId }}" class="button">Open in Alexandria App</a>
         
-        <a href="https://apps.apple.com/app/ariess/id6474744109" class="button secondary">Download from App Store</a>
-        <a href="https://play.google.com/store/apps/details?id=com.Oubomi.Ariess" class="button secondary">Download from Google Play</a>
+        <a href="https://apps.apple.com/app/ariess/id6474744109" class="button">Download Alexandria App</a>
     </div>
 
     <script>
@@ -84,7 +104,7 @@
             // Wait a moment before attempting to redirect
             setTimeout(function() {
                 window.location.href = "aries://channel/{{ $channelId }}";
-            }, 100);
+            }, 300);
         };
     </script>
 </body>

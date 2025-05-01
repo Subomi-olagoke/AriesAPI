@@ -30,10 +30,11 @@ class FileUploadThrottle extends ThrottleRequests
     public function handle($request, Closure $next, $maxAttempts = 20, $decayMinutes = 1)
     {
         // Set higher PHP limits for file upload requests
-        ini_set('upload_max_filesize', '100M');
-        ini_set('post_max_size', '100M');
-        ini_set('max_execution_time', '300');
-        ini_set('memory_limit', '512M');
+        ini_set('upload_max_filesize', '500M');
+        ini_set('post_max_size', '500M');
+        ini_set('max_execution_time', '900');  // 15 minutes
+        ini_set('max_input_time', '900');      // 15 minutes
+        ini_set('memory_limit', '1024M');      // 1GB
         
         // Use a separate limiter key for file uploads
         $key = 'file_uploads:' . $request->ip();

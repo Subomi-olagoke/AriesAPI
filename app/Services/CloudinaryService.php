@@ -114,13 +114,29 @@ class CloudinaryService
         $options = [
             'resource_type' => 'video',
             'eager_async' => true,
-            'chunk_size' => 20000000, // 20MB chunks for large uploads
-            'timeout' => 600000, // 10 minutes timeout for large uploads
+            'chunk_size' => 50000000, // 50MB chunks for larger files
+            'timeout' => 1800000, // 30 minutes timeout for large uploads
             'eager_notification_url' => config('app.url') . '/api/cloudinary/notification',
+            'use_filename' => true,
+            'unique_filename' => true,
+            'overwrite' => true,
         ];
         
+        // Add adaptive streaming profiles for better video delivery
+        $options['eager'] = [
+            [
+                'streaming_profile' => 'hd', 
+                'format' => 'm3u8'
+            ],
+            [
+                'quality' => 'auto',
+                'format' => 'mp4'
+            ]
+        ];
+        
+        // Add custom transformations if provided
         if (!empty($transformations)) {
-            $options['eager'] = $transformations;
+            $options['eager'][] = $transformations;
         }
         
         return $this->uploadFile($file, $type, $options);
@@ -186,5 +202,81 @@ class CloudinaryService
         // Implementation depends on your specific needs
         // This is a simplified example
         return $url;
+    }
+    
+    /**
+     * Extract public ID from a Cloudinary URL
+     * 
+     * @param string $url The Cloudinary URL
+     * @return string The public ID
+     */
+    protected function getPublicIdFromUrl(string $url): string
+    {
+        if (Str::startsWith($url, 'http')) {
+            $parts = parse_url($url);
+            $path = $parts['path'] ?? '';
+            
+            // Remove version if present
+            $path = preg_replace('/\/v\d+\//', '/', $path);
+            
+            // Extract filename and folder
+            $pathParts = explode('/', trim($path, '/'));
+            $filename = end($pathParts);
+            
+            // Remove file extension
+            $publicId = Str::beforeLast($filename, '.');
+            
+            // Add folder if present
+            if (count($pathParts) > 1) {
+                $folder = $pathParts[count($pathParts) - 2];
+                $publicId = $folder . '/' . $publicId;
+            }
+            
+            return $publicId;
+        }
+        
+        return $url;
+    }
+    
+    /**
+     * Create an adaptive streaming version of an existing video
+     * 
+     * @param string $videoUrl The URL of the uploaded video
+     * @param array $options Additional options
+     * @return string The URL of the streaming video
+     */
+    public function createAdaptiveStreamingVideo(string $videoUrl, array $options = []): string
+    {
+        try {
+            // Use Cloudinary's API to create an adaptive streaming profile
+            $result = $this->uploadApi->explicit(
+                $this->getPublicIdFromUrl($videoUrl),
+                [
+                    'resource_type' => 'video',
+                    'eager' => [
+                        [
+                            'streaming_profile' => 'hd',
+                            'format' => 'm3u8'
+                        ],
+                        [
+                            'quality' => 'auto',
+                            'format' => 'mp4'
+                        ]
+                    ],
+                    'eager_async' => true,
+                    'eager_notification_url' => config('app.url') . '/api/cloudinary/notification',
+                    'type' => 'upload'
+                ]
+            );
+            
+            return $result['eager'][0]['secure_url'] ?? $videoUrl;
+        } catch (Exception $e) {
+            Log::error('Cloudinary streaming profile creation failed: ' . $e->getMessage(), [
+                'video_url' => $videoUrl,
+                'exception' => $e
+            ]);
+            
+            return $videoUrl;
+        }
     }
 }

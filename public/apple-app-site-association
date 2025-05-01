@@ -5,7 +5,10 @@
       {
         "appID": "BMBR5BDGDM.com.Oubomi.Ariess",
         "paths": [
-          "/channel/*"
+          "/channel/*",
+          "/post/*",
+          "/profile/*",
+          "/readlist/*"
         ]
       }
     ]

@@ -727,6 +727,31 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/spaces/{spaceId}/content/{contentId}/cursor', [\App\Http\Controllers\CollaborationController::class, 'updateCursor']);
     });
     
+    // Document routes for channels
+    Route::prefix('channels/{channelId}/documents')->group(function () {
+        // Document CRUD
+        Route::get('/', [\App\Http\Controllers\DocumentController::class, 'getDocuments']);
+        Route::post('/', [\App\Http\Controllers\DocumentController::class, 'createDocument']);
+        Route::get('/{documentId}', [\App\Http\Controllers\DocumentController::class, 'getDocument']);
+        
+        // Document content and metadata
+        Route::put('/{documentId}/content', [\App\Http\Controllers\DocumentController::class, 'updateDocumentContent']);
+        Route::put('/{documentId}/title', [\App\Http\Controllers\DocumentController::class, 'updateDocumentTitle']);
+        
+        // Collaborators and permissions
+        Route::get('/{documentId}/collaborators', [\App\Http\Controllers\DocumentController::class, 'getDocumentCollaborators']);
+        Route::put('/{documentId}/permissions', [\App\Http\Controllers\DocumentController::class, 'updateDocumentPermissions']);
+        
+        // Version history
+        Route::get('/{documentId}/history', [\App\Http\Controllers\DocumentController::class, 'getDocumentHistory']);
+        Route::post('/{documentId}/restore/{versionId}', [\App\Http\Controllers\DocumentController::class, 'restoreDocumentVersion']);
+        
+        // Real-time collaboration
+        Route::post('/{documentId}/operations', [\App\Http\Controllers\DocumentController::class, 'processDocumentOperation']);
+        Route::post('/{documentId}/cursor', [\App\Http\Controllers\DocumentController::class, 'updateDocumentCursor']);
+        Route::get('/{documentId}/cursors', [\App\Http\Controllers\DocumentController::class, 'getDocumentCursors']);
+    });
+    
     // Also support the singular form
     Route::prefix('channel/{channelId}/collaboration')->group(function () {
         // Spaces

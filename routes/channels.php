@@ -42,3 +42,21 @@ Broadcast::channel('channel.{channelId}', function ($user, $channelId) {
     }
     return $channel->isMember($user);
 });
+
+// Document collaboration channels
+Broadcast::channel('document.{documentId}', function ($user, $documentId) {
+    // Get document content
+    $content = \App\Models\CollaborativeContent::with('space.channel')->find($documentId);
+    if (!$content) {
+        return false;
+    }
+    
+    // Check if user is a member of the channel
+    $channel = $content->space->channel;
+    if (!$channel->isMember($user)) {
+        return false;
+    }
+    
+    // At minimum, user should be able to view the document
+    return $content->canView($user);
+});
