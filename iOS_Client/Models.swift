@@ -1,8 +1,22 @@
 import Foundation
+import SwiftUI
+
+// We need this to access the FeedViewModel.RecommendedEducator type
+// The actual module name might need to be adjusted based on your project setup
 
 
-// MARK: - Common Protocols
+// ======================================
+// Beginning of Common Protocols and Utilities
+// ======================================
 protocol BaseModel: Codable, Identifiable {}
+
+// ======================================
+// End of Common Protocols and Utilities
+// ======================================
+
+// ======================================
+// Beginning of Feed and Post Models
+// ====================================== 
 
 // MARK: - Feed Response
 struct FeedResponse: Codable {
@@ -131,7 +145,7 @@ struct SearchResultItem: Identifiable, Codable {
     }
     
     // Custom initializer for creating from RecommendedEducator
-    init(from educator: RecommendedEducator) {
+    init(from educator: FeedViewModel.RecommendedEducator) {
         self.id = educator.id
         self.createdAt = nil
         self.updatedAt = nil
@@ -176,10 +190,26 @@ struct SearchResultItem: Identifiable, Codable {
     }
 }
 
+// ======================================
+// End of Feed and Post Models
+// ======================================
+
+// ======================================
+// Beginning of Search Models
+// ======================================
+
 struct SearchResponse: Codable {
     let success: Bool
     let results: [SearchResultItem]
 }
+
+// ======================================
+// End of Search Models
+// ======================================
+
+// ======================================
+// Beginning of Readlist Models
+// ======================================
 
 // MARK: - Readlist Models
 struct ReadlistResponse: Codable {
@@ -250,6 +280,14 @@ struct ReadlistItemContent: Identifiable, Codable {
     }
 }
 
+// ======================================
+// End of Readlist Models
+// ======================================
+
+// ======================================
+// Beginning of Profile Post Models
+// ======================================
+
 // MARK: - Profile Post Model
 struct ProfilePost: Codable, Identifiable {
     let id: Int
@@ -276,6 +314,14 @@ struct ProfilePost: Codable, Identifiable {
         case userId = "user_id"
     }
 }
+
+// ======================================
+// End of Profile Post Models
+// ======================================
+
+// ======================================
+// Beginning of Live Class Models
+// ======================================
 
 // MARK: - Live Class Models
 struct LiveClassesResponse: Decodable {
@@ -446,6 +492,14 @@ struct ClassSettings: Decodable, Equatable {
     }
 }
 
+// ======================================
+// End of Live Class Models
+// ======================================
+
+// ======================================
+// Beginning of User Models
+// ======================================
+
 // MARK: - User Models
 struct Teacher: Codable, Equatable {
     let id: String
@@ -515,6 +569,14 @@ struct Educator: Decodable, Equatable {
     }
 }
 
+// ======================================
+// End of User Models
+// ======================================
+
+// ======================================
+// Beginning of Profile Response Models
+// ======================================
+
 // MARK: - Profile Response
 struct ProfileResponse: Codable {
     let posts: [ProfilePost]?
@@ -539,6 +601,14 @@ struct ProfileResponse: Codable {
         case role = "role"
     }
 }
+
+// ======================================
+// End of Profile Response Models
+// ======================================
+
+// ======================================
+// Beginning of Channel Models
+// ======================================
 
 // MARK: - Channel Models
 struct Channel: Codable, Identifiable {
@@ -646,6 +716,14 @@ struct ShareLinkResponse: Codable {
     let share_link: String
 }
 
+// ======================================
+// End of Channel Models
+// ======================================
+
+// ======================================
+// Beginning of Educator Profile Models
+// ======================================
+
 // MARK: - Educator Profile Models
 struct EducatorProfile: Codable {
     let qualifications: [Qualification]?
@@ -704,6 +782,14 @@ struct Rating: Codable {
         case user
     }
 }
+
+// ======================================
+// End of Educator Profile Models
+// ======================================
+
+// ======================================
+// Beginning of Post Models
+// ======================================
 
 // MARK: - Post Model
 struct Post: BaseModel {
@@ -852,6 +938,14 @@ struct CourseCategory: Codable, Identifiable {
     }
 }
 
+// ======================================
+// End of Post Models
+// ======================================
+
+// ======================================
+// Beginning of Comment Models
+// ======================================
+
 // MARK: - Comment Models
 struct CommentsResponse: Codable {
     let comments: [Comment]?
@@ -911,6 +1005,14 @@ struct Comment: Codable, Identifiable {
         case user
     }
 }
+// ======================================
+// End of Comment Models
+// ======================================
+
+// ======================================
+// Beginning of Notification Models
+// ======================================
+
 // MARK: - Notification Models
 struct NotificationResponse: Codable {
     let notifications: [NotificationData]
@@ -1050,6 +1152,14 @@ enum NotificationDeepLinkType {
 
 
 
+// ======================================
+// End of Notification Models
+// ======================================
+
+// ======================================
+// Beginning of Topic Models
+// ======================================
+
 // MARK: - Topic Model
 struct Topic: Codable, Identifiable {
     let id: Int
@@ -1063,6 +1173,14 @@ struct Topic: Codable, Identifiable {
         case updatedAt = "updated_at"
     }
 }
+
+// ======================================
+// End of Topic Models
+// ======================================
+
+// ======================================
+// Beginning of Course Models
+// ======================================
 
 // MARK: - Course Model
 struct Course: Codable, Identifiable {
@@ -1241,6 +1359,14 @@ struct EducatorsResponse: Codable {
     }
 }
 
+// ======================================
+// End of Course Models
+// ======================================
+
+// ======================================
+// Beginning of Conversation Models
+// ======================================
+
 // MARK: - Conversation Models
 struct Conversation: Identifiable, Codable {
     var id: String
@@ -1387,3 +1513,7 @@ struct WelcomeCard: Identifiable {
     let title: String
     let subtitle: String
 }
+
+// ======================================
+// End of UI Models
+// ======================================

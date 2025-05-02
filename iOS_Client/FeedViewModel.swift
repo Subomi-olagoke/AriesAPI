@@ -165,6 +165,9 @@ class FeedViewModel: ObservableObject {
     
     
     // MARK: - Authentication & Profile Management
+    // ======================================
+    // Beginning of Authentication & Profile Functions
+    // ======================================
     
     // Function to manually refresh the token
     func refreshToken() {
@@ -689,7 +692,108 @@ class FeedViewModel: ObservableObject {
         }.resume()
     }
     
+    // Verification Routes
+    func submitVerification(documentData: Data, documentType: String, documentName: String, completion: @escaping (Bool, String?) -> Void) {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        
+        // Add document data
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition:form-data; name=\"document\"; filename=\"\(documentName)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \(getMimeType(for: documentName))\r\n\r\n".data(using: .utf8)!)
+        body.append(documentData)
+        body.append("\r\n".data(using: .utf8)!)
+        
+        // Add document type
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition:form-data; name=\"document_type\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(documentType)\r\n".data(using: .utf8)!)
+        
+        // Add closing boundary
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        // Create request
+        var request = URLRequest(url: URL(string: "\(baseURL)/verification/submit")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                    return
+                }
+                
+                if let httpResponse = response as? HTTPURLResponse,
+                   httpResponse.statusCode >= 200 && httpResponse.statusCode < 300 {
+                    completion(true, "Verification document submitted successfully")
+                } else {
+                    var errorMessage = "Failed to submit verification"
+                    if let data = data,
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let message = json["message"] as? String {
+                        errorMessage = message
+                    }
+                    completion(false, errorMessage)
+                }
+            }
+        }.resume()
+    }
+    
+    func getVerificationStatus(completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        var request = URLRequest(url: URL(string: "\(baseURL)/verification/status")!)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    // ======================================
+    // End of Authentication & Profile Functions
+    // ======================================
+
     // MARK: - Posts & Feed Management
+    // ======================================
+    // Beginning of Posts & Feed Functions
+    // ======================================
     
     func fetchPosts() {
         isLoadingPosts = true
@@ -1155,7 +1259,14 @@ class FeedViewModel: ObservableObject {
         userDefaults.set(Array(likedPostIds), forKey: likedPostsKey)
     }
     
+    // ======================================
+    // End of Posts & Feed Functions
+    // ======================================
+
     // MARK: - Comments Management
+    // ======================================
+    // Beginning of Comments Functions
+    // ======================================
     
     func fetchComments(for postId: Int) {
         isLoadingComments = true
@@ -1424,7 +1535,14 @@ class FeedViewModel: ObservableObject {
         }.resume()
     }
     
+    // ======================================
+    // End of Comments Functions
+    // ======================================
+
     // MARK: - Notifications Management
+    // ======================================
+    // Beginning of Notifications Functions
+    // ======================================
     
     func fetchNotifications() {
         isLoadingNotifications = true
@@ -1591,7 +1709,14 @@ class FeedViewModel: ObservableObject {
         }
     }
     
+    // ======================================
+    // End of Notifications Functions
+    // ======================================
+
     // MARK: - Bookmarks Management
+    // ======================================
+    // Beginning of Bookmarks Functions
+    // ======================================
     
     func isPostBookmarked(_ postId: Int) -> Bool {
         return bookmarkedPostIds.contains(postId)
@@ -1664,7 +1789,14 @@ class FeedViewModel: ObservableObject {
         }.resume()
     }
     
+    // ======================================
+    // End of Bookmarks Functions
+    // ======================================
+
     // MARK: - Educators Management
+    // ======================================
+    // Beginning of Educators Functions
+    // ======================================
     
     // Fetch available educators (all educators)
     func fetchAvailableEducators() {
@@ -1696,18 +1828,154 @@ class FeedViewModel: ObservableObject {
                 if let responseString = String(data: data, encoding: .utf8) {
                     print("API educators response: \(responseString)")
                 }
+            }
+        }.resume()
+    }
+    
+    // Fetch hireable educators - filtering educators who can be hired
+    func fetchHireableEducators(completion: @escaping (Bool, [EducatorData]?, String?) -> Void) {
+        isLoadingAvailableEducators = true
+        error = nil
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/educators/with-follow-status")!,
+                               timeoutInterval: Double.infinity)
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.httpMethod = "GET"
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else {
+                completion(false, nil, "View model deallocated")
+                return
+            }
+            
+            if let error = error {
+                print("Error fetching hireable educators: \(error.localizedDescription)")
+                completion(false, nil, error.localizedDescription)
+                return
+            }
+            
+            guard let data = data else {
+                completion(false, nil, "No data received")
+                return
+            }
+            
+            do {
+                let response = try JSONDecoder().decode(EducatorsResponse.self, from: data)
+                
+                // Filter educators to include only those who:
+                // 1. Have completed setup (can offer services)
+                // 2. Are not the current user (can't hire yourself)
+                let hireableEducators = response.educators.data.filter { educator in
+                    return educator.setupCompleted == true && educator.isCurrentUser == false
+                }
+                
+                completion(true, hireableEducators, nil)
+            } catch {
+                print("Hireable educators decoding error: \(error)")
+                completion(false, nil, "Failed to decode educators response")
+            }
+        }.resume()
+    }
+    
+    // Fetch all educators with follow status - for SearchPage integration
+    func fetchAllEducatorsWithFollowStatus(completion: @escaping (Bool, [EducatorData]?, String?) -> Void) {
+        isLoadingAvailableEducators = true
+        error = nil
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/educators/with-follow-status")!,
+                                 timeoutInterval: Double.infinity)
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.httpMethod = "GET"
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingAvailableEducators = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
                 
                 do {
                     let decoder = JSONDecoder()
-                    let response = try decoder.decode(EducatorsResponse.self, from: data)
-                    self.availableEducators = response.educators.data
-                    print("Successfully decoded educators response")
-                } catch {
-                    self.error = "Failed to decode educators response: \(error.localizedDescription)"
-                    print("Educators decoding error: \(error)")
+                    if let response = try? decoder.decode(EducatorsResponse.self, from: data) {
+                        self.availableEducators = response.educators.data
+                        completion(true, response.educators.data, nil)
+                    } else {
+                        completion(false, nil, "Failed to decode educators response")
+                    }
                 }
             }
         }.resume()
+    }
+    
+    // Fetch followed educators - for SearchPage integration
+    func fetchFollowedEducators(completion: @escaping (Bool, [EducatorData]?, String?) -> Void) {
+        isLoadingFollowedEducators = true
+        error = nil
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/educators/followed")!,
+                                 timeoutInterval: Double.infinity)
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.httpMethod = "GET"
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingFollowedEducators = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    let decoder = JSONDecoder()
+                    if let response = try? decoder.decode(EducatorsResponse.self, from: data) {
+                        self.followedEducators = response.educators.data
+                        completion(true, response.educators.data, nil)
+                    } else {
+                        completion(false, nil, "Failed to decode educators response")
+                    }
+                }
+            }
+        }.resume()
+    }
+                
+    // Helper function to parse educators response
+    private func parseEducatorsResponse(_ data: Data) {
+        do {
+            let decoder = JSONDecoder()
+            let response = try decoder.decode(EducatorsResponse.self, from: data)
+            self.availableEducators = response.educators.data
+            print("Successfully decoded educators response")
+        } catch {
+            self.error = "Failed to decode educators response: \(error.localizedDescription)"
+            print("Educators decoding error: \(error)")
+        }
     }
     
     // Fetch educators with follow status
@@ -1823,7 +2091,14 @@ class FeedViewModel: ObservableObject {
         }.resume()
     }
     
+    // ======================================
+    // End of Educators Functions
+    // ======================================
+
     // MARK: - Hire Services
+    // ======================================
+    // Beginning of Hire Services Functions
+    // ======================================
     
     func verifyPayment(reference: String, completion: @escaping (Bool, String?, [String: Any]?) -> Void) {
         let urlString = "\(baseURL)/hire/verify-payment?reference=\(reference)"
@@ -2095,7 +2370,14 @@ class FeedViewModel: ObservableObject {
         }.resume()
     }
     
+    // ======================================
+    // End of Hire Services Functions
+    // ======================================
+
     // MARK: - Live Classes Management
+    // ======================================
+    // Beginning of Live Classes Functions
+    // ======================================
     
     // Fetch live classes
     func fetchLiveClasses() {
@@ -2740,7 +3022,14 @@ class FeedViewModel: ObservableObject {
         }.resume()
     }
     
+    // ======================================
+    // End of Live Classes Functions
+    // ======================================
+
     // MARK: - Courses Management
+    // ======================================
+    // Beginning of Courses Functions
+    // ======================================
     
     func createCourse(title: String, description: String, price: String, topicId: String, contentType: String, coverImage: Data?, coverImageFileName: String, videoData: Data?, videoFileName: String, fileData: Data?, fileFileName: String, completion: @escaping (Bool, String?) -> Void) {
         // Multipart form data boundary
@@ -3247,7 +3536,82 @@ class FeedViewModel: ObservableObject {
         }.resume()
     }
     
+    // ======================================
+    // End of Courses Functions
+    // ======================================
+
     // MARK: - Readlists Management
+    // ======================================
+    // Beginning of Readlists Functions
+    // ======================================
+    
+    // Model for user readlists response
+    struct UserReadlistsResponse: Codable {
+        let success: Bool
+        let readlists: [APIReadlist]
+        let message: String?
+    }
+    
+    // Internal API Readlist model - will be converted to the app's Readlist model
+    struct APIReadlist: Codable {
+        let id: String
+        let title: String
+        let description: String?
+        let cover_image: String?
+        let item_count: Int
+        let created_by: String
+        let created_at: String
+    }
+    
+    // Fetch user's readlists
+    func fetchUserReadlists(completion: @escaping (Bool, [Readlist]?, String?) -> Void) {
+        let urlComponents = URLComponents(string: "\(baseURL)/readlists/user")!
+        
+        guard let url = urlComponents.url else {
+            completion(false, nil, "Invalid URL")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.httpMethod = "GET"
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("Error fetching user readlists: \(error.localizedDescription)")
+                completion(false, nil, error.localizedDescription)
+                return
+            }
+            
+            guard let data = data else {
+                completion(false, nil, "No data received")
+                return
+            }
+            
+            do {
+                let decoder = JSONDecoder()
+                let response: UserReadlistsResponse = try decoder.decode(UserReadlistsResponse.self, from: data)
+                
+                // Convert APIReadlist to Readlist
+                let readlists = response.readlists.map { apiReadlist -> Readlist in
+                    return Readlist(
+                        id: apiReadlist.id,
+                        title: apiReadlist.title,
+                        description: apiReadlist.description,
+                        coverImage: apiReadlist.cover_image,
+                        itemCount: apiReadlist.item_count,
+                        createdBy: apiReadlist.created_by,
+                        createdAt: apiReadlist.created_at
+                    )
+                }
+                
+                completion(true, readlists, nil)
+            } catch {
+                print("Readlists decoding error: \(error)")
+                completion(false, nil, "Failed to decode readlists response")
+            }
+        }.resume()
+    }
     
     func removeReadlistItem(readlistId: Int, itemId: Int, completion: @escaping (Bool, String?) -> Void) {
           var request = URLRequest(url: URL(string: "\(baseURL)/readlists/\(readlistId)/items/\(itemId)")!)
@@ -3378,7 +3742,14 @@ class FeedViewModel: ObservableObject {
         print("Share URL: \(shareUrl)")
     }
     
+    // ======================================
+    // End of Readlists Functions
+    // ======================================
+
     // MARK: - Libraries Management
+    // ======================================
+    // Beginning of Libraries Functions
+    // ======================================
     
     func fetchLibraries() {
         Task {
@@ -3525,7 +3896,14 @@ class FeedViewModel: ObservableObject {
         }.resume()
     }
     
+    // ======================================
+    // End of Libraries Functions
+    // ======================================
+
     // MARK: - Messaging & Conversations
+    // ======================================
+    // Beginning of Messaging & Conversations Functions
+    // ======================================
     
     func fetchConversations() {
         isLoadingConversations = true
@@ -3787,7 +4165,14 @@ class FeedViewModel: ObservableObject {
         }.resume()
     }
     
+    // ======================================
+    // End of Messaging & Conversations Functions
+    // ======================================
+
     // MARK: - Channels Management
+    // ======================================
+    // Beginning of Channels Functions
+    // ======================================
     
     func fetchChannels() {
         isLoadingChannels = true
@@ -5294,15 +5679,512 @@ class FeedViewModel: ObservableObject {
     }
     
     
+    // ======================================
+    // End of Channels Functions
+    // ======================================
+
     // MARK: - Search
+    // ======================================
+    // Beginning of Search Functions
+    // ======================================
     
-    func search(query: String) {
+    // ======================================
+    // Beginning of Cogni AI Assistant Functions
+    // ======================================
+    
+    // Published properties for Cogni
+    @Published var cogniIsLoading = false
+    @Published var cogniConversations: [[String: Any]] = []
+    @Published var cogniCurrentConversationHistory: [[String: Any]] = []
+    
+    func cogniAsk(message: String, conversationId: String? = nil, completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        cogniIsLoading = true
+        
+        let parameters: [String: Any] = [
+            "message": message,
+            "conversation_id": conversationId ?? ""
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                completion(false, nil, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/cogni/ask")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func cogniGetConversations(completion: @escaping (Bool, [[String: Any]]?, String?) -> Void) {
+        cogniIsLoading = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/cogni/conversations")!)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let conversations = json["conversations"] as? [[String: Any]] {
+                        self.cogniConversations = conversations
+                        completion(true, conversations, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func cogniGetConversationHistory(conversationId: String, completion: @escaping (Bool, [[String: Any]]?, String?) -> Void) {
+        cogniIsLoading = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/cogni/conversations/\(conversationId)")!)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let messages = json["messages"] as? [[String: Any]] {
+                        self.cogniCurrentConversationHistory = messages
+                        completion(true, messages, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func cogniClearConversation(conversationId: String, completion: @escaping (Bool, String?) -> Void) {
+        cogniIsLoading = true
+        
+        let parameters: [String: Any] = [
+            "conversation_id": conversationId
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                completion(false, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/cogni/conversations/clear")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                    return
+                }
+                
+                completion(true, "Conversation cleared successfully")
+            }
+        }.resume()
+    }
+    
+    func cogniExplain(content: String, completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        cogniIsLoading = true
+        
+        let parameters: [String: Any] = [
+            "content": content
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                completion(false, nil, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/cogni/explain")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func cogniGenerateQuiz(content: String, completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        cogniIsLoading = true
+        
+        let parameters: [String: Any] = [
+            "content": content
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                completion(false, nil, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/cogni/generate-quiz")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func cogniGenerateReadlist(topic: String, completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        cogniIsLoading = true
+        
+        let parameters: [String: Any] = [
+            "topic": topic
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                completion(false, nil, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/cogni/generate-readlist")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    // Enhanced Cogni Functions
+    
+    // Model for matched tutors response
+    struct MatchedTutorsResponse: Codable {
+        let success: Bool
+        let tutors: [SearchResultItem]
+    }
+    
+    // Model for educator recommendations response
+    struct RecommendationResponse: Codable {
+        let success: Bool
+        let recommendations: [RecommendedEducator]
+        let code: Int
+    }
+    
+    // Make RecommendedEducator public so it can be used outside this file
+    public struct RecommendedEducator: Identifiable, Codable {
+        let id: String
+        let username: String
+        let firstName: String
+        let lastName: String
+        let avatar: String?
+        let bio: String?
+        let relevanceScore: Int
+        let recommendationReason: String?
+        let topCourses: [String]
+        let topics: [String]
+        
+        enum CodingKeys: String, CodingKey {
+            case id, username, bio, topics
+            case firstName = "first_name"
+            case lastName = "last_name"
+            case avatar
+            case relevanceScore = "relevance_score"
+            case recommendationReason = "recommendation_reason"
+            case topCourses = "top_courses"
+        }
+    }
+    
+    // Fetch matched tutors based on user's preferences and learning goals
+    func fetchMatchedTutors(completion: @escaping (Bool, [SearchResultItem]?, String?) -> Void) {
+        var urlComponents = URLComponents(string: "\(baseURL)/tutors/matched")!
+        
+        guard let url = urlComponents.url else {
+            completion(false, nil, "Invalid URL")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.httpMethod = "GET"
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("Error fetching matched tutors: \(error.localizedDescription)")
+                completion(false, nil, error.localizedDescription)
+                return
+            }
+            
+            guard let data = data else {
+                completion(false, nil, "No data received")
+                return
+            }
+            
+            do {
+                let decoder = JSONDecoder()
+                let response: MatchedTutorsResponse = try decoder.decode(MatchedTutorsResponse.self, from: data)
+                if response.success {
+                    completion(true, response.tutors, nil)
+                } else {
+                    completion(false, nil, "Failed to fetch matched tutors")
+                }
+            } catch {
+                print("Matched tutors decoding error: \(error)")
+                completion(false, nil, "Failed to decode matched tutors response")
+            }
+        }.resume()
+    }
+    
+    func enhancedCogniRecommendEducators(completion: @escaping (Bool, [RecommendedEducator]?, String?) -> Void) {
+        cogniIsLoading = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/cogni/enhanced/recommend-educators")!)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.cogniIsLoading = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    let decoder = JSONDecoder()
+                    let response: RecommendationResponse = try decoder.decode(RecommendationResponse.self, from: data)
+                    if response.success {
+                        completion(true, response.recommendations, nil)
+                    } else {
+                        completion(false, nil, "Failed to get recommendations")
+                    }
+                } catch {
+                    if let responseString = String(data: data, encoding: .utf8) {
+                        print("Raw recommendation response:", responseString)
+                    }
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    // ======================================
+    // End of Cogni AI Assistant Functions
+    // ======================================
+    
+    // MARK: - Search Functions
+    
+    func search(query: String, completion: @escaping (Bool, [SearchResultItem]?) -> Void) {
         isLoadingPosts = true
         error = nil
         
         guard !query.isEmpty else {
             error = "Search query cannot be empty"
             isLoadingPosts = false
+            completion(false, nil)
             return
         }
         
@@ -5367,9 +6249,16 @@ class FeedViewModel: ObservableObject {
                             )
                         }
                         self.posts = posts
+                        // Call completion handler with search results
+                        if let searchResponse = try? JSONDecoder().decode(SearchResponse.self, from: data) {
+                            completion(true, searchResponse.results)
+                        } else {
+                            completion(true, []) // No results found but search was successful
+                        }
                     } else {
                         self.posts = []
                         self.error = "Search failed"
+                        completion(false, nil)
                     }
                 } catch {
                     self.error = "Failed to decode search response"
@@ -5377,8 +6266,875 @@ class FeedViewModel: ObservableObject {
                     if let responseString = String(data: data, encoding: .utf8) {
                         print("Raw search response:", responseString)
                     }
+                    completion(false, nil)
                 }
             }
         }.resume()
     }
+    
+    // ======================================
+    // End of Search Functions
+    // ======================================
+    
+    // ======================================
+    // Beginning of Payment and Subscription Functions
+    // ======================================
+    
+    // Published properties for Payment
+    @Published var isLoadingPayment = false
+    @Published var paymentMethods: [[String: Any]] = []
+    @Published var subscriptions: [[String: Any]] = []
+    
+    func initializePayment(amount: Double, description: String, email: String, completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        isLoadingPayment = true
+        
+        let parameters: [String: Any] = [
+            "amount": amount,
+            "description": description,
+            "email": email
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                completion(false, nil, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/payment/initiate")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func verifyPaymentReference(reference: String, completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        isLoadingPayment = true
+        
+        var urlComponents = URLComponents(string: "\(baseURL)/payment/verify")!
+        urlComponents.queryItems = [
+            URLQueryItem(name: "reference", value: reference)
+        ]
+        
+        guard let url = urlComponents.url else {
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                completion(false, nil, "Invalid URL")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    // Payment Methods Functions
+    func getPaymentMethods(completion: @escaping (Bool, [[String: Any]]?, String?) -> Void) {
+        isLoadingPayment = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/payment-methods")!)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let methods = json["payment_methods"] as? [[String: Any]] {
+                        self.paymentMethods = methods
+                        completion(true, methods, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func initiatePaymentMethod(email: String, completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        isLoadingPayment = true
+        
+        let parameters: [String: Any] = [
+            "email": email
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                completion(false, nil, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/payment-methods/initiate")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func setDefaultPaymentMethod(methodId: String, completion: @escaping (Bool, String?) -> Void) {
+        isLoadingPayment = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/payment-methods/\(methodId)/default")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                    return
+                }
+                
+                // Refresh payment methods
+                self.getPaymentMethods { _, _, _ in }
+                
+                completion(true, "Payment method set as default")
+            }
+        }.resume()
+    }
+    
+    func deletePaymentMethod(methodId: String, completion: @escaping (Bool, String?) -> Void) {
+        isLoadingPayment = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/payment-methods/\(methodId)")!)
+        request.httpMethod = "DELETE"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                    return
+                }
+                
+                // Refresh payment methods
+                self.getPaymentMethods { _, _, _ in }
+                
+                completion(true, "Payment method deleted")
+            }
+        }.resume()
+    }
+    
+    // Subscription Functions
+    func initiateSubscription(planId: String, completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        isLoadingPayment = true
+        
+        let parameters: [String: Any] = [
+            "plan_id": planId
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                completion(false, nil, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/subscriptions/initiate")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func createFreeSubscription(planId: String, completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        isLoadingPayment = true
+        
+        let parameters: [String: Any] = [
+            "plan_id": planId
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                completion(false, nil, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/subscriptions/free")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func getSubscriptions(completion: @escaping (Bool, [[String: Any]]?, String?) -> Void) {
+        isLoadingPayment = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/subscriptions")!)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let subscriptions = json["subscriptions"] as? [[String: Any]] {
+                        self.subscriptions = subscriptions
+                        completion(true, subscriptions, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func getCurrentSubscription(completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        isLoadingPayment = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/subscriptions/current")!)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func cancelSubscription(completion: @escaping (Bool, String?) -> Void) {
+        isLoadingPayment = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/subscriptions/cancel")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                    return
+                }
+                
+                completion(true, "Subscription canceled")
+            }
+        }.resume()
+    }
+    
+    // Payment Split
+    func getSplitDetails(reference: String, completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        isLoadingPayment = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/payment-split/details/\(reference)")!)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    // Educator Earnings
+    func getEducatorEarnings(completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        isLoadingPayment = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/educator/earnings")!)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func getEducatorBankInfo(completion: @escaping (Bool, [String: Any]?, String?) -> Void) {
+        isLoadingPayment = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/educator/earnings/bank-info")!)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        completion(true, json, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    func updateEducatorBankInfo(bankCode: String, accountNumber: String, accountName: String, completion: @escaping (Bool, String?) -> Void) {
+        isLoadingPayment = true
+        
+        let parameters: [String: Any] = [
+            "bank_code": bankCode,
+            "account_number": accountNumber,
+            "account_name": accountName
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                completion(false, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/educator/earnings/bank-info")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingPayment = false
+                
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                    return
+                }
+                
+                completion(true, "Bank information updated successfully")
+            }
+        }.resume()
+    }
+    
+    // ======================================
+    // End of Payment and Subscription Functions
+    // ======================================
+    
+    // ======================================
+    // Beginning of Report Functions
+    // ======================================
+    
+    // Published properties for Reports
+    @Published var isLoadingReports = false
+    @Published var reports: [[String: Any]] = []
+    
+    func reportUser(userId: String, reason: String, details: String, completion: @escaping (Bool, String?) -> Void) {
+        isLoadingReports = true
+        
+        let parameters: [String: Any] = [
+            "reason": reason,
+            "details": details
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.isLoadingReports = false
+                completion(false, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/reports/user/\(userId)")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingReports = false
+                
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                    return
+                }
+                
+                completion(true, "User reported successfully")
+            }
+        }.resume()
+    }
+    
+    func reportPost(postId: Int, reason: String, details: String, completion: @escaping (Bool, String?) -> Void) {
+        isLoadingReports = true
+        
+        let parameters: [String: Any] = [
+            "reason": reason,
+            "details": details
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.isLoadingReports = false
+                completion(false, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/reports/post/\(postId)")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingReports = false
+                
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                    return
+                }
+                
+                completion(true, "Post reported successfully")
+            }
+        }.resume()
+    }
+    
+    func reportEducator(educatorId: String, reason: String, details: String, completion: @escaping (Bool, String?) -> Void) {
+        isLoadingReports = true
+        
+        let parameters: [String: Any] = [
+            "reason": reason,
+            "details": details
+        ]
+        
+        guard let postData = try? JSONSerialization.data(withJSONObject: parameters) else {
+            DispatchQueue.main.async {
+                self.isLoadingReports = false
+                completion(false, "Failed to encode request data")
+            }
+            return
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/reports/educator/\(educatorId)")!)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = postData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingReports = false
+                
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                    return
+                }
+                
+                completion(true, "Educator reported successfully")
+            }
+        }.resume()
+    }
+    
+    func getMyReports(completion: @escaping (Bool, [[String: Any]]?, String?) -> Void) {
+        isLoadingReports = true
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)/reports/my")!)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self, self.handleApiResponse(data, response, error) else {
+                DispatchQueue.main.async {
+                    completion(false, nil, "Authentication error or network issue")
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoadingReports = false
+                
+                if let error = error {
+                    completion(false, nil, error.localizedDescription)
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(false, nil, "No data received")
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let reports = json["reports"] as? [[String: Any]] {
+                        self.reports = reports
+                        completion(true, reports, nil)
+                    } else {
+                        completion(false, nil, "Invalid response format")
+                    }
+                } catch {
+                    completion(false, nil, "Error parsing response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+    
+    // ======================================
+    // End of Report Functions
+    // ======================================
 }
+

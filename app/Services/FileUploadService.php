@@ -51,6 +51,28 @@ class FileUploadService
     }
     
     /**
+     * Upload an image file
+     *
+     * @param UploadedFile $file
+     * @param string $path
+     * @param array $options Optional processing options
+     * @return string The image URL
+     */
+    public function uploadImage(UploadedFile $file, string $path, array $options = [])
+    {
+        // Map the path to a Cloudinary upload type
+        $type = $this->mapPathToType($path);
+        
+        // Process image if options provided
+        if (!empty($options)) {
+            return $this->processAndUploadImage($file, $type, $options);
+        }
+        
+        // Use the CloudinaryService's uploadImage method
+        return $this->cloudinaryService->uploadImage($file, $type);
+    }
+    
+    /**
      * Process and upload an image with optional resizing
      */
     private function processAndUploadImage(UploadedFile $file, string $type, array $options)
