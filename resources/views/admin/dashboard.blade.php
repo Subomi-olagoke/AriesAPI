@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Aries Admin</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -185,9 +186,9 @@
                             <button class="btn btn-secondary">
                                 <i class="fa-solid fa-calendar mr-2"></i> Last 30 days
                             </button>
-                            <button class="btn btn-secondary">
+                            <a href="{{ route('admin.export-stats') }}" class="btn btn-secondary">
                                 <i class="fa-solid fa-file-export mr-2"></i> Export
-                            </button>
+                            </a>
                         </div>
                     </div>
 
@@ -199,7 +200,7 @@
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <div class="text-sm font-medium text-neutral-500">Total Users</div>
-                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">2,814</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900" data-stat="users.total">2,814</div>
                                     </div>
                                     <div class="w-12 h-12 bg-primary-50 rounded-md flex items-center justify-center">
                                         <i class="fa-solid fa-users text-primary-600 text-xl"></i>
@@ -220,7 +221,7 @@
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <div class="text-sm font-medium text-neutral-500">Total Revenue</div>
-                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">$18,230</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900" data-stat="revenue.total" data-format="currency">$18,230</div>
                                     </div>
                                     <div class="w-12 h-12 bg-green-50 rounded-md flex items-center justify-center">
                                         <i class="fa-solid fa-dollar-sign text-green-600 text-xl"></i>
@@ -241,7 +242,7 @@
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <div class="text-sm font-medium text-neutral-500">New Content</div>
-                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">142</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900" data-stat="content.postsToday">142</div>
                                     </div>
                                     <div class="w-12 h-12 bg-blue-50 rounded-md flex items-center justify-center">
                                         <i class="fa-solid fa-file-lines text-blue-600 text-xl"></i>
@@ -262,7 +263,7 @@
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <div class="text-sm font-medium text-neutral-500">Pending Verifications</div>
-                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">23</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900" data-stat="content.pendingLibraries">23</div>
                                     </div>
                                     <div class="w-12 h-12 bg-yellow-50 rounded-md flex items-center justify-center">
                                         <i class="fa-solid fa-user-check text-yellow-600 text-xl"></i>
@@ -548,7 +549,7 @@
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <div class="text-sm font-medium text-neutral-500">Total Users</div>
-                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">2,814</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900" data-stat="users.total">2,814</div>
                                     </div>
                                     <div class="w-12 h-12 bg-primary-50 rounded-md flex items-center justify-center">
                                         <i class="fa-solid fa-users text-primary-600 text-xl"></i>
@@ -740,6 +741,105 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Add the dashboard stats from the server
+            // Parse dashboard stats safely
+            let dashboardStats;
+            try {
+                dashboardStats = {
+                    users: {
+                        total: {{ $stats['users']['total'] ?? 0 }},
+                        newToday: {{ $stats['users']['new_today'] ?? 0 }},
+                        newThisWeek: {{ $stats['users']['new_this_week'] ?? 0 }},
+                        banned: {{ $stats['users']['banned'] ?? 0 }}
+                    },
+                    content: {
+                        totalPosts: {{ $stats['content']['total_posts'] ?? 0 }},
+                        postsToday: {{ $stats['content']['posts_today'] ?? 0 }},
+                        totalCourses: {{ $stats['content']['total_courses'] ?? 0 }},
+                        totalLibraries: {{ $stats['content']['total_libraries'] ?? 0 }},
+                        pendingLibraries: {{ $stats['content']['pending_libraries'] ?? 0 }}
+                    },
+                    revenue: {
+                        total: {{ $stats['revenue']['total'] ?? 0 }},
+                        thisMonth: {{ $stats['revenue']['this_month'] ?? 0 }}
+                    }
+                };
+            } catch (e) {
+                console.error('Error parsing dashboard stats:', e);
+                // Provide fallback values if there was an error
+                dashboardStats = {
+                    users: { total: 0, newToday: 0, newThisWeek: 0, banned: 0 },
+                    content: { totalPosts: 0, postsToday: 0, totalCourses: 0, totalLibraries: 0, pendingLibraries: 0 },
+                    revenue: { total: 0, thisMonth: 0 }
+                };
+            }
+
+            // Function to handle CSV export
+            function exportToCSV(data, filename) {
+                // Create CSV content
+                const csvRows = [];
+                
+                // Add headers
+                const headers = Object.keys(data);
+                csvRows.push(headers.join(','));
+                
+                // Add values
+                const values = headers.map(header => {
+                    if (typeof data[header] === 'object') {
+                        return JSON.stringify(data[header]);
+                    }
+                    return data[header];
+                });
+                csvRows.push(values.join(','));
+                
+                // Create blob and download
+                const csvContent = csvRows.join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+            // Update dashboard stats with real data
+            document.querySelectorAll('[data-stat]').forEach(el => {
+                const path = el.getAttribute('data-stat').split('.');
+                let value = dashboardStats;
+                
+                for (const key of path) {
+                    if (value && value[key] !== undefined) {
+                        value = value[key];
+                    } else {
+                        value = 0;
+                        break;
+                    }
+                }
+                
+                if (el.getAttribute('data-format') === 'currency') {
+                    el.textContent = '$' + value.toLocaleString();
+                } else {
+                    el.textContent = value.toLocaleString();
+                }
+            });
+            
+            // Set up export functionality
+            document.getElementById('exportBtn').addEventListener('click', function() {
+                exportToCSV(dashboardStats, 'dashboard-stats-' + new Date().toISOString().split('T')[0] + '.csv');
+            });
+            $' + value.toLocaleString();
+                } else {
+                    el.textContent = value.toLocaleString();
+                }
+            });
+            
+            // Set up export functionality
+            document.getElementById('exportBtn').addEventListener('click', function() {
+                exportToCSV(dashboardStats, 'dashboard-stats-' + new Date().toISOString().split('T')[0] + '.csv');
+            });
             // User Growth Chart
             const userCtx = document.getElementById('userGrowthChart').getContext('2d');
             new Chart(userCtx, {

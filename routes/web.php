@@ -183,6 +183,7 @@ Route::prefix('admin')->group(function () {
     // Auth protected routes
     Route::middleware(['auth', 'admin'])->group(function () {
         Route::get('/dashboard', [App\Http\Controllers\AdminAuthController::class, 'dashboard'])->name('admin.dashboard');
+        Route::get('/export-stats', [App\Http\Controllers\AdminAuthController::class, 'exportStats'])->name('admin.export-stats');
         Route::post('/logout', [App\Http\Controllers\AdminAuthController::class, 'logout'])->name('admin.logout');
         
         // Library management routes
