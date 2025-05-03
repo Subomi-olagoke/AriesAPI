@@ -199,9 +199,24 @@
                     <div class="flex justify-between items-center mb-6">
                         <h1 class="text-2xl font-semibold text-neutral-900">Dashboard</h1>
                         <div class="flex space-x-2">
-                            <button class="btn btn-secondary">
-                                <i class="fa-solid fa-calendar mr-2"></i> Last 30 days
-                            </button>
+                            <div class="relative" x-data="{ isOpen: false, selectedPeriod: 'last30' }">
+                                <button @click="isOpen = !isOpen" class="btn btn-secondary">
+                                    <i class="fa-solid fa-calendar mr-2"></i> 
+                                    <span x-text="selectedPeriod === 'last30' ? 'Last 30 days' : 
+                                                 selectedPeriod === 'last90' ? 'Last 90 days' : 
+                                                 selectedPeriod === 'thisYear' ? 'This Year' : 
+                                                 selectedPeriod === 'allTime' ? 'All Time' : 'Last 30 days'"></span>
+                                    <i class="fa-solid fa-chevron-down ml-2 text-xs"></i>
+                                </button>
+                                <div x-show="isOpen" @click.away="isOpen = false" class="absolute mt-1 bg-white shadow-lg rounded-md border border-neutral-200 z-10">
+                                    <div class="py-1">
+                                        <a href="#" @click.prevent="selectedPeriod = 'last30'; isOpen = false" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">Last 30 days</a>
+                                        <a href="#" @click.prevent="selectedPeriod = 'last90'; isOpen = false" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">Last 90 days</a>
+                                        <a href="#" @click.prevent="selectedPeriod = 'thisYear'; isOpen = false" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">This Year</a>
+                                        <a href="#" @click.prevent="selectedPeriod = 'allTime'; isOpen = false" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">All Time</a>
+                                    </div>
+                                </div>
+                            </div>
                             <a href="{{ route('admin.export-stats') }}" class="btn btn-secondary">
                                 <i class="fa-solid fa-file-export mr-2"></i> Export
                             </a>
@@ -322,7 +337,7 @@
                     <div class="card mb-6">
                         <div class="p-5 border-b border-neutral-200 flex justify-between items-center">
                             <h3 class="text-lg font-medium text-neutral-900">Recent Activity</h3>
-                            <button class="text-sm text-primary-600 hover:text-primary-700">View all</button>
+                            <button class="text-sm text-secondary-700 hover:text-secondary-900">View all</button>
                         </div>
                         <div class="divide-y divide-neutral-200">
                             <div class="p-5 flex items-center">
@@ -441,13 +456,14 @@
                                             </a>
                                             <form action="{{ route('admin.libraries.approve', [$library->id]) }}" method="POST" style="display:inline">
                                                 @csrf
-                                                <button type="submit" class="text-green-600 hover:text-green-900">
+                                                <button type="submit" class="text-green-600 hover:text-green-900" title="Approve Library">
                                                     <i class="fa-solid fa-check"></i>
                                                 </button>
                                             </form>
                                             <form action="{{ route('admin.libraries.reject', [$library->id]) }}" method="POST" style="display:inline">
                                                 @csrf
-                                                <button type="submit" class="text-red-600 hover:text-red-900">
+                                                <input type="hidden" name="rejection_reason" value="Content does not meet guidelines">
+                                                <button type="submit" class="text-red-600 hover:text-red-900" title="Reject Library">
                                                     <i class="fa-solid fa-xmark"></i>
                                                 </button>
                                             </form>
@@ -740,7 +756,10 @@
     </div>
 
     <script>
+        console.log('Script execution started');
+        
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded - Charts initialization should start now');
             // Add the dashboard stats from the server
             // Parse dashboard stats safely
             let dashboardStats;
@@ -840,22 +859,33 @@
             document.getElementById('exportBtn').addEventListener('click', function() {
                 exportToCSV(dashboardStats, 'dashboard-stats-' + new Date().toISOString().split('T')[0] + '.csv');
             });
-            // User Growth Chart
-            const userCtx = document.getElementById('userGrowthChart').getContext('2d');
-            new Chart(userCtx, {
-                type: 'line',
-                data: {
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                    datasets: [{
-                        label: 'New Users',
-                        data: [65, 78, 90, 105, 125, 138, 156, 170, 186, 199, 210, 225],
-                        borderColor: '#5a78ee',
-                        backgroundColor: 'rgba(90, 120, 238, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.3,
-                        fill: true
-                    }]
-                },
+            // Function to render charts
+            function renderCharts() {
+                console.log('Rendering charts...');
+                
+                try {
+                    // User Growth Chart
+                    const userGrowthElement = document.getElementById('userGrowthChart');
+                    if (!userGrowthElement) {
+                        console.error('User growth chart element not found');
+                        return;
+                    }
+                    
+                    const userCtx = userGrowthElement.getContext('2d');
+                    new Chart(userCtx, {
+                        type: 'line',
+                        data: {
+                            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                            datasets: [{
+                                label: 'New Users',
+                                data: [65, 78, 90, 105, 125, 138, 156, 170, 186, 199, 210, 225],
+                                borderColor: '#5a78ee',
+                                backgroundColor: 'rgba(90, 120, 238, 0.1)',
+                                borderWidth: 2,
+                                tension: 0.3,
+                                fill: true
+                            }]
+                        },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -887,19 +917,26 @@
                 }
             });
 
-            // Revenue Chart
-            const revenueCtx = document.getElementById('revenueChart').getContext('2d');
-            new Chart(revenueCtx, {
-                type: 'bar',
-                data: {
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                    datasets: [{
-                        label: 'Revenue',
-                        data: [1500, 1700, 1900, 2100, 2300, 2500, 2700, 2900, 3100, 3300, 3500, 3700],
-                        backgroundColor: 'rgba(90, 120, 238, 0.8)',
-                        borderRadius: 4
-                    }]
-                },
+                    
+                    // Revenue Chart
+                    const revenueChartElement = document.getElementById('revenueChart');
+                    if (!revenueChartElement) {
+                        console.error('Revenue chart element not found');
+                        return;
+                    }
+                    
+                    const revenueCtx = revenueChartElement.getContext('2d');
+                    new Chart(revenueCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                            datasets: [{
+                                label: 'Revenue',
+                                data: [1500, 1700, 1900, 2100, 2300, 2500, 2700, 2900, 3100, 3300, 3500, 3700],
+                                backgroundColor: '#1a202c', // Changed to black as per request
+                                borderRadius: 4
+                            }]
+                        },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -973,6 +1010,14 @@
                     }
                 });
             }
+            
+                } catch (e) {
+                    console.error('Error rendering charts:', e);
+                }
+            }
+            
+            // Call the chart rendering function
+            renderCharts();
             
             // User Roles Distribution Chart
             const userRolesCtx = document.getElementById('userRolesChart');

@@ -188,11 +188,15 @@ Route::prefix('admin')->group(function () {
         
         // Library management routes
         Route::prefix('libraries')->name('admin.libraries.')->group(function () {
-            Route::get('/', [App\Http\Controllers\AdminLibraryController::class, 'index'])->name('index');
-            Route::get('/{id}', [App\Http\Controllers\AdminLibraryController::class, 'show'])->name('view');
-            Route::post('/{id}/approve', [App\Http\Controllers\AdminLibraryController::class, 'approve'])->name('approve');
-            Route::post('/{id}/reject', [App\Http\Controllers\AdminLibraryController::class, 'reject'])->name('reject');
-            Route::post('/{id}/generate-cover', [App\Http\Controllers\AdminLibraryController::class, 'generateCover'])->name('generate-cover');
+            Route::get('/', [App\Http\Controllers\AdminLibraryController::class, 'listLibraries'])->name('index');
+            Route::get('/{id}', [App\Http\Controllers\AdminLibraryController::class, 'viewLibrary'])->name('view');
+            Route::post('/{id}/approve', [App\Http\Controllers\AdminLibraryController::class, 'approveLibrary'])->name('approve');
+            Route::post('/{id}/reject', [App\Http\Controllers\AdminLibraryController::class, 'rejectLibrary'])->name('reject');
+            Route::post('/{id}/generate-cover', function($id) {
+                $controller = new \App\Http\Controllers\AdminLibraryController();
+                $library = \App\Models\OpenLibrary::findOrFail($id);
+                return $controller->approveLibrary(request()->merge(['generate_cover' => true]), $id);
+            })->name('generate-cover');
         });
         
         // User management routes
