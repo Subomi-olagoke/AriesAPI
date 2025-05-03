@@ -32,6 +32,18 @@
                             800: '#2b3ca9',
                             900: '#273782',
                         },
+                        'secondary': {
+                            50: '#f8f9fa',
+                            100: '#eaedf0',
+                            200: '#d1d6db',
+                            300: '#acb5bf',
+                            400: '#717d8c',
+                            500: '#4a5568',
+                            600: '#3c4655',
+                            700: '#2d3748',
+                            800: '#1a202c',
+                            900: '#0f141e',
+                        },
                         'neutral': {
                             50: '#f9fafb',
                             100: '#f4f5f7',
@@ -79,7 +91,7 @@
         }
         
         .btn-secondary {
-            @apply border-neutral-300 text-neutral-700 bg-white hover:bg-neutral-50 focus:ring-2 focus:ring-offset-2 focus:ring-primary-500;
+            @apply border-secondary-300 text-secondary-700 bg-white hover:bg-secondary-50 focus:ring-2 focus:ring-offset-2 focus:ring-secondary-500;
         }
         
         .table-header {
@@ -204,7 +216,7 @@
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <div class="text-sm font-medium text-neutral-500">Total Users</div>
-                                        <div class="mt-1 text-3xl font-semibold text-neutral-900" data-stat="users.total">2,814</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">{{ $stats['users']['total'] }}</div>
                                     </div>
                                     <div class="w-12 h-12 bg-primary-50 rounded-md flex items-center justify-center">
                                         <i class="fa-solid fa-users text-primary-600 text-xl"></i>
@@ -225,7 +237,7 @@
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <div class="text-sm font-medium text-neutral-500">Total Revenue</div>
-                                        <div class="mt-1 text-3xl font-semibold text-neutral-900" data-stat="revenue.total" data-format="currency">$18,230</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">${{ number_format($stats['revenue']['total']) }}</div>
                                     </div>
                                     <div class="w-12 h-12 bg-green-50 rounded-md flex items-center justify-center">
                                         <i class="fa-solid fa-dollar-sign text-green-600 text-xl"></i>
@@ -246,7 +258,7 @@
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <div class="text-sm font-medium text-neutral-500">New Content</div>
-                                        <div class="mt-1 text-3xl font-semibold text-neutral-900" data-stat="content.postsToday">142</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">{{ $stats['content']['posts_today'] }}</div>
                                     </div>
                                     <div class="w-12 h-12 bg-blue-50 rounded-md flex items-center justify-center">
                                         <i class="fa-solid fa-file-lines text-blue-600 text-xl"></i>
@@ -267,7 +279,7 @@
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <div class="text-sm font-medium text-neutral-500">Pending Verifications</div>
-                                        <div class="mt-1 text-3xl font-semibold text-neutral-900" data-stat="content.pendingLibraries">23</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">{{ $stats['content']['pending_libraries'] }}</div>
                                     </div>
                                     <div class="w-12 h-12 bg-yellow-50 rounded-md flex items-center justify-center">
                                         <i class="fa-solid fa-user-check text-yellow-600 text-xl"></i>
@@ -401,6 +413,7 @@
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-neutral-200">
+                                @forelse($pendingLibraries as $library)
                                 <tr>
                                     <td class="table-cell">
                                         <div class="flex items-center">
@@ -408,67 +421,49 @@
                                                 <i class="fa-solid fa-book text-primary-600"></i>
                                             </div>
                                             <div class="ml-4">
-                                                <div class="text-sm font-medium text-neutral-900">Science & Technology</div>
-                                                <div class="text-xs text-neutral-500 truncate max-w-xs">A collection of the latest science and technology articles</div>
+                                                <div class="text-sm font-medium text-neutral-900">{{ $library->title ?? 'Untitled Library' }}</div>
+                                                <div class="text-xs text-neutral-500 truncate max-w-xs">{{ $library->description ?? 'No description available' }}</div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td class="table-cell">Auto</td>
-                                    <td class="table-cell">May 2, 2025</td>
-                                    <td class="table-cell">24</td>
+                                    <td class="table-cell">{{ $library->type ?? 'Auto' }}</td>
+                                    <td class="table-cell">{{ $library->created_at ? $library->created_at->format('M d, Y') : 'Unknown date' }}</td>
+                                    <td class="table-cell">{{ $library->items_count ?? 0 }}</td>
                                     <td class="table-cell">
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                            Pending
+                                            {{ ucfirst($library->approval_status ?? 'Pending') }}
                                         </span>
                                     </td>
                                     <td class="table-cell text-right">
                                         <div class="flex justify-end space-x-2">
-                                            <button class="text-primary-600 hover:text-primary-900">
+                                            <a href="{{ route('admin.libraries.view', [$library->id]) }}" class="text-primary-600 hover:text-primary-900">
                                                 <i class="fa-solid fa-eye"></i>
-                                            </button>
-                                            <button class="text-green-600 hover:text-green-900">
-                                                <i class="fa-solid fa-check"></i>
-                                            </button>
-                                            <button class="text-red-600 hover:text-red-900">
-                                                <i class="fa-solid fa-xmark"></i>
-                                            </button>
+                                            </a>
+                                            <form action="{{ route('admin.libraries.approve', [$library->id]) }}" method="POST" style="display:inline">
+                                                @csrf
+                                                <button type="submit" class="text-green-600 hover:text-green-900">
+                                                    <i class="fa-solid fa-check"></i>
+                                                </button>
+                                            </form>
+                                            <form action="{{ route('admin.libraries.reject', [$library->id]) }}" method="POST" style="display:inline">
+                                                @csrf
+                                                <button type="submit" class="text-red-600 hover:text-red-900">
+                                                    <i class="fa-solid fa-xmark"></i>
+                                                </button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
+                                @empty
                                 <tr>
-                                    <td class="table-cell">
-                                        <div class="flex items-center">
-                                            <div class="h-10 w-10 flex-shrink-0 rounded bg-primary-100 flex items-center justify-center">
-                                                <i class="fa-solid fa-book text-primary-600"></i>
-                                            </div>
-                                            <div class="ml-4">
-                                                <div class="text-sm font-medium text-neutral-900">Business & Economics</div>
-                                                <div class="text-xs text-neutral-500 truncate max-w-xs">Business strategies and economic trends</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="table-cell">Auto</td>
-                                    <td class="table-cell">May 1, 2025</td>
-                                    <td class="table-cell">18</td>
-                                    <td class="table-cell">
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                            Pending
-                                        </span>
-                                    </td>
-                                    <td class="table-cell text-right">
-                                        <div class="flex justify-end space-x-2">
-                                            <button class="text-primary-600 hover:text-primary-900">
-                                                <i class="fa-solid fa-eye"></i>
-                                            </button>
-                                            <button class="text-green-600 hover:text-green-900">
-                                                <i class="fa-solid fa-check"></i>
-                                            </button>
-                                            <button class="text-red-600 hover:text-red-900">
-                                                <i class="fa-solid fa-xmark"></i>
-                                            </button>
-                                        </div>
+                                    <td colspan="6" class="table-cell text-center py-4">
+                                        <div class="text-sm text-neutral-500">No pending libraries found</div>
                                     </td>
                                 </tr>
+                                @endforelse
+                                
+                                @if(count($pendingLibraries) > 0 && count($pendingLibraries) < 3)
+                                <!-- Add some sample approved libraries to show contrast -->
                                 <tr>
                                     <td class="table-cell">
                                         <div class="flex items-center">
@@ -500,6 +495,7 @@
                                         </div>
                                     </td>
                                 </tr>
+                                @endif
                             </tbody>
                         </table>
                         <div class="bg-white px-4 py-3 flex items-center justify-between border-t border-neutral-200">
@@ -510,7 +506,7 @@
                             <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                                 <div>
                                     <p class="text-sm text-neutral-700">
-                                        Showing <span class="font-medium">1</span> to <span class="font-medium">3</span> of <span class="font-medium">12</span> results
+                                        Showing <span class="font-medium">1</span> to <span class="font-medium">{{ count($pendingLibraries) }}</span> of <span class="font-medium">{{ $stats['content']['pending_libraries'] }}</span> pending libraries
                                     </p>
                                 </div>
                                 <div>
@@ -553,7 +549,7 @@
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <div class="text-sm font-medium text-neutral-500">Total Users</div>
-                                        <div class="mt-1 text-3xl font-semibold text-neutral-900" data-stat="users.total">2,814</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">{{ $stats['users']['total'] }}</div>
                                     </div>
                                     <div class="w-12 h-12 bg-primary-50 rounded-md flex items-center justify-center">
                                         <i class="fa-solid fa-users text-primary-600 text-xl"></i>

@@ -100,6 +100,17 @@ class AdminAuthController extends Controller
             ->orderBy('created_at', 'desc')
             ->limit(5)
             ->get();
+            
+        // Get pending libraries for display in the libraries tab
+        try {
+            $pendingLibraries = \App\Models\OpenLibrary::where('approval_status', 'pending')
+                ->with('user')
+                ->orderBy('created_at', 'desc')
+                ->limit(10)
+                ->get();
+        } catch (\Exception $e) {
+            $pendingLibraries = collect(); // Empty collection if error
+        }
         
         // Compile stats for the dashboard
         $stats = [
@@ -147,10 +158,11 @@ class AdminAuthController extends Controller
         // Merge default stats with actual stats to ensure all keys exist
         $mergedStats = array_replace_recursive($defaultStats, $stats);
         
-        // Due to issues with the regular dashboard, use the simplified version
-        return view('admin.simplified-dashboard', [
+        // Use the original dashboard layout
+        return view('admin.dashboard', [
             'stats' => $mergedStats,
-            'recentUsers' => $recentUsers
+            'recentUsers' => $recentUsers,
+            'pendingLibraries' => $pendingLibraries ?? collect()
         ]);
     }
 
