@@ -41,7 +41,8 @@ class AdminAuthController extends Controller
         if (Auth::attempt($credentials, $request->filled('remember'))) {
             $request->session()->regenerate();
             
-            return redirect()->intended(route('admin.dashboard'));
+            // Always redirect to dashboard after login
+            return redirect()->route('admin.dashboard');
         }
 
         throw ValidationException::withMessages([
