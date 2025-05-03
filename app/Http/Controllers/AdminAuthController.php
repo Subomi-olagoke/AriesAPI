@@ -69,7 +69,14 @@ class AdminAuthController extends Controller
         $postsToday = \App\Models\Post::whereDate('created_at', $carbon->today())->count();
         $totalCourses = \App\Models\Course::count();
         $totalLibraries = \App\Models\OpenLibrary::count();
-        $pendingLibraries = \App\Models\OpenLibrary::where('approval_status', 'pending')->count();
+        
+        // Try to get pending libraries count, but handle case where approval_status column might not exist
+        try {
+            $pendingLibraries = \App\Models\OpenLibrary::where('approval_status', 'pending')->count();
+        } catch (\Exception $e) {
+            // If column doesn't exist, default to 0
+            $pendingLibraries = 0;
+        }
         
         // Get payment stats
         $totalRevenue = \App\Models\PaymentLog::where('status', 'success')->sum('amount');
