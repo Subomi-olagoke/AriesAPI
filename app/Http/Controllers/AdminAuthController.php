@@ -147,7 +147,8 @@ class AdminAuthController extends Controller
         // Merge default stats with actual stats to ensure all keys exist
         $mergedStats = array_replace_recursive($defaultStats, $stats);
         
-        return view('admin.dashboard', [
+        // Due to issues with the regular dashboard, use the simplified version
+        return view('admin.simplified-dashboard', [
             'stats' => $mergedStats,
             'recentUsers' => $recentUsers
         ]);
@@ -158,7 +159,7 @@ class AdminAuthController extends Controller
      */
     public function exportStats()
     {
-        if (!$this->isAdmin()) {
+        if (!Auth::user() || Auth::user()->isAdmin !== true) {
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);

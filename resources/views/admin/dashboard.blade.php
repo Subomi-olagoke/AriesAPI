@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Aries Admin</title>
+    <!-- Force reload the app CSS and JS -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -91,7 +95,7 @@
         }
     </style>
 </head>
-<body class="bg-neutral-50 font-sans antialiased text-neutral-900" x-data="{ sidebarOpen: true, currentTab: 'overview', showDropdown: false }">
+<body class="bg-neutral-50 font-sans antialiased text-neutral-900" x-data="{ sidebarOpen: true, currentTab: 'overview', showDropdown: false }" x-init="console.log('Alpine initialized')">
     <div class="min-h-screen flex">
         <!-- Sidebar -->
         <div class="fixed inset-y-0 left-0 z-30 w-64 transition-all duration-300 transform bg-white border-r border-neutral-200" :class="{'translate-x-0': sidebarOpen, '-translate-x-full': !sidebarOpen}">
