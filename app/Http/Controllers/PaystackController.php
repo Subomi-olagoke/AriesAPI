@@ -127,19 +127,29 @@ class PaystackController extends Controller
             }
             
             // Log the payment attempt
-            PaymentLog::create([
-                'user_id' => $user->id,
-                'transaction_reference' => $initResponse['data']['data']['reference'],
-                'payment_type' => 'subscription',
-                'status' => 'pending',
-                'amount' => $plan['amount'],
-                'plan_type' => $validated['plan_type'],
-                'response_data' => $initResponse['data'],
-                'metadata' => json_encode([
-                    'plan_code' => $plan['plan_code'],
-                    'is_recurring' => true
-                ])
-            ]);
+            try {
+                PaymentLog::create([
+                    'user_id' => $user->id,
+                    'transaction_reference' => $initResponse['data']['data']['reference'],
+                    'payment_type' => 'subscription',
+                    'status' => 'pending',
+                    'amount' => $plan['amount'],
+                    'plan_type' => $validated['plan_type'],
+                    'response_data' => $initResponse['data'],
+                    'metadata' => json_encode([
+                        'plan_code' => $plan['plan_code'],
+                        'is_recurring' => true
+                    ])
+                ]);
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Just log the error but don't stop execution if payment_logs table doesn't exist
+                if (str_contains($e->getMessage(), "payment_logs' doesn't exist")) {
+                    Log::warning('Payment logs table not found when initializing subscription');
+                    // Continue without creating the log
+                } else {
+                    throw $e;
+                }
+            }
             
             DB::commit();
             
@@ -237,12 +247,21 @@ class PaystackController extends Controller
         $reference = $paymentData['reference'];
         $metadata = $paymentData['metadata'] ?? null;
         
-        // Find the payment log
-        $paymentLog = PaymentLog::where('transaction_reference', $reference)->first();
-        
-        if (!$paymentLog) {
-            Log::error('Payment log not found for reference: ' . $reference);
-            return null;
+        try {
+            // Find the payment log
+            $paymentLog = PaymentLog::where('transaction_reference', $reference)->first();
+            
+            if (!$paymentLog) {
+                Log::error('Payment log not found for reference: ' . $reference);
+                return null;
+            }
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Handle the case where the payment_logs table doesn't exist
+            if (str_contains($e->getMessage(), "payment_logs' doesn't exist")) {
+                Log::warning('Payment logs table not found when processing payment: ' . $reference);
+                return null;
+            }
+            throw $e;
         }
         
         try {
@@ -366,16 +385,26 @@ class PaystackController extends Controller
                 $subscription->save();
                 
                 // Create payment log
-                PaymentLog::create([
-                    'user_id' => $subscription->user_id,
-                    'transaction_reference' => $data['reference'],
-                    'payment_type' => 'subscription_renewal',
-                    'status' => 'success',
-                    'amount' => $data['amount'] / 100,
-                    'plan_type' => $subscription->plan_type,
-                    'paystack_code' => $data['subscription_code'],
-                    'response_data' => $data
-                ]);
+                try {
+                    PaymentLog::create([
+                        'user_id' => $subscription->user_id,
+                        'transaction_reference' => $data['reference'],
+                        'payment_type' => 'subscription_renewal',
+                        'status' => 'success',
+                        'amount' => $data['amount'] / 100,
+                        'plan_type' => $subscription->plan_type,
+                        'paystack_code' => $data['subscription_code'],
+                        'response_data' => $data
+                    ]);
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // Just log the error but don't stop execution if payment_logs table doesn't exist
+                    if (str_contains($e->getMessage(), "payment_logs' doesn't exist")) {
+                        Log::warning('Payment logs table not found when handling charge success');
+                        // Continue without creating the log
+                    } else {
+                        throw $e;
+                    }
+                }
             }
         }
         // Check if this is a split payment

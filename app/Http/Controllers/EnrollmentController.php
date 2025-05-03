@@ -97,15 +97,25 @@ class EnrollmentController extends Controller
             $enrollment->save();
             
             // Create payment log
-            PaymentLog::create([
-                'user_id' => $user->id,
-                'transaction_reference' => $paymentData['reference'],
-                'payment_type' => 'course_enrollment',
-                'status' => 'pending',
-                'amount' => $course->price,
-                'course_id' => $course->id,
-                'response_data' => $initResponse['data']
-            ]);
+            try {
+                PaymentLog::create([
+                    'user_id' => $user->id,
+                    'transaction_reference' => $paymentData['reference'],
+                    'payment_type' => 'course_enrollment',
+                    'status' => 'pending',
+                    'amount' => $course->price,
+                    'course_id' => $course->id,
+                    'response_data' => $initResponse['data']
+                ]);
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Just log the error but don't stop execution if payment_logs table doesn't exist
+                if (str_contains($e->getMessage(), "payment_logs' doesn't exist")) {
+                    Log::warning('Payment logs table not found when creating enrollment');
+                    // Continue without creating the log
+                } else {
+                    throw $e;
+                }
+            }
             
             DB::commit();
             
@@ -154,17 +164,30 @@ class EnrollmentController extends Controller
             }
             
             // Find or create payment log
-            $paymentLog = PaymentLog::where('transaction_reference', $reference)->first();
-            
-            if (!$paymentLog) {
-                $paymentLog = PaymentLog::create([
-                    'user_id' => $enrollment->user_id,
-                    'transaction_reference' => $reference,
-                    'payment_type' => 'course_enrollment',
-                    'status' => 'pending',
-                    'amount' => $enrollment->course->price,
-                    'course_id' => $enrollment->course_id
-                ]);
+            try {
+                $paymentLog = PaymentLog::where('transaction_reference', $reference)->first();
+                
+                if (!$paymentLog) {
+                    $paymentLog = PaymentLog::create([
+                        'user_id' => $enrollment->user_id,
+                        'transaction_reference' => $reference,
+                        'payment_type' => 'course_enrollment',
+                        'status' => 'pending',
+                        'amount' => $enrollment->course->price,
+                        'course_id' => $enrollment->course_id
+                    ]);
+                }
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Handle the case where the payment_logs table doesn't exist
+                if (str_contains($e->getMessage(), "payment_logs' doesn't exist")) {
+                    Log::warning('Payment logs table not found when verifying enrollment');
+                    // Create a temporary object to use for the rest of the function
+                    $paymentLog = new \stdClass();
+                    $paymentLog->status = 'pending';
+                    $paymentLog->response_data = [];
+                } else {
+                    throw $e;
+                }
             }
             
             // Verify payment with Paystack
@@ -172,11 +195,17 @@ class EnrollmentController extends Controller
             
             if (!$verification['success']) {
                 // Update payment log status
-                $paymentLog->status = 'failed';
-                $paymentLog->response_data = array_merge($paymentLog->response_data ?? [], [
-                    'verification_error' => $verification['message']
-                ]);
-                $paymentLog->save();
+                try {
+                    if ($paymentLog instanceof \App\Models\PaymentLog) {
+                        $paymentLog->status = 'failed';
+                        $paymentLog->response_data = array_merge($paymentLog->response_data ?? [], [
+                            'verification_error' => $verification['message']
+                        ]);
+                        $paymentLog->save();
+                    }
+                } catch (\Exception $logEx) {
+                    Log::warning('Could not update payment log status: ' . $logEx->getMessage());
+                }
                 
                 DB::commit();
                 
@@ -191,11 +220,17 @@ class EnrollmentController extends Controller
             // Check if payment was successful
             if ($paymentData['status'] !== 'success') {
                 // Update payment log status
-                $paymentLog->status = 'failed';
-                $paymentLog->response_data = array_merge($paymentLog->response_data ?? [], [
-                    'verification' => $paymentData
-                ]);
-                $paymentLog->save();
+                try {
+                    if ($paymentLog instanceof \App\Models\PaymentLog) {
+                        $paymentLog->status = 'failed';
+                        $paymentLog->response_data = array_merge($paymentLog->response_data ?? [], [
+                            'verification' => $paymentData
+                        ]);
+                        $paymentLog->save();
+                    }
+                } catch (\Exception $logEx) {
+                    Log::warning('Could not update payment log status: ' . $logEx->getMessage());
+                }
                 
                 DB::commit();
                 
@@ -206,11 +241,17 @@ class EnrollmentController extends Controller
             }
             
             // Update payment log status
-            $paymentLog->status = 'success';
-            $paymentLog->response_data = array_merge($paymentLog->response_data ?? [], [
-                'verification' => $paymentData
-            ]);
-            $paymentLog->save();
+            try {
+                if ($paymentLog instanceof \App\Models\PaymentLog) {
+                    $paymentLog->status = 'success';
+                    $paymentLog->response_data = array_merge($paymentLog->response_data ?? [], [
+                        'verification' => $paymentData
+                    ]);
+                    $paymentLog->save();
+                }
+            } catch (\Exception $logEx) {
+                Log::warning('Could not update payment log status: ' . $logEx->getMessage());
+            }
             
             // Activate the enrollment
             $enrollment->status = 'active';
@@ -384,15 +425,25 @@ class EnrollmentController extends Controller
         $enrollment->save();
         
         // Create payment log for tracking
-        PaymentLog::create([
-            'user_id' => $user->id,
-            'transaction_reference' => $reference,
-            'payment_type' => 'course_enrollment',
-            'status' => 'success',
-            'amount' => 0,
-            'course_id' => $course->id,
-            'metadata' => json_encode(['free_course' => true])
-        ]);
+        try {
+            PaymentLog::create([
+                'user_id' => $user->id,
+                'transaction_reference' => $reference,
+                'payment_type' => 'course_enrollment',
+                'status' => 'success',
+                'amount' => 0,
+                'course_id' => $course->id,
+                'metadata' => json_encode(['free_course' => true])
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Just log the error but don't stop execution if payment_logs table doesn't exist
+            if (str_contains($e->getMessage(), "payment_logs' doesn't exist")) {
+                Log::warning('Payment logs table not found when creating free enrollment');
+                // Continue without creating the log
+            } else {
+                throw $e;
+            }
+        }
         
         return $enrollment;
     }

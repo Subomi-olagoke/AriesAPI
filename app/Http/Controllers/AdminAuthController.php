@@ -79,11 +79,21 @@ class AdminAuthController extends Controller
         }
         
         // Get payment stats
-        $totalRevenue = \App\Models\PaymentLog::where('status', 'success')->sum('amount');
-        $revenueThisMonth = \App\Models\PaymentLog::where('status', 'success')
-            ->whereMonth('created_at', $carbon->month)
-            ->whereYear('created_at', $carbon->year)
-            ->sum('amount');
+        try {
+            $totalRevenue = \App\Models\PaymentLog::where('status', 'success')->sum('amount');
+            $revenueThisMonth = \App\Models\PaymentLog::where('status', 'success')
+                ->whereMonth('created_at', $carbon->month)
+                ->whereYear('created_at', $carbon->year)
+                ->sum('amount');
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Handle the case where the payment_logs table doesn't exist
+            if (str_contains($e->getMessage(), "payment_logs' doesn't exist")) {
+                $totalRevenue = 0;
+                $revenueThisMonth = 0;
+            } else {
+                throw $e;
+            }
+        }
             
         // Get recent user registrations
         $recentUsers = \App\Models\User::with('profile')

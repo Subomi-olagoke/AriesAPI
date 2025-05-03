@@ -4840,7 +4840,7 @@ class FeedViewModel: ObservableObject {
     
     func leaveChannel(channelId: String, completion: @escaping (Bool, String?) -> Void) {
         error = nil
-        
+         
         var request = URLRequest(url: URL(string: "\(baseURL)/channels/\(channelId)/leave")!)
         request.httpMethod = "POST"
         request.addValue("Bearer \(storedBearer)", forHTTPHeaderField: "Authorization")
