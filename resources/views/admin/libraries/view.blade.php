@@ -1,4 +1,4 @@
-@extends('admin.layouts.app')
+@extends('admin.layout')
 
 @section('title', 'Library Details')
 
@@ -6,7 +6,7 @@
 <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-semibold text-neutral-900">Library Details</h1>
     <div class="flex space-x-2">
-        <a href="{{ route('admin.libraries') }}" class="btn btn-secondary">
+        <a href="{{ route('admin.libraries.index') }}" class="btn btn-secondary">
             <i class="fa-solid fa-arrow-left mr-2"></i> Back to Libraries
         </a>
         

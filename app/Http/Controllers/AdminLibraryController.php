@@ -111,7 +111,7 @@ class AdminLibraryController extends Controller
         $library->approved_by = Auth::id();
         $library->save();
         
-        return redirect()->route('admin.libraries')->with('success', 'Library has been approved successfully.');
+        return redirect()->route('admin.libraries.index')->with('success', 'Library has been approved successfully.');
     }
     
     /**
@@ -131,7 +131,7 @@ class AdminLibraryController extends Controller
         $library->rejection_reason = $request->rejection_reason;
         $library->save();
         
-        return redirect()->route('admin.libraries')->with('success', 'Library has been rejected.');
+        return redirect()->route('admin.libraries.index')->with('success', 'Library has been rejected.');
     }
     
     /**
