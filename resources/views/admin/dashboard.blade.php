@@ -526,6 +526,213 @@
                     </div>
                 </div>
 
+                <!-- Users Tab -->
+                <div x-show="currentTab === 'users'" x-cloak>
+                    <div class="flex justify-between items-center mb-6">
+                        <h1 class="text-2xl font-semibold text-neutral-900">User Management</h1>
+                        <div class="flex space-x-2">
+                            <a href="{{ route('admin.users.index') }}" class="btn btn-primary">
+                                <i class="fa-solid fa-user-group mr-2"></i> View All Users
+                            </a>
+                            <a href="{{ route('admin.users.banned') }}" class="btn btn-secondary">
+                                <i class="fa-solid fa-user-slash mr-2"></i> Banned Users
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <!-- User Stats Cards -->
+                    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+                        <!-- Total Users -->
+                        <div class="card">
+                            <div class="p-5">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <div class="text-sm font-medium text-neutral-500">Total Users</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">2,814</div>
+                                    </div>
+                                    <div class="w-12 h-12 bg-primary-50 rounded-md flex items-center justify-center">
+                                        <i class="fa-solid fa-users text-primary-600 text-xl"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-3 flex items-center text-sm">
+                                    <span class="text-green-600 font-medium flex items-center">
+                                        <i class="fa-solid fa-arrow-up mr-1 text-xs"></i> 12%
+                                    </span>
+                                    <span class="ml-2 text-neutral-500">vs last month</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Active Users -->
+                        <div class="card">
+                            <div class="p-5">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <div class="text-sm font-medium text-neutral-500">Active Users</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">1,625</div>
+                                    </div>
+                                    <div class="w-12 h-12 bg-green-50 rounded-md flex items-center justify-center">
+                                        <i class="fa-solid fa-user-check text-green-600 text-xl"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-3 flex items-center text-sm">
+                                    <span class="text-green-600 font-medium flex items-center">
+                                        <i class="fa-solid fa-arrow-up mr-1 text-xs"></i> 8%
+                                    </span>
+                                    <span class="ml-2 text-neutral-500">vs last month</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- New Users Today -->
+                        <div class="card">
+                            <div class="p-5">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <div class="text-sm font-medium text-neutral-500">New Users Today</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">48</div>
+                                    </div>
+                                    <div class="w-12 h-12 bg-blue-50 rounded-md flex items-center justify-center">
+                                        <i class="fa-solid fa-user-plus text-blue-600 text-xl"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-3 flex items-center text-sm">
+                                    <span class="text-green-600 font-medium flex items-center">
+                                        <i class="fa-solid fa-arrow-up mr-1 text-xs"></i> 15%
+                                    </span>
+                                    <span class="ml-2 text-neutral-500">vs yesterday</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Banned Users -->
+                        <div class="card">
+                            <div class="p-5">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <div class="text-sm font-medium text-neutral-500">Banned Users</div>
+                                        <div class="mt-1 text-3xl font-semibold text-neutral-900">12</div>
+                                    </div>
+                                    <div class="w-12 h-12 bg-red-50 rounded-md flex items-center justify-center">
+                                        <i class="fa-solid fa-user-slash text-red-600 text-xl"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-3 flex items-center text-sm">
+                                    <span class="text-neutral-600 font-medium flex items-center">
+                                        <i class="fa-solid fa-minus mr-1 text-xs"></i> No change
+                                    </span>
+                                    <span class="ml-2 text-neutral-500">vs last month</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- User Overview -->
+                    <div class="card mb-6">
+                        <div class="p-5 border-b border-neutral-200">
+                            <h3 class="text-lg font-medium text-neutral-900">Recently Registered Users</h3>
+                        </div>
+                        <div class="divide-y divide-neutral-200">
+                            <!-- Sample user rows - would be dynamically populated -->
+                            <div class="p-5 flex items-center">
+                                <div class="flex-shrink-0">
+                                    <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-neutral-500">
+                                        <span class="font-medium leading-none text-white">JS</span>
+                                    </span>
+                                </div>
+                                <div class="ml-4 flex-1">
+                                    <div class="flex items-center">
+                                        <div class="text-sm font-medium text-neutral-900">John Smith</div>
+                                        <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-neutral-100 text-neutral-800">
+                                            User
+                                        </span>
+                                    </div>
+                                    <div class="text-sm text-neutral-500">john.smith@example.com</div>
+                                </div>
+                                <div class="text-sm text-neutral-500">
+                                    <div>Registered 2 hours ago</div>
+                                    <div class="text-right mt-1">
+                                        <a href="#" class="text-primary-600 hover:text-primary-700">View Profile</a>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="p-5 flex items-center">
+                                <div class="flex-shrink-0">
+                                    <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-neutral-500">
+                                        <span class="font-medium leading-none text-white">SJ</span>
+                                    </span>
+                                </div>
+                                <div class="ml-4 flex-1">
+                                    <div class="flex items-center">
+                                        <div class="text-sm font-medium text-neutral-900">Sarah Johnson</div>
+                                        <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            Educator
+                                        </span>
+                                    </div>
+                                    <div class="text-sm text-neutral-500">sarah.johnson@example.com</div>
+                                </div>
+                                <div class="text-sm text-neutral-500">
+                                    <div>Registered 5 hours ago</div>
+                                    <div class="text-right mt-1">
+                                        <a href="#" class="text-primary-600 hover:text-primary-700">View Profile</a>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="p-5 flex items-center">
+                                <div class="flex-shrink-0">
+                                    <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-neutral-500">
+                                        <span class="font-medium leading-none text-white">AW</span>
+                                    </span>
+                                </div>
+                                <div class="ml-4 flex-1">
+                                    <div class="flex items-center">
+                                        <div class="text-sm font-medium text-neutral-900">Alex Williams</div>
+                                        <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-neutral-100 text-neutral-800">
+                                            User
+                                        </span>
+                                    </div>
+                                    <div class="text-sm text-neutral-500">alex.williams@example.com</div>
+                                </div>
+                                <div class="text-sm text-neutral-500">
+                                    <div>Registered 8 hours ago</div>
+                                    <div class="text-right mt-1">
+                                        <a href="#" class="text-primary-600 hover:text-primary-700">View Profile</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-neutral-50 px-5 py-3 text-right border-t border-neutral-200">
+                            <a href="{{ route('admin.users.index') }}" class="text-sm text-primary-600 hover:text-primary-700">
+                                View all users
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- User Growth Chart -->
+                        <div class="card">
+                            <div class="p-5 border-b border-neutral-200">
+                                <h3 class="text-lg font-medium text-neutral-900">User Registration Trends</h3>
+                            </div>
+                            <div class="p-5">
+                                <canvas id="userRegistrationChart" height="260"></canvas>
+                            </div>
+                        </div>
+                        
+                        <!-- User Roles Distribution -->
+                        <div class="card">
+                            <div class="p-5 border-b border-neutral-200">
+                                <h3 class="text-lg font-medium text-neutral-900">User Roles Distribution</h3>
+                            </div>
+                            <div class="p-5">
+                                <canvas id="userRolesChart" height="260"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Other content tabs will be added here -->
             </main>
         </div>
@@ -617,6 +824,89 @@
                     }
                 }
             });
+            
+            // User Registration Chart
+            const userRegCtx = document.getElementById('userRegistrationChart');
+            if (userRegCtx) {
+                new Chart(userRegCtx.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                        datasets: [{
+                            label: 'New Registrations',
+                            data: [120, 135, 155, 180, 210, 235, 245, 260, 285, 295, 310, 325],
+                            borderColor: '#5a78ee',
+                            backgroundColor: 'rgba(90, 120, 238, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    drawBorder: false
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false,
+                                    drawBorder: false
+                                }
+                            }
+                        },
+                        elements: {
+                            point: {
+                                radius: 0,
+                                hoverRadius: 4
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // User Roles Distribution Chart
+            const userRolesCtx = document.getElementById('userRolesChart');
+            if (userRolesCtx) {
+                new Chart(userRolesCtx.getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Regular Users', 'Educators', 'Admins'],
+                        datasets: [{
+                            data: [2250, 540, 24],
+                            backgroundColor: [
+                                'rgba(90, 120, 238, 0.8)',
+                                'rgba(59, 130, 246, 0.8)',
+                                'rgba(107, 114, 128, 0.8)'
+                            ],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 20
+                                }
+                            }
+                        },
+                        cutout: '65%'
+                    }
+                });
+            }
         });
     </script>
 </body>

@@ -186,10 +186,35 @@ Route::prefix('admin')->group(function () {
         Route::post('/logout', [App\Http\Controllers\AdminAuthController::class, 'logout'])->name('admin.logout');
         
         // Library management routes
-        Route::get('/libraries', [App\Http\Controllers\AdminController::class, 'listLibraries'])->name('admin.libraries');
-        Route::get('/libraries/{id}', [App\Http\Controllers\AdminController::class, 'viewLibrary'])->name('admin.libraries.view');
-        Route::post('/libraries/{id}/approve', [App\Http\Controllers\AdminController::class, 'approveLibrary'])->name('admin.libraries.approve');
-        Route::post('/libraries/{id}/reject', [App\Http\Controllers\AdminController::class, 'rejectLibrary'])->name('admin.libraries.reject');
+        Route::prefix('libraries')->name('admin.libraries.')->group(function () {
+            Route::get('/', [App\Http\Controllers\AdminLibraryController::class, 'index'])->name('index');
+            Route::get('/{id}', [App\Http\Controllers\AdminLibraryController::class, 'show'])->name('view');
+            Route::post('/{id}/approve', [App\Http\Controllers\AdminLibraryController::class, 'approve'])->name('approve');
+            Route::post('/{id}/reject', [App\Http\Controllers\AdminLibraryController::class, 'reject'])->name('reject');
+            Route::post('/{id}/generate-cover', [App\Http\Controllers\AdminLibraryController::class, 'generateCover'])->name('generate-cover');
+        });
+        
+        // User management routes
+        Route::prefix('users')->name('admin.users.')->group(function () {
+            Route::get('/', [App\Http\Controllers\AdminUserController::class, 'index'])->name('index');
+            Route::get('/banned', [App\Http\Controllers\AdminUserController::class, 'bannedUsers'])->name('banned');
+            Route::get('/{id}', [App\Http\Controllers\AdminUserController::class, 'show'])->name('show');
+            Route::get('/{id}/edit', [App\Http\Controllers\AdminUserController::class, 'edit'])->name('edit');
+            Route::put('/{id}', [App\Http\Controllers\AdminUserController::class, 'update'])->name('update');
+            Route::post('/{id}/ban', [App\Http\Controllers\AdminUserController::class, 'ban'])->name('ban');
+            Route::post('/{id}/unban', [App\Http\Controllers\AdminUserController::class, 'unban'])->name('unban');
+            Route::post('/{id}/make-admin', [App\Http\Controllers\AdminUserController::class, 'makeAdmin'])->name('make-admin');
+            Route::post('/{id}/remove-admin', [App\Http\Controllers\AdminUserController::class, 'removeAdmin'])->name('remove-admin');
+            Route::post('/{id}/notify', [App\Http\Controllers\AdminUserController::class, 'notify'])->name('notify');
+            Route::post('/export', [App\Http\Controllers\AdminUserController::class, 'export'])->name('export');
+        });
+        
+        // Other admin routes
+        Route::get('/content', [App\Http\Controllers\AdminController::class, 'contentDashboard'])->name('admin.content');
+        Route::get('/reports', [App\Http\Controllers\AdminController::class, 'reportsDashboard'])->name('admin.reports');
+        Route::get('/revenue', [App\Http\Controllers\AdminController::class, 'revenueDashboard'])->name('admin.revenue');
+        Route::get('/verifications', [App\Http\Controllers\AdminController::class, 'verificationsDashboard'])->name('admin.verifications');
+        Route::get('/settings', [App\Http\Controllers\AdminController::class, 'settingsDashboard'])->name('admin.settings');
     });
 });
 

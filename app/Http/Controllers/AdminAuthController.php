@@ -54,7 +54,60 @@ class AdminAuthController extends Controller
      */
     public function dashboard()
     {
-        return view('admin.dashboard');
+        // Import necessary classes
+        $carbon = new \Carbon\Carbon();
+        
+        // Get user stats
+        $totalUsers = \App\Models\User::count();
+        $newUsersToday = \App\Models\User::whereDate('created_at', $carbon->today())->count();
+        $newUsersThisWeek = \App\Models\User::where('created_at', '>=', $carbon->now()->subWeek())->count();
+        $bannedUsers = \App\Models\User::where('is_banned', true)->count();
+        
+        // Get content stats
+        $totalPosts = \App\Models\Post::count();
+        $postsToday = \App\Models\Post::whereDate('created_at', $carbon->today())->count();
+        $totalCourses = \App\Models\Course::count();
+        $totalLibraries = \App\Models\OpenLibrary::count();
+        $pendingLibraries = \App\Models\OpenLibrary::where('approval_status', 'pending')->count();
+        
+        // Get payment stats
+        $totalRevenue = \App\Models\PaymentLog::where('status', 'success')->sum('amount');
+        $revenueThisMonth = \App\Models\PaymentLog::where('status', 'success')
+            ->whereMonth('created_at', $carbon->month)
+            ->whereYear('created_at', $carbon->year)
+            ->sum('amount');
+            
+        // Get recent user registrations
+        $recentUsers = \App\Models\User::with('profile')
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get();
+        
+        // Compile stats for the dashboard
+        $stats = [
+            'users' => [
+                'total' => $totalUsers,
+                'new_today' => $newUsersToday,
+                'new_this_week' => $newUsersThisWeek,
+                'banned' => $bannedUsers,
+            ],
+            'content' => [
+                'total_posts' => $totalPosts,
+                'posts_today' => $postsToday,
+                'total_courses' => $totalCourses,
+                'total_libraries' => $totalLibraries,
+                'pending_libraries' => $pendingLibraries,
+            ],
+            'revenue' => [
+                'total' => $totalRevenue,
+                'this_month' => $revenueThisMonth,
+            ],
+        ];
+        
+        return view('admin.dashboard', [
+            'stats' => $stats,
+            'recentUsers' => $recentUsers
+        ]);
     }
 
     /**

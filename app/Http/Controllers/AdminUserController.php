@@ -365,6 +365,148 @@ class AdminUserController extends Controller
     }
     
     /**
+     * Export users based on filter criteria
+     */
+    public function export(Request $request)
+    {
+        $query = User::query();
+        
+        // Join with profiles if needed for filtering
+        if ($request->has('bio') || $request->has('has_profile')) {
+            $query->leftJoin('profiles', 'users.id', '=', 'profiles.user_id');
+            $query->select('users.*'); // Ensure we only get user columns
+        }
+        
+        // Apply the same filters as in the index method
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('username', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%");
+            });
+        }
+        
+        // Filter by role
+        if ($request->has('role')) {
+            $query->where('role', $request->role);
+        }
+        
+        // Filter by status
+        if ($request->has('status')) {
+            switch ($request->status) {
+                case 'active':
+                    $query->where('is_banned', false);
+                    break;
+                case 'banned':
+                    $query->where('is_banned', true);
+                    break;
+                case 'verified':
+                    $query->where('email_verified_at', '!=', null);
+                    break;
+                case 'unverified':
+                    $query->where('email_verified_at', null);
+                    break;
+            }
+        }
+        
+        // Filter by admin status
+        if ($request->has('is_admin')) {
+            $query->where('is_admin', $request->is_admin == 'true');
+        }
+        
+        // Filter by profile existence
+        if ($request->has('has_profile')) {
+            if ($request->has_profile == 'true') {
+                $query->whereNotNull('profiles.id');
+            } else {
+                $query->whereNull('profiles.id');
+            }
+        }
+        
+        // Filter by creation date
+        if ($request->has('created_after')) {
+            $query->where('users.created_at', '>=', $request->created_after);
+        }
+        
+        if ($request->has('created_before')) {
+            $query->where('users.created_at', '<=', $request->created_before);
+        }
+        
+        // Apply sorting
+        $sortField = $request->input('sort_by', 'created_at');
+        $sortDir = $request->input('sort_dir', 'desc');
+        
+        // Validate sortable fields to prevent SQL injection
+        $allowedSortFields = ['id', 'username', 'email', 'first_name', 'last_name', 'created_at', 'role'];
+        
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDir);
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
+        
+        // Get all users matching the criteria
+        $users = $query->get();
+        
+        // Generate a filename for the export
+        $filename = 'users_export_' . date('Y-m-d_His') . '.csv';
+        
+        // Open output stream
+        $handle = fopen('php://temp', 'r+');
+        
+        // Add CSV header
+        fputcsv($handle, [
+            'ID',
+            'Username',
+            'Email',
+            'First Name',
+            'Last Name',
+            'Role',
+            'Admin',
+            'Banned',
+            'Registered Date',
+            'Last Login',
+            'Verified'
+        ]);
+        
+        // Add user data
+        foreach ($users as $user) {
+            fputcsv($handle, [
+                $user->id,
+                $user->username,
+                $user->email,
+                $user->first_name,
+                $user->last_name,
+                $user->role,
+                $user->is_admin ? 'Yes' : 'No',
+                $user->is_banned ? 'Yes' : 'No',
+                $user->created_at->format('Y-m-d H:i:s'),
+                $user->last_login_at ? $user->last_login_at->format('Y-m-d H:i:s') : 'Never',
+                $user->email_verified_at ? 'Yes' : 'No'
+            ]);
+        }
+        
+        // Reset pointer to the beginning
+        rewind($handle);
+        
+        // Get the content
+        $content = stream_get_contents($handle);
+        
+        // Close the handle
+        fclose($handle);
+        
+        // Create the response with CSV content
+        $response = response($content, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+        
+        return $response;
+    }
+
+    /**
      * Get user activities for the admin dashboard
      */
     private function getUserActivities($user)
