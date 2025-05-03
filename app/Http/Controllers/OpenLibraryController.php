@@ -28,7 +28,11 @@ class OpenLibraryController extends Controller
      */
     public function index()
     {
-        $libraries = OpenLibrary::orderBy('created_at', 'desc')->get();
+        // Only show approved libraries to regular users
+        $libraries = OpenLibrary::where('is_approved', true)
+                              ->where('approval_status', 'approved')
+                              ->orderBy('created_at', 'desc')
+                              ->get();
         
         return response()->json([
             'libraries' => $libraries

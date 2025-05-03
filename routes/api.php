@@ -622,6 +622,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/verifications/{userId}', [App\Http\Controllers\VerificationController::class, 'getVerificationDetails']);
         Route::put('/verifications/{userId}/status', [App\Http\Controllers\VerificationController::class, 'updateVerificationStatus']);
         Route::put('/verification-requests/{requestId}/status', [App\Http\Controllers\VerificationController::class, 'updateDocumentStatus']);
+        
+        // Library management
+        Route::get('/libraries', [App\Http\Controllers\AdminApiLibraryController::class, 'getLibraries']);
+        Route::get('/libraries/{id}', [App\Http\Controllers\AdminApiLibraryController::class, 'getLibrary']);
+        Route::post('/libraries/{id}/approve', [App\Http\Controllers\AdminApiLibraryController::class, 'approveLibrary']);
+        Route::post('/libraries/{id}/reject', [App\Http\Controllers\AdminApiLibraryController::class, 'rejectLibrary']);
+        Route::post('/libraries/{id}/generate-cover', [App\Http\Controllers\AdminApiLibraryController::class, 'generateCoverImage']);
     });
 });
 

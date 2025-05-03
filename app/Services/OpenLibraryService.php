@@ -29,7 +29,9 @@ class OpenLibraryService
                 'description' => "All content from the course: {$course->title}",
                 'type' => 'course',
                 'thumbnail_url' => $course->thumbnail_url,
-                'course_id' => $course->id
+                'course_id' => $course->id,
+                'is_approved' => false,
+                'approval_status' => 'pending'
             ]);
             
             // Add all course lessons to the library
@@ -76,7 +78,9 @@ class OpenLibraryService
                 'criteria' => [
                     'topic_id' => $topic->id,
                     'maxItems' => $maxItems
-                ]
+                ],
+                'is_approved' => false,
+                'approval_status' => 'pending'
             ]);
             
             // Find courses in this topic
@@ -316,7 +320,9 @@ class OpenLibraryService
                     'baseContentType' => $contentType,
                     'keywords' => $keywords,
                     'maxItems' => $maxItems
-                ]
+                ],
+                'is_approved' => false,
+                'approval_status' => 'pending'
             ]);
             
             // Add the base content itself

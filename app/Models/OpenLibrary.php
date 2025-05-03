@@ -15,11 +15,18 @@ class OpenLibrary extends Model
         'type',
         'thumbnail_url',
         'course_id',
-        'criteria'
+        'criteria',
+        'is_approved',
+        'approval_status',
+        'approval_date',
+        'approved_by'
     ];
 
     protected $casts = [
         'criteria' => 'array',
+        'is_approved' => 'boolean',
+        'has_ai_cover' => 'boolean',
+        'approval_date' => 'datetime',
     ];
 
     /**
@@ -63,5 +70,38 @@ class OpenLibrary extends Model
             ->orderBy('relevance_score', 'desc')
             ->limit($limit)
             ->get();
+    }
+    
+    /**
+     * Get the user who approved this library
+     */
+    public function approver()
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+    
+    /**
+     * Scope for approved libraries
+     */
+    public function scopeApproved($query)
+    {
+        return $query->where('is_approved', true)
+                    ->where('approval_status', 'approved');
+    }
+    
+    /**
+     * Scope for pending libraries
+     */
+    public function scopePending($query)
+    {
+        return $query->where('approval_status', 'pending');
+    }
+    
+    /**
+     * Scope for rejected libraries
+     */
+    public function scopeRejected($query)
+    {
+        return $query->where('approval_status', 'rejected');
     }
 }

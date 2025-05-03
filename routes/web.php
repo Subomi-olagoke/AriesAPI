@@ -172,6 +172,27 @@ Route::prefix('email')->group(function () {
     Route::post('/verification-notification', [AuthManager::class, 'resendVerificationEmail'])->middleware(['throttle:6,1'])->name('verification.send');
 });
 
+// Admin Routes
+Route::prefix('admin')->group(function () {
+    // Guest routes
+    Route::middleware('guest')->group(function () {
+        Route::get('/login', [App\Http\Controllers\AdminAuthController::class, 'showLoginForm'])->name('admin.login');
+        Route::post('/login', [App\Http\Controllers\AdminAuthController::class, 'login']);
+    });
+    
+    // Auth protected routes
+    Route::middleware(['auth', 'admin'])->group(function () {
+        Route::get('/dashboard', [App\Http\Controllers\AdminAuthController::class, 'dashboard'])->name('admin.dashboard');
+        Route::post('/logout', [App\Http\Controllers\AdminAuthController::class, 'logout'])->name('admin.logout');
+        
+        // Library management routes
+        Route::get('/libraries', [App\Http\Controllers\AdminController::class, 'listLibraries'])->name('admin.libraries');
+        Route::get('/libraries/{id}', [App\Http\Controllers\AdminController::class, 'viewLibrary'])->name('admin.libraries.view');
+        Route::post('/libraries/{id}/approve', [App\Http\Controllers\AdminController::class, 'approveLibrary'])->name('admin.libraries.approve');
+        Route::post('/libraries/{id}/reject', [App\Http\Controllers\AdminController::class, 'rejectLibrary'])->name('admin.libraries.reject');
+    });
+});
+
 // Payment success/failure pages
 Route::view('/payment-methods/success', 'payment-methods.success')->name('payment-methods.success');
 Route::view('/payment-methods/failed', 'payment-methods.failed')->name('payment-methods.failed');
