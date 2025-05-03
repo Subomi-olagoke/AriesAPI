@@ -258,7 +258,7 @@
                         class="absolute bottom-14 left-3 right-3 z-10 mt-1 bg-white rounded-md shadow-lg border border-neutral-200">
                         <div class="py-1">
                             <a href="{{ route('admin.settings') }}" class="block px-4 py-2 text-sm text-neutral-700 hover:bg-primary-50 transition-colors duration-150">Admin Settings</a>
-                            <form method="POST" action="{{ route('logout') }}">
+                            <form method="POST" action="{{ route('admin.logout') }}">
                                 @csrf
                                 <button type="submit" class="block w-full text-left px-4 py-2 text-sm text-neutral-700 hover:bg-primary-50 transition-colors duration-150">
                                     Sign out

@@ -119,9 +119,12 @@
                 <div class="flex items-center justify-between mb-4">
                     <div class="text-xl font-semibold">Aries Admin Dashboard</div>
                     <div class="flex items-center">
-                        <a href="/admin/logout" class="text-sm text-neutral-700 hover:text-neutral-900">
-                            <i class="fa-solid fa-sign-out-alt mr-1"></i> Sign out
-                        </a>
+                        <form method="POST" action="{{ route('admin.logout') }}" class="inline">
+                            @csrf
+                            <button type="submit" class="text-sm text-neutral-700 hover:text-neutral-900">
+                                <i class="fa-solid fa-sign-out-alt mr-1"></i> Sign out
+                            </button>
+                        </form>
                     </div>
                 </div>
                 <div class="flex space-x-4 overflow-x-auto pb-2">
