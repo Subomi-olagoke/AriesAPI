@@ -61,7 +61,10 @@
             }
         }
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Primary Chart.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <!-- Fallback to ApexCharts if Chart.js fails -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <style>
         [x-cloak] { display: none !important; }
@@ -109,93 +112,47 @@
 </head>
 <body class="bg-neutral-50 font-sans antialiased text-neutral-900" x-data="{ sidebarOpen: true, currentTab: 'overview', showDropdown: false }" x-init="console.log('Alpine initialized')">
     <div class="min-h-screen flex">
-        <!-- Sidebar -->
-        <div class="fixed inset-y-0 left-0 z-30 w-64 transition-all duration-300 transform bg-white border-r border-neutral-200" :class="{'translate-x-0': sidebarOpen, '-translate-x-full': !sidebarOpen}">
-            <div class="flex items-center justify-between h-16 px-4 border-b border-neutral-200">
-                <div class="flex items-center">
-                    <div class="text-xl font-semibold text-neutral-900">Aries Admin</div>
-                </div>
-            </div>
-            <div class="flex flex-col flex-1 h-0 overflow-y-auto">
-                <nav class="flex-1 px-2 py-4 space-y-1">
-                    <a href="#" @click.prevent="currentTab = 'overview'" class="sidebar-item" :class="{'active': currentTab === 'overview'}">
-                        <i class="fa-solid fa-gauge-high w-5 h-5 mr-3"></i>
-                        <span>Overview</span>
-                    </a>
-                    <a href="#" @click.prevent="currentTab = 'users'" class="sidebar-item" :class="{'active': currentTab === 'users'}">
-                        <i class="fa-solid fa-users w-5 h-5 mr-3"></i>
-                        <span>Users</span>
-                    </a>
-                    <a href="#" @click.prevent="currentTab = 'content'" class="sidebar-item" :class="{'active': currentTab === 'content'}">
-                        <i class="fa-solid fa-file-lines w-5 h-5 mr-3"></i>
-                        <span>Content</span>
-                    </a>
-                    <a href="#" @click.prevent="currentTab = 'libraries'" class="sidebar-item" :class="{'active': currentTab === 'libraries'}">
-                        <i class="fa-solid fa-book-open w-5 h-5 mr-3"></i>
-                        <span>Libraries</span>
-                    </a>
-                    <a href="#" @click.prevent="currentTab = 'reports'" class="sidebar-item" :class="{'active': currentTab === 'reports'}">
-                        <i class="fa-solid fa-flag w-5 h-5 mr-3"></i>
-                        <span>Reports</span>
-                    </a>
-                    <a href="#" @click.prevent="currentTab = 'revenue'" class="sidebar-item" :class="{'active': currentTab === 'revenue'}">
-                        <i class="fa-solid fa-chart-line w-5 h-5 mr-3"></i>
-                        <span>Revenue</span>
-                    </a>
-                    <a href="#" @click.prevent="currentTab = 'verifications'" class="sidebar-item" :class="{'active': currentTab === 'verifications'}">
-                        <i class="fa-solid fa-user-check w-5 h-5 mr-3"></i>
-                        <span>Verifications</span>
-                    </a>
-                    <a href="#" @click.prevent="currentTab = 'settings'" class="sidebar-item" :class="{'active': currentTab === 'settings'}">
-                        <i class="fa-solid fa-gear w-5 h-5 mr-3"></i>
-                        <span>Settings</span>
-                    </a>
-                </nav>
-                <div class="p-4 border-t border-neutral-200">
-                    <div class="flex items-center">
-                        <div @click="showDropdown = !showDropdown" class="relative flex items-center w-full cursor-pointer">
-                            <div class="flex-shrink-0">
-                                <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-neutral-500">
-                                    <span class="text-xs font-medium leading-none text-white">AU</span>
-                                </span>
-                            </div>
-                            <div class="ml-3 flex-1 overflow-hidden">
-                                <div class="text-sm font-medium text-neutral-900 truncate">Admin User</div>
-                                <div class="text-xs text-neutral-500 truncate">admin@aries.com</div>
-                            </div>
-                            <i class="fa-solid fa-chevron-down text-neutral-400 ml-1"></i>
-                        </div>
-                    </div>
-                    <div x-show="showDropdown" x-cloak @click.away="showDropdown = false" class="absolute bottom-14 left-3 right-3 z-10 mt-1 bg-white rounded-md shadow-lg border border-neutral-200">
-                        <div class="py-1">
-                            <a href="#" class="block px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-100">Profile</a>
-                            <a href="/admin/logout" class="block px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-100">Sign out</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Content -->
-        <div class="flex-1 flex flex-col" :class="{'ml-64': sidebarOpen, 'ml-0': !sidebarOpen}">
+        <div class="flex-1 flex flex-col">
             <!-- Header -->
-            <header class="z-10 py-4 bg-white border-b border-neutral-200 flex items-center justify-between px-4 sm:px-6">
-                <button @click="sidebarOpen = !sidebarOpen" class="text-neutral-500 focus:outline-none">
-                    <i class="fa-solid fa-bars"></i>
-                </button>
-                <div class="flex-1 px-4 flex justify-end">
-                    <div class="ml-4 flex items-center md:ml-6">
-                        <button class="p-1 rounded-full text-neutral-400 hover:text-neutral-500 focus:outline-none">
-                            <i class="fa-solid fa-bell"></i>
-                        </button>
+            <header class="z-10 py-4 bg-white border-b border-neutral-200 flex flex-col px-4 sm:px-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="text-xl font-semibold">Aries Admin Dashboard</div>
+                    <div class="flex items-center">
+                        <a href="/admin/logout" class="text-sm text-neutral-700 hover:text-neutral-900">
+                            <i class="fa-solid fa-sign-out-alt mr-1"></i> Sign out
+                        </a>
                     </div>
+                </div>
+                <div class="flex space-x-4 overflow-x-auto pb-2">
+                    <a href="{{ route('admin.dashboard') }}" class="px-3 py-2 rounded-md bg-primary-100 text-primary-700 font-medium text-sm">
+                        <i class="fa-solid fa-gauge-high mr-1"></i> Overview
+                    </a>
+                    <a href="{{ route('admin.users.index') }}" class="px-3 py-2 rounded-md bg-white hover:bg-neutral-50 text-neutral-700 font-medium text-sm">
+                        <i class="fa-solid fa-users mr-1"></i> Users
+                    </a>
+                    <a href="{{ route('admin.libraries.index') }}" class="px-3 py-2 rounded-md bg-white hover:bg-neutral-50 text-neutral-700 font-medium text-sm">
+                        <i class="fa-solid fa-book-open mr-1"></i> Libraries
+                    </a>
+                    <a href="{{ route('admin.content') }}" class="px-3 py-2 rounded-md bg-white hover:bg-neutral-50 text-neutral-700 font-medium text-sm">
+                        <i class="fa-solid fa-file-lines mr-1"></i> Content
+                    </a>
+                    <a href="{{ route('admin.reports') }}" class="px-3 py-2 rounded-md bg-white hover:bg-neutral-50 text-neutral-700 font-medium text-sm">
+                        <i class="fa-solid fa-flag mr-1"></i> Reports
+                    </a>
+                    <a href="{{ route('admin.revenue') }}" class="px-3 py-2 rounded-md bg-white hover:bg-neutral-50 text-neutral-700 font-medium text-sm">
+                        <i class="fa-solid fa-chart-line mr-1"></i> Revenue
+                    </a>
+                    <a href="{{ route('admin.verifications') }}" class="px-3 py-2 rounded-md bg-white hover:bg-neutral-50 text-neutral-700 font-medium text-sm">
+                        <i class="fa-solid fa-user-check mr-1"></i> Verifications
+                    </a>
                 </div>
             </header>
 
             <!-- Main content -->
             <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-neutral-50">
                 <!-- Overview Tab -->
-                <div x-show="currentTab === 'overview'" x-cloak>
+                <div>
                     <div class="flex justify-between items-center mb-6">
                         <h1 class="text-2xl font-semibold text-neutral-900">Dashboard</h1>
                         <div class="flex space-x-2">
@@ -217,12 +174,36 @@
                                     </div>
                                 </div>
                             </div>
-                            <a href="{{ route('admin.export-stats') }}" class="btn btn-secondary">
+                            <a href="{{ route('admin.export-stats') }}" class="btn btn-secondary" id="exportBtn">
                                 <i class="fa-solid fa-file-export mr-2"></i> Export
                             </a>
                         </div>
                     </div>
 
+                    <!-- Debug Banner (will only show if there are chart errors) -->
+                    <div id="chart-debug-banner" class="mb-6 bg-orange-50 border border-orange-200 rounded-lg p-4 hidden">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0 mt-0.5">
+                                <i class="fa-solid fa-triangle-exclamation text-orange-500"></i>
+                            </div>
+                            <div class="ml-3">
+                                <h3 class="text-sm font-medium text-orange-800">Chart Debug Information</h3>
+                                <div class="mt-2 text-sm text-orange-700">
+                                    <p>There were issues loading the charts. Check the developer console for more details.</p>
+                                    <div id="chart-debug-details" class="mt-2 bg-white p-3 rounded text-xs font-mono overflow-auto max-h-40"></div>
+                                    <div class="mt-3 flex space-x-3">
+                                        <button id="retry-charts-btn" class="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded">
+                                            Retry Loading Charts
+                                        </button>
+                                        <button id="toggle-debug-btn" class="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded">
+                                            Toggle Debug Details
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Status Cards -->
                     <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-6">
                         <!-- Total Users -->
@@ -318,6 +299,10 @@
                                 <h3 class="text-lg font-medium text-neutral-900">User Growth</h3>
                             </div>
                             <div class="p-5">
+                                <!-- Chart debug message will appear here if there's an issue -->
+                                <div id="userGrowthChartError" class="hidden p-3 bg-red-50 text-red-700 text-sm rounded mb-3">
+                                    Chart failed to load. Please check console for details.
+                                </div>
                                 <canvas id="userGrowthChart" height="260"></canvas>
                             </div>
                         </div>
@@ -328,6 +313,10 @@
                                 <h3 class="text-lg font-medium text-neutral-900">Revenue Trends</h3>
                             </div>
                             <div class="p-5">
+                                <!-- Chart debug message will appear here if there's an issue -->
+                                <div id="revenueChartError" class="hidden p-3 bg-red-50 text-red-700 text-sm rounded mb-3">
+                                    Chart failed to load. Please check console for details.
+                                </div>
                                 <canvas id="revenueChart" height="260"></canvas>
                             </div>
                         </div>
@@ -734,6 +723,10 @@
                                 <h3 class="text-lg font-medium text-neutral-900">User Registration Trends</h3>
                             </div>
                             <div class="p-5">
+                                <!-- Chart debug message will appear here if there's an issue -->
+                                <div id="userRegistrationChartError" class="hidden p-3 bg-red-50 text-red-700 text-sm rounded mb-3">
+                                    Chart failed to load. Please check console for details.
+                                </div>
                                 <canvas id="userRegistrationChart" height="260"></canvas>
                             </div>
                         </div>
@@ -744,6 +737,10 @@
                                 <h3 class="text-lg font-medium text-neutral-900">User Roles Distribution</h3>
                             </div>
                             <div class="p-5">
+                                <!-- Chart debug message will appear here if there's an issue -->
+                                <div id="userRolesChartError" class="hidden p-3 bg-red-50 text-red-700 text-sm rounded mb-3">
+                                    Chart failed to load. Please check console for details.
+                                </div>
                                 <canvas id="userRolesChart" height="260"></canvas>
                             </div>
                         </div>
@@ -760,7 +757,38 @@
         
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM loaded - Charts initialization should start now');
-            // Add the dashboard stats from the server
+
+            // Initialize debug UI
+            const debugBanner = document.getElementById('chart-debug-banner');
+            const debugDetails = document.getElementById('chart-debug-details');
+            
+            function logDebug(message) {
+                console.log(message);
+                if (debugDetails) {
+                    debugBanner.classList.remove('hidden');
+                    const timestamp = new Date().toLocaleTimeString();
+                    debugDetails.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+                }
+            }
+            
+            // Check if Chart.js is loaded
+            if (typeof Chart === 'undefined') {
+                logDebug('ERROR: Chart.js is not loaded. Adding it again...');
+                // Try to load Chart.js again
+                const chartScript = document.createElement('script');
+                chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js';
+                chartScript.onload = function() {
+                    logDebug('Chart.js loaded successfully, initializing charts...');
+                    setTimeout(initializeAllCharts, 300);
+                };
+                chartScript.onerror = function() {
+                    logDebug('Failed to load Chart.js dynamically');
+                };
+                document.head.appendChild(chartScript);
+            } else {
+                logDebug('Chart.js is loaded, version: ' + Chart.version);
+            }
+            
             // Parse dashboard stats safely
             let dashboardStats;
             try {
@@ -783,8 +811,9 @@
                         thisMonth: {{ $stats['revenue']['this_month'] ?? 0 }}
                     }
                 };
+                logDebug('Dashboard stats loaded successfully');
             } catch (e) {
-                console.error('Error parsing dashboard stats:', e);
+                logDebug('Error parsing dashboard stats: ' + e.message);
                 // Provide fallback values if there was an error
                 dashboardStats = {
                     users: { total: 0, newToday: 0, newThisWeek: 0, banned: 0 },
@@ -824,231 +853,257 @@
                 document.body.removeChild(link);
             }
 
-            // Update dashboard stats with real data
-            document.querySelectorAll('[data-stat]').forEach(el => {
-                const path = el.getAttribute('data-stat').split('.');
-                let value = dashboardStats;
-                
-                for (const key of path) {
-                    if (value && value[key] !== undefined) {
-                        value = value[key];
-                    } else {
-                        value = 0;
-                        break;
-                    }
-                }
-                
-                if (el.getAttribute('data-format') === 'currency') {
-                    el.textContent = '$' + value.toLocaleString();
-                } else {
-                    el.textContent = value.toLocaleString();
-                }
-            });
-            
             // Set up export functionality
-            document.getElementById('exportBtn').addEventListener('click', function() {
-                exportToCSV(dashboardStats, 'dashboard-stats-' + new Date().toISOString().split('T')[0] + '.csv');
-            });
-            $' + value.toLocaleString();
-                } else {
-                    el.textContent = value.toLocaleString();
-                }
-            });
-            
-            // Set up export functionality
-            document.getElementById('exportBtn').addEventListener('click', function() {
-                exportToCSV(dashboardStats, 'dashboard-stats-' + new Date().toISOString().split('T')[0] + '.csv');
-            });
-            // Function to render charts
-            function renderCharts() {
-                console.log('Rendering charts...');
-                
-                try {
-                    // User Growth Chart
-                    const userGrowthElement = document.getElementById('userGrowthChart');
-                    if (!userGrowthElement) {
-                        console.error('User growth chart element not found');
-                        return;
-                    }
-                    
-                    const userCtx = userGrowthElement.getContext('2d');
-                    new Chart(userCtx, {
-                        type: 'line',
-                        data: {
-                            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                            datasets: [{
-                                label: 'New Users',
-                                data: [65, 78, 90, 105, 125, 138, 156, 170, 186, 199, 210, 225],
-                                borderColor: '#5a78ee',
-                                backgroundColor: 'rgba(90, 120, 238, 0.1)',
-                                borderWidth: 2,
-                                tension: 0.3,
-                                fill: true
-                            }]
-                        },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                drawBorder: false
-                            }
-                        },
-                        x: {
-                            grid: {
-                                display: false,
-                                drawBorder: false
-                            }
-                        }
-                    },
-                    elements: {
-                        point: {
-                            radius: 0,
-                            hoverRadius: 4
-                        }
-                    }
-                }
-            });
+            const exportBtn = document.getElementById('exportBtn');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    logDebug('Export button clicked, generating CSV...');
+                    exportToCSV(dashboardStats, 'dashboard-stats-' + new Date().toISOString().split('T')[0] + '.csv');
+                });
+            } else {
+                logDebug('Export button not found on page');
+            }
 
-                    
-                    // Revenue Chart
-                    const revenueChartElement = document.getElementById('revenueChart');
-                    if (!revenueChartElement) {
-                        console.error('Revenue chart element not found');
+            // Function to initialize all charts
+            function initializeAllCharts() {
+                logDebug('Initializing all charts...');
+                
+                // Create and initialize charts
+                initializeChart(
+                    'userGrowthChart', 
+                    'line', 
+                    ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    [{
+                        label: 'New Users',
+                        data: [65, 78, 90, 105, 125, 138, 156, 170, 186, 199, 210, 225],
+                        borderColor: '#5a78ee',
+                        backgroundColor: 'rgba(90, 120, 238, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    }]
+                );
+                
+                initializeChart(
+                    'revenueChart', 
+                    'bar', 
+                    ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    [{
+                        label: 'Revenue',
+                        data: [1500, 1700, 1900, 2100, 2300, 2500, 2700, 2900, 3100, 3300, 3500, 3700],
+                        backgroundColor: '#1a202c',
+                        borderRadius: 4
+                    }]
+                );
+                
+                initializeChart(
+                    'userRegistrationChart', 
+                    'line', 
+                    ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    [{
+                        label: 'New Registrations',
+                        data: [120, 135, 155, 180, 210, 235, 245, 260, 285, 295, 310, 325],
+                        borderColor: '#5a78ee',
+                        backgroundColor: 'rgba(90, 120, 238, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    }]
+                );
+                
+                initializeChart(
+                    'userRolesChart', 
+                    'doughnut', 
+                    ['Regular Users', 'Educators', 'Admins'],
+                    [{
+                        data: [2250, 540, 24],
+                        backgroundColor: [
+                            'rgba(90, 120, 238, 0.8)',
+                            'rgba(59, 130, 246, 0.8)',
+                            'rgba(107, 114, 128, 0.8)'
+                        ],
+                        borderWidth: 0
+                    }],
+                    {
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { usePointStyle: true, padding: 20 }
+                            }
+                        },
+                        cutout: '65%'
+                    }
+                );
+            }
+            
+            // Function to initialize a single chart
+            function initializeChart(elementId, type, labels, datasets, additionalOptions = {}) {
+                try {
+                    const chartElement = document.getElementById(elementId);
+                    if (!chartElement) {
+                        logDebug(`Chart element '${elementId}' not found in DOM`);
+                        // Show error message
+                        showChartError(elementId);
                         return;
                     }
                     
-                    const revenueCtx = revenueChartElement.getContext('2d');
-                    new Chart(revenueCtx, {
-                        type: 'bar',
-                        data: {
-                            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                            datasets: [{
-                                label: 'Revenue',
-                                data: [1500, 1700, 1900, 2100, 2300, 2500, 2700, 2900, 3100, 3300, 3500, 3700],
-                                backgroundColor: '#1a202c', // Changed to black as per request
-                                borderRadius: 4
-                            }]
-                        },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                drawBorder: false
-                            }
-                        },
-                        x: {
-                            grid: {
-                                display: false,
-                                drawBorder: false
-                            }
-                        }
-                    }
-                }
-            });
-            
-            // User Registration Chart
-            const userRegCtx = document.getElementById('userRegistrationChart');
-            if (userRegCtx) {
-                new Chart(userRegCtx.getContext('2d'), {
-                    type: 'line',
-                    data: {
-                        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                        datasets: [{
-                            label: 'New Registrations',
-                            data: [120, 135, 155, 180, 210, 235, 245, 260, 285, 295, 310, 325],
-                            borderColor: '#5a78ee',
-                            backgroundColor: 'rgba(90, 120, 238, 0.1)',
-                            borderWidth: 2,
-                            tension: 0.3,
-                            fill: true
-                        }]
-                    },
-                    options: {
+                    logDebug(`Initializing ${type} chart for ${elementId}...`);
+                    
+                    // Setup default options
+                    const defaultOptions = {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                display: false
+                                display: type !== 'doughnut'
                             }
                         },
-                        scales: {
+                        scales: type !== 'doughnut' ? {
                             y: {
                                 beginAtZero: true,
-                                grid: {
-                                    drawBorder: false
-                                }
+                                grid: { drawBorder: false }
                             },
                             x: {
-                                grid: {
-                                    display: false,
-                                    drawBorder: false
-                                }
+                                grid: { display: false, drawBorder: false }
                             }
-                        },
-                        elements: {
+                        } : undefined,
+                        elements: type === 'line' ? {
                             point: {
                                 radius: 0,
                                 hoverRadius: 4
                             }
+                        } : undefined
+                    };
+                    
+                    // Merge options
+                    const options = {...defaultOptions, ...additionalOptions};
+                    
+                    // Create chart
+                    const ctx = chartElement.getContext('2d');
+                    if (!ctx) {
+                        logDebug(`Could not get 2D context for ${elementId}`);
+                        showChartError(elementId);
+                        return;
+                    }
+                    
+                    // Create chart with unique ID to prevent conflicts
+                    if (chartElement.chart) {
+                        logDebug(`Destroying existing chart for ${elementId}`);
+                        chartElement.chart.destroy();
+                    }
+                    
+                    // Try to create chart with Chart.js
+                    try {
+                        chartElement.chart = new Chart(ctx, {
+                            type: type,
+                            data: {
+                                labels: labels,
+                                datasets: datasets
+                            },
+                            options: options
+                        });
+                        
+                        // Hide any error message if chart created successfully
+                        hideChartError(elementId);
+                        logDebug(`Successfully created ${type} chart for ${elementId}`);
+                    } catch (err) {
+                        logDebug(`Error during Chart constructor for ${elementId}: ${err.message}`);
+                        
+                        // Try ApexCharts as fallback if Chart.js fails
+                        try {
+                            if (typeof ApexCharts !== 'undefined') {
+                                logDebug(`Attempting to render ${elementId} with ApexCharts instead...`);
+                                
+                                // Create a div container for ApexCharts
+                                const apexContainer = document.createElement('div');
+                                apexContainer.id = `${elementId}-apex`;
+                                chartElement.parentNode.insertBefore(apexContainer, chartElement);
+                                chartElement.style.display = 'none';
+                                
+                                // Convert Chart.js data to ApexCharts format
+                                const series = datasets.map(dataset => {
+                                    return {
+                                        name: dataset.label || 'Series',
+                                        data: dataset.data
+                                    };
+                                });
+                                
+                                // Create ApexChart
+                                let chartType = 'line';
+                                if (type === 'bar') chartType = 'bar';
+                                if (type === 'doughnut') chartType = 'donut';
+                                
+                                const apexOptions = {
+                                    series: series,
+                                    chart: {
+                                        type: chartType,
+                                        height: 260,
+                                        toolbar: { show: false }
+                                    },
+                                    xaxis: {
+                                        categories: labels
+                                    },
+                                    colors: datasets.map(d => d.borderColor || d.backgroundColor || '#5a78ee')
+                                };
+                                
+                                const apexChart = new ApexCharts(document.getElementById(`${elementId}-apex`), apexOptions);
+                                apexChart.render();
+                                chartElement.apexChart = apexChart;
+                                
+                                hideChartError(elementId);
+                                logDebug(`Successfully created fallback ApexChart for ${elementId}`);
+                            } else {
+                                throw new Error('ApexCharts not available');
+                            }
+                        } catch (apexErr) {
+                            logDebug(`Fallback to ApexCharts also failed: ${apexErr.message}`);
+                            showChartError(elementId);
                         }
                     }
-                });
-            }
-            
                 } catch (e) {
-                    console.error('Error rendering charts:', e);
+                    logDebug(`Error creating chart ${elementId}: ${e.message}`);
+                    console.error('Chart initialization error:', e);
+                    showChartError(elementId);
                 }
             }
             
-            // Call the chart rendering function
-            renderCharts();
+            // Helper functions to show/hide chart errors
+            function showChartError(chartId) {
+                const errorEl = document.getElementById(chartId + 'Error');
+                if (errorEl) {
+                    errorEl.classList.remove('hidden');
+                }
+            }
             
-            // User Roles Distribution Chart
-            const userRolesCtx = document.getElementById('userRolesChart');
-            if (userRolesCtx) {
-                new Chart(userRolesCtx.getContext('2d'), {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Regular Users', 'Educators', 'Admins'],
-                        datasets: [{
-                            data: [2250, 540, 24],
-                            backgroundColor: [
-                                'rgba(90, 120, 238, 0.8)',
-                                'rgba(59, 130, 246, 0.8)',
-                                'rgba(107, 114, 128, 0.8)'
-                            ],
-                            borderWidth: 0
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'bottom',
-                                labels: {
-                                    usePointStyle: true,
-                                    padding: 20
-                                }
-                            }
-                        },
-                        cutout: '65%'
+            function hideChartError(chartId) {
+                const errorEl = document.getElementById(chartId + 'Error');
+                if (errorEl) {
+                    errorEl.classList.add('hidden');
+                }
+            }
+            
+            // Initialize charts after a short delay to ensure DOM is fully loaded
+            setTimeout(initializeAllCharts, 300);
+            
+            // Set up debug UI functionality
+            const retryButton = document.getElementById('retry-charts-btn');
+            if (retryButton) {
+                retryButton.addEventListener('click', function() {
+                    logDebug('Manual chart rendering requested...');
+                    initializeAllCharts();
+                });
+            }
+            
+            const toggleDebugButton = document.getElementById('toggle-debug-btn');
+            if (toggleDebugButton) {
+                toggleDebugButton.addEventListener('click', function() {
+                    const details = document.getElementById('chart-debug-details');
+                    if (details) {
+                        details.classList.toggle('hidden');
+                        this.textContent = details.classList.contains('hidden') 
+                            ? 'Show Debug Details' 
+                            : 'Hide Debug Details';
                     }
                 });
             }
