@@ -654,15 +654,27 @@ class AdminController extends Controller
             'amount' => 'nullable|numeric|min:0',
         ]);
         
-        // Find the payment log
-        $paymentLog = \App\Models\PaymentLog::where('transaction_reference', $request->transaction_reference)
-            ->where('status', 'success')
-            ->first();
+        try {
+            // Find the payment log
+            $paymentLog = \App\Models\PaymentLog::where('transaction_reference', $request->transaction_reference)
+                ->where('status', 'success')
+                ->first();
+                
+            if (!$paymentLog) {
+                return response()->json([
+                    'message' => 'Payment not found or not in a refundable state'
+                ], 404);
+            }
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Handle the case where the payment_logs table doesn't exist
+            if (str_contains($e->getMessage(), "payment_logs' doesn't exist")) {
+                return response()->json([
+                    'message' => 'Payment logs functionality is currently unavailable',
+                    'error' => 'Database table not configured'
+                ], 503);
+            }
             
-        if (!$paymentLog) {
-            return response()->json([
-                'message' => 'Payment not found or not in a refundable state'
-            ], 404);
+            throw $e;
         }
         
         try {
@@ -881,18 +893,19 @@ class AdminController extends Controller
             ], 403);
         }
         
-        $query = DB::table('refunds')
-            ->join('payment_logs', 'refunds.payment_log_id', '=', 'payment_logs.id')
-            ->join('users', 'payment_logs.user_id', '=', 'users.id')
-            ->select(
-                'refunds.*',
-                'payment_logs.payment_type',
-                'payment_logs.status as payment_status',
-                'payment_logs.amount as payment_amount',
-                'users.first_name',
-                'users.last_name',
-                'users.email'
-            );
+        try {
+            $query = DB::table('refunds')
+                ->join('payment_logs', 'refunds.payment_log_id', '=', 'payment_logs.id')
+                ->join('users', 'payment_logs.user_id', '=', 'users.id')
+                ->select(
+                    'refunds.*',
+                    'payment_logs.payment_type',
+                    'payment_logs.status as payment_status',
+                    'payment_logs.amount as payment_amount',
+                    'users.first_name',
+                    'users.last_name',
+                    'users.email'
+                );
             
         // Filter by status if provided
         if ($request->has('status')) {
@@ -913,6 +926,19 @@ class AdminController extends Controller
             ->paginate($request->per_page ?? 15);
             
         return response()->json($refunds);
+        
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Handle the case where the payment_logs or refunds table doesn't exist
+            if (str_contains($e->getMessage(), "payment_logs' doesn't exist") || 
+                str_contains($e->getMessage(), "refunds' doesn't exist")) {
+                return response()->json([
+                    'message' => 'Refunds functionality is currently unavailable',
+                    'error' => 'Database table not configured'
+                ], 503);
+            }
+            
+            throw $e;
+        }
     }
     
     /**
@@ -929,24 +955,25 @@ class AdminController extends Controller
             ], 403);
         }
         
-        $refund = DB::table('refunds')
-            ->join('payment_logs', 'refunds.payment_log_id', '=', 'payment_logs.id')
-            ->join('users', 'payment_logs.user_id', '=', 'users.id')
-            ->select(
-                'refunds.*',
-                'payment_logs.payment_type',
-                'payment_logs.status as payment_status',
-                'payment_logs.amount as payment_amount',
-                'payment_logs.course_id',
-                'payment_logs.response_data',
-                'payment_logs.metadata',
-                'users.id as user_id',
-                'users.first_name',
-                'users.last_name',
-                'users.email'
-            )
-            ->where('refunds.id', $id)
-            ->first();
+        try {
+            $refund = DB::table('refunds')
+                ->join('payment_logs', 'refunds.payment_log_id', '=', 'payment_logs.id')
+                ->join('users', 'payment_logs.user_id', '=', 'users.id')
+                ->select(
+                    'refunds.*',
+                    'payment_logs.payment_type',
+                    'payment_logs.status as payment_status',
+                    'payment_logs.amount as payment_amount',
+                    'payment_logs.course_id',
+                    'payment_logs.response_data',
+                    'payment_logs.metadata',
+                    'users.id as user_id',
+                    'users.first_name',
+                    'users.last_name',
+                    'users.email'
+                )
+                ->where('refunds.id', $id)
+                ->first();
             
         if (!$refund) {
             return response()->json([
@@ -1019,5 +1046,18 @@ class AdminController extends Controller
             'refund' => $refund,
             'additional_data' => $additionalData
         ]);
+        
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Handle the case where the payment_logs or refunds table doesn't exist
+            if (str_contains($e->getMessage(), "payment_logs' doesn't exist") || 
+                str_contains($e->getMessage(), "refunds' doesn't exist")) {
+                return response()->json([
+                    'message' => 'Refund details functionality is currently unavailable',
+                    'error' => 'Database table not configured'
+                ], 503);
+            }
+            
+            throw $e;
+        }
     }
 }
