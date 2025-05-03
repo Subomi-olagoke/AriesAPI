@@ -58,8 +58,8 @@ class AdminUserController extends Controller
         }
         
         // Filter by admin status
-        if ($request->has('is_admin')) {
-            $query->where('is_admin', $request->is_admin == 'true');
+        if ($request->has('isAdmin')) {
+            $query->where('isAdmin', $request->isAdmin == 'true');
         }
         
         // Filter by profile existence
@@ -116,7 +116,7 @@ class AdminUserController extends Controller
                 'search' => $request->search,
                 'role' => $request->role,
                 'status' => $request->status,
-                'is_admin' => $request->is_admin,
+                'isAdmin' => $request->isAdmin,
                 'has_profile' => $request->has_profile,
                 'created_after' => $request->created_after,
                 'created_before' => $request->created_before,
@@ -178,7 +178,7 @@ class AdminUserController extends Controller
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
             'role' => 'required|in:user,educator,admin',
-            'is_admin' => 'boolean',
+            'isAdmin' => 'boolean',
             'password' => 'nullable|string|min:8|confirmed',
             'bio' => 'nullable|string',
         ]);
@@ -189,7 +189,7 @@ class AdminUserController extends Controller
         $user->first_name = $request->first_name;
         $user->last_name = $request->last_name;
         $user->role = $request->role;
-        $user->is_admin = $request->is_admin ? true : false;
+        $user->isAdmin = $request->isAdmin ? true : false;
         
         // Update password if provided
         if ($request->filled('password')) {
@@ -232,7 +232,7 @@ class AdminUserController extends Controller
         ]);
         
         // Don't allow banning other admins
-        if ($user->is_admin) {
+        if ($user->isAdmin) {
             return back()->with('error', 'Cannot ban an administrator');
         }
         
@@ -275,7 +275,7 @@ class AdminUserController extends Controller
     {
         $user = User::findOrFail($id);
         
-        $user->is_admin = true;
+        $user->isAdmin = true;
         $user->save();
         
         // Log this action
@@ -292,12 +292,12 @@ class AdminUserController extends Controller
         $user = User::findOrFail($id);
         
         // Prevent removing the last admin
-        $adminCount = User::where('is_admin', true)->count();
-        if ($adminCount <= 1 && $user->is_admin) {
+        $adminCount = User::where('isAdmin', true)->count();
+        if ($adminCount <= 1 && $user->isAdmin) {
             return back()->with('error', 'Cannot remove the last administrator');
         }
         
-        $user->is_admin = false;
+        $user->isAdmin = false;
         $user->save();
         
         // Log this action
@@ -412,8 +412,8 @@ class AdminUserController extends Controller
         }
         
         // Filter by admin status
-        if ($request->has('is_admin')) {
-            $query->where('is_admin', $request->is_admin == 'true');
+        if ($request->has('isAdmin')) {
+            $query->where('isAdmin', $request->isAdmin == 'true');
         }
         
         // Filter by profile existence
@@ -480,7 +480,7 @@ class AdminUserController extends Controller
                 $user->first_name,
                 $user->last_name,
                 $user->role,
-                $user->is_admin ? 'Yes' : 'No',
+                $user->isAdmin ? 'Yes' : 'No',
                 $user->is_banned ? 'Yes' : 'No',
                 $user->created_at->format('Y-m-d H:i:s'),
                 $user->last_login_at ? $user->last_login_at->format('Y-m-d H:i:s') : 'Never',

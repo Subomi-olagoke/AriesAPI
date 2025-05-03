@@ -16,7 +16,7 @@ class AdminOnly
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (!Auth::check() || !Auth::user()->is_admin) {
+        if (!Auth::check() || !Auth::user()->isAdmin) {
             return response()->json([
                 'message' => 'Unauthorized. Admin access required.'
             ], 403);

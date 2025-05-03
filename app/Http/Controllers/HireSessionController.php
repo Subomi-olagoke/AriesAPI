@@ -403,7 +403,7 @@ class HireSessionController extends Controller
         $session->update(['conversation_id' => $conversation->id]);
         
         // Add a system message
-        $adminUser = \App\Models\User::where('is_admin', true)->first();
+        $adminUser = \App\Models\User::where('isAdmin', true)->first();
         
         if ($adminUser) {
             $conversation->messages()->create([

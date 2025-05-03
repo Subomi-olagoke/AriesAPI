@@ -88,7 +88,7 @@ class VerificationController extends Controller
             $user->save();
             
             // Notify admins about new verification request
-            $admins = User::where('is_admin', true)->get();
+            $admins = User::where('isAdmin', true)->get();
             Notification::send($admins, new VerificationStatusNotification([
                 'title' => 'New Verification Request',
                 'body' => "Educator {$user->first_name} {$user->last_name} has submitted verification documents",
@@ -149,7 +149,7 @@ class VerificationController extends Controller
     public function getAllVerificationRequests(Request $request)
     {
         // Check if user is admin
-        if (!Auth::user()->is_admin) {
+        if (!Auth::user()->isAdmin) {
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);
@@ -179,7 +179,7 @@ class VerificationController extends Controller
     public function getVerificationDetails($userId)
     {
         // Check if user is admin
-        if (!Auth::user()->is_admin) {
+        if (!Auth::user()->isAdmin) {
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);
@@ -215,7 +215,7 @@ class VerificationController extends Controller
     public function updateVerificationStatus(Request $request, $userId)
     {
         // Check if user is admin
-        if (!Auth::user()->is_admin) {
+        if (!Auth::user()->isAdmin) {
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);
@@ -301,7 +301,7 @@ class VerificationController extends Controller
     public function updateDocumentStatus(Request $request, $requestId)
     {
         // Check if user is admin
-        if (!Auth::user()->is_admin) {
+        if (!Auth::user()->isAdmin) {
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);

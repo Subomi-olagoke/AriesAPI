@@ -35,7 +35,7 @@ class AdminAuthController extends Controller
         ];
 
         // Add admin check to credentials
-        $credentials['is_admin'] = true;
+        $credentials['isAdmin'] = true;
 
         // Attempt login
         if (Auth::attempt($credentials, $request->filled('remember'))) {

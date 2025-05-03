@@ -88,7 +88,7 @@ class ReportController extends Controller
         if ($report->save()) {
             // Notify admins about the report
             // Get all admin users
-            $admins = User::where('is_admin', true)->get();
+            $admins = User::where('isAdmin', true)->get();
             
             // Send notification to all admins
             Notification::send($admins, new ReportSubmittedNotification($report));
@@ -149,7 +149,7 @@ class ReportController extends Controller
     public function index(Request $request)
     {
         // Only admins can view all reports
-        if (!Auth::user()->is_admin) {
+        if (!Auth::user()->isAdmin) {
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);
@@ -196,7 +196,7 @@ class ReportController extends Controller
     public function show($id)
     {
         // Only admins can view report details
-        if (!Auth::user()->is_admin) {
+        if (!Auth::user()->isAdmin) {
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);
@@ -217,7 +217,7 @@ class ReportController extends Controller
     public function updateStatus(Request $request, $id)
     {
         // Only admins can update report status
-        if (!Auth::user()->is_admin) {
+        if (!Auth::user()->isAdmin) {
             return response()->json([
                 'message' => 'Unauthorized'
             ], 403);

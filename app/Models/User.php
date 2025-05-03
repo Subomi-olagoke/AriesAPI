@@ -42,6 +42,7 @@ class User extends Authenticatable {
         'role',
         'avatar',
         'google_id',
+        'isAdmin',
         'is_banned',
         'banned_at',
         'ban_reason',
@@ -58,6 +59,7 @@ class User extends Authenticatable {
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'isAdmin' => 'boolean',
         'is_banned' => 'boolean',
         'banned_at' => 'datetime',
         'alex_points' => 'integer',
