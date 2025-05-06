@@ -21,7 +21,7 @@ use App\Notifications\GeneralNotification;
 class ChannelController extends Controller
 {
     /**
-     * Get all channels the authenticated user is a member of
+     * Get all channels the authenticated user is a member of, plus public channels
      */
     public function index()
     {
@@ -31,7 +31,8 @@ class ChannelController extends Controller
             return response()->json(['message' => 'User not authenticated'], 401);
         }
         
-        $channels = $user->channels()
+        // Get user's channels
+        $userChannels = $user->channels()
             ->with(['latestMessage.sender', 'creator'])
             ->orderBy('updated_at', 'desc')
             ->get()
@@ -48,12 +49,35 @@ class ChannelController extends Controller
                 
                 // Add user's role in the channel
                 $channel->user_role = $membership ? $membership->role : null;
+                $channel->is_member = true;
                 
                 return $channel;
             });
+            
+        // Get public channels that the user is not a member of
+        $publicChannelIds = $userChannels->pluck('id')->toArray();
+        $publicChannels = Channel::where('is_public', true)
+            ->where('is_active', true)
+            ->whereNotIn('id', $publicChannelIds)
+            ->with(['creator'])
+            ->orderBy('updated_at', 'desc')
+            ->get()
+            ->map(function ($channel) use ($user) {
+                $membership = $channel->members()->where('user_id', $user->id)->first();
+                $channel->is_member = false;
+                $channel->has_pending_request = $membership && $membership->status === 'pending';
+                $channel->member_count = $channel->approvedMembers()->count();
+                $channel->unread_count = 0;
+                return $channel;
+            });
+            
+        // Combine and sort all channels
+        $allChannels = $userChannels->concat($publicChannels)
+            ->sortByDesc('updated_at')
+            ->values();
         
         return response()->json([
-            'channels' => $channels
+            'channels' => $allChannels
         ]);
     }
     
@@ -107,38 +131,7 @@ class ChannelController extends Controller
         ]);
     }
     
-    /**
-     * Get all public channels available for discovery
-     */
-    public function discover(Request $request)
-    {
-        $user = Auth::user();
-        
-        if (!$user) {
-            return response()->json(['message' => 'User not authenticated'], 401);
-        }
-        
-        // Get all public channels
-        $publicChannels = Channel::where('is_public', true)
-            ->where('is_active', true)
-            ->with(['creator'])
-            ->orderBy('updated_at', 'desc')
-            ->paginate(20);
-            
-        // Check if the user is already a member of each channel
-        $publicChannels->getCollection()->transform(function ($channel) use ($user) {
-            $membership = $channel->members()->where('user_id', $user->id)->first();
-            $channel->is_member = $membership && $membership->status === 'approved';
-            $channel->has_pending_request = $membership && $membership->status === 'pending';
-            $channel->member_count = $channel->approvedMembers()->count();
-            return $channel;
-        });
-        
-        return response()->json([
-            'public_channels' => $publicChannels
-        ]);
-    }
-
+    
     /**
      * Create a new channel
      */
