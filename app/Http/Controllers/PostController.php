@@ -25,11 +25,11 @@ class PostController extends Controller
     }
 
     /**
-     * Display a listing of posts.
+     * Display a listing of posts with their media.
      */
     public function index()
     {
-        $posts = Post::with('user')
+        $posts = Post::with(['user', 'media'])
             ->where('visibility', 'public')
             ->orderBy('created_at', 'desc')
             ->paginate(20);
@@ -40,7 +40,7 @@ class PostController extends Controller
     }
 
     /**
-     * Store a newly created post with comprehensive media support.
+     * Store a newly created post with support for multiple media files.
      */
     public function store(Request $request)
     {
@@ -48,78 +48,117 @@ class PostController extends Controller
         $request->validate([
             // Text content is now completely optional
             'text_content' => 'nullable|string',
-            'media_type'   => 'nullable|string|in:image,video,text,file',
-            // Media file is required only if media_type is specified
-            'media_file'   => 'required_if:media_type,image,video,file|file|max:102400', // 100MB
+            // Media files array
+            'media_files'  => 'nullable|array',
+            'media_files.*' => 'file|max:102400', // 100MB each file
             'visibility'   => 'nullable|in:public,private,followers',
             'title'        => 'nullable|string|max:255'
         ]);
 
         try {
+            DB::beginTransaction();
+            
             $newPost = new Post();
             $newPost->user_id = auth()->id();
             $newPost->title = $request->title;
-            
-            // Determine media type and content
-            $newPost->media_type = $request->media_type ?? 'text';
             $newPost->visibility = $request->visibility ?? 'public';
             $newPost->share_key = Str::random(10);
-
-            // Always set body to the text_content or empty string
             $newPost->body = $request->text_content ?? '';
-
-            // Handle different post types
-            if ($newPost->media_type !== 'text') {
-                // Media post handling
-                if ($request->hasFile('media_file')) {
-                    $file = $request->file('media_file');
+            
+            // Set default media type to text (will be updated if media is attached)
+            $newPost->media_type = 'text';
+            
+            // Check if we have multiple media files
+            $hasMultipleFiles = $request->hasFile('media_files') && count($request->file('media_files')) > 1;
+            $newPost->has_multiple_media = $hasMultipleFiles;
+            
+            // For single file backward compatibility
+            if ($request->hasFile('media_file')) {
+                $file = $request->file('media_file');
+                
+                // Upload the main media file
+                $mediaLink = $this->fileUploadService->uploadFile(
+                    $file,
+                    'media/singles'
+                );
+                
+                // Set directly on post for backward compatibility
+                $newPost->media_link = $mediaLink;
+                $newPost->media_type = $file->getMimeType();
+                $newPost->original_filename = $file->getClientOriginalName();
+            }
+            
+            // Save the post first to get an ID
+            $newPost->save();
+            
+            // Process media files (if any)
+            $mediaFiles = [];
+            
+            if ($request->hasFile('media_files')) {
+                $files = $request->file('media_files');
+                $order = 0;
+                
+                foreach ($files as $file) {
+                    // Determine the media folder based on mime type
+                    $mimeType = $file->getMimeType();
+                    $mediaFolder = 'media/';
                     
-                    // Specific validations for different media types
-                    switch ($newPost->media_type) {
-                        case 'image':
-                            $request->validate([
-                                'media_file' => 'image|mimes:jpg,jpeg,png,gif,webp|max:51200', // 50MB
-                            ]);
-                            break;
-                        
-                        case 'video':
-                            $request->validate([
-                                'media_file' => 'mimetypes:video/avi,video/mpeg,video/quicktime,video/mp4,video/webm,video/x-matroska|max:102400', // 100MB
-                            ]);
-                            break;
-                        
-                        case 'file':
-                            // Allow various file types
-                            break;
+                    if (Str::startsWith($mimeType, 'image/')) {
+                        $mediaFolder .= 'images';
+                    } elseif (Str::startsWith($mimeType, 'video/')) {
+                        $mediaFolder .= 'videos';
+                    } elseif (Str::startsWith($mimeType, 'audio/')) {
+                        $mediaFolder .= 'audios';
+                    } else {
+                        $mediaFolder .= 'files';
                     }
                     
-                    // Upload the main media file
-                    $mediaLink = $this->fileUploadService->uploadFile(
-                        $file,
-                        'media/' . $newPost->media_type . 's'
-                    );
+                    // Upload the file
+                    $mediaLink = $this->fileUploadService->uploadFile($file, $mediaFolder);
+                    
+                    // Create media record
+                    $media = new PostMedia([
+                        'post_id' => $newPost->id,
+                        'media_link' => $mediaLink,
+                        'media_type' => $mimeType,
+                        'original_filename' => $file->getClientOriginalName(),
+                        'mime_type' => $mimeType,
+                        'order' => $order++
+                    ]);
+                    
+                    $media->save();
+                    $mediaFiles[] = $media;
                     
                     // Log file upload details
                     Log::info('File upload details', [
                         'filename' => $file->getClientOriginalName(),
-                        'mime_type' => $file->getMimeType(),
+                        'mime_type' => $mimeType,
                         'size' => $file->getSize(),
                         'media_link' => $mediaLink
                     ]);
-                    
-                    $newPost->media_link = $mediaLink;
-                    $newPost->media_type = $file->getMimeType();
-                    $newPost->original_filename = $file->getClientOriginalName();
+                }
+                
+                // If we have at least one media file and no single file was uploaded
+                // set the post's primary media info to the first file for backwards compatibility
+                if (count($mediaFiles) > 0 && !$request->hasFile('media_file')) {
+                    $firstMedia = $mediaFiles[0];
+                    $newPost->media_link = $firstMedia->media_link;
+                    $newPost->media_type = $firstMedia->media_type;
+                    $newPost->original_filename = $firstMedia->original_filename;
+                    $newPost->mime_type = $firstMedia->mime_type;
+                    $newPost->save();
                 }
             }
-
-            // Save the post
-            $newPost->save();
 
             // Process mentions if the post body contains @username
             if (Str::contains($newPost->body, '@')) {
                 $newPost->processMentions($newPost->body);
             }
+            
+            DB::commit();
+            
+            // Load the media relationship for the response
+            $newPost->load('media');
 
             return response()->json([
                 'message' => 'Post created successfully',
@@ -146,7 +185,7 @@ class PostController extends Controller
      */
     public function show($id)
     {
-        $post = Post::with('user', 'comments.user', 'likes')->findOrFail($id);
+        $post = Post::with('user', 'comments.user', 'likes', 'media')->findOrFail($id);
         
         // Check visibility permissions
         $user = auth()->user();
@@ -187,6 +226,10 @@ class PostController extends Controller
             'body' => 'sometimes|required|string',
             'visibility' => 'nullable|in:public,private,followers',
             'media' => 'nullable|file|max:102400', // 100MB
+            'media_files' => 'nullable|array',
+            'media_files.*' => 'file|max:102400', // 100MB each file
+            'delete_media_ids' => 'nullable|array', // IDs of media to delete
+            'delete_media_ids.*' => 'numeric|exists:post_media,id'
         ]);
 
         if ($request->has('title')) {
@@ -206,16 +249,18 @@ class PostController extends Controller
             $post->visibility = $request->visibility;
         }
         
-        // Handle media update if provided
-        if ($request->hasFile('media')) {
-            try {
+        try {
+            DB::beginTransaction();
+            
+            // Handle single media update if provided (backward compatibility)
+            if ($request->hasFile('media')) {
                 // Delete old media if it exists
                 if ($post->media_link) {
                     $this->fileUploadService->deleteFile($post->media_link);
                 }
                 
                 $file = $request->file('media');
-                $mediaLink = $this->fileUploadService->uploadFile($file, 'media/images');
+                $mediaLink = $this->fileUploadService->uploadFile($file, 'media/singles');
                 
                 if (!$mediaLink) {
                     throw new \Exception('File upload returned empty URL');
@@ -224,20 +269,98 @@ class PostController extends Controller
                 $post->media_link = $mediaLink;
                 $post->media_type = $file->getMimeType();
                 $post->original_filename = $file->getClientOriginalName();
-            } catch (\Exception $e) {
-                Log::error('File update failed', [
-                    'error' => $e->getMessage(),
-                    'post_id' => $post->id
-                ]);
-                
-                return response()->json([
-                    'message' => 'File update failed: ' . $e->getMessage()
-                ], 500);
+                $post->mime_type = $file->getMimeType();
             }
+            
+            // Handle multiple media files if provided
+            if ($request->hasFile('media_files')) {
+                // Set the post to have multiple media
+                $post->has_multiple_media = true;
+                
+                $files = $request->file('media_files');
+                $lastOrder = $post->media()->max('order') ?? -1;
+                $order = $lastOrder + 1;
+                
+                foreach ($files as $file) {
+                    // Determine the media folder based on mime type
+                    $mimeType = $file->getMimeType();
+                    $mediaFolder = 'media/';
+                    
+                    if (Str::startsWith($mimeType, 'image/')) {
+                        $mediaFolder .= 'images';
+                    } elseif (Str::startsWith($mimeType, 'video/')) {
+                        $mediaFolder .= 'videos';
+                    } elseif (Str::startsWith($mimeType, 'audio/')) {
+                        $mediaFolder .= 'audios';
+                    } else {
+                        $mediaFolder .= 'files';
+                    }
+                    
+                    // Upload the file
+                    $mediaLink = $this->fileUploadService->uploadFile($file, $mediaFolder);
+                    
+                    // Create media record
+                    $media = new \App\Models\PostMedia([
+                        'post_id' => $post->id,
+                        'media_link' => $mediaLink,
+                        'media_type' => $mimeType,
+                        'original_filename' => $file->getClientOriginalName(),
+                        'mime_type' => $mimeType,
+                        'order' => $order++
+                    ]);
+                    
+                    $media->save();
+                    
+                    // Log file upload details
+                    Log::info('File upload details', [
+                        'filename' => $file->getClientOriginalName(),
+                        'mime_type' => $mimeType,
+                        'size' => $file->getSize(),
+                        'media_link' => $mediaLink
+                    ]);
+                }
+            }
+            
+            // Handle media deletions if requested
+            if ($request->has('delete_media_ids') && is_array($request->delete_media_ids)) {
+                foreach ($request->delete_media_ids as $mediaId) {
+                    $media = \App\Models\PostMedia::where('id', $mediaId)
+                        ->where('post_id', $post->id)
+                        ->first();
+                        
+                    if ($media) {
+                        // Delete the file from storage
+                        $this->fileUploadService->deleteFile($media->media_link);
+                        
+                        // Delete the record
+                        $media->delete();
+                    }
+                }
+                
+                // If we deleted all media, update has_multiple_media flag
+                if ($post->media()->count() <= 1) {
+                    $post->has_multiple_media = false;
+                }
+            }
+            
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Media update failed', [
+                'error' => $e->getMessage(),
+                'post_id' => $post->id
+            ]);
+            
+            return response()->json([
+                'message' => 'Media update failed: ' . $e->getMessage()
+            ], 500);
         }
 
         $post->save();
 
+        // Load the media relationship for the response
+        $post->load('media');
+        
         return response()->json([
             'message' => 'Post updated successfully',
             'post' => $post
@@ -258,14 +381,22 @@ class PostController extends Controller
             ], 403);
         }
 
-        // Delete media if it exists
-        if ($post->media_link) {
-            try {
+        // Delete all media files associated with this post
+        try {
+            // First delete the main media if it exists (for backward compatibility)
+            if ($post->media_link) {
                 $this->fileUploadService->deleteFile($post->media_link);
-            } catch (\Exception $e) {
-                Log::warning('Failed to delete post media: ' . $e->getMessage());
-                // Continue with post deletion even if media deletion fails
             }
+            
+            // Delete all media files in the PostMedia table
+            $mediaFiles = $post->media()->get();
+            foreach ($mediaFiles as $media) {
+                $this->fileUploadService->deleteFile($media->media_link);
+                $media->delete();
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to delete some post media: ' . $e->getMessage());
+            // Continue with post deletion even if media deletion fails
         }
 
         $post->delete();
@@ -284,8 +415,8 @@ class PostController extends Controller
             // Log the share key access attempt
             Log::info('Attempting to view shared post', ['share_key' => $shareKey]);
             
-            // Find the post with the exact share key
-            $post = Post::where('share_key', $shareKey)->first();
+            // Find the post with the exact share key and load media
+            $post = Post::with('media')->where('share_key', $shareKey)->first();
             
             // Check if post exists
             if (!$post) {
@@ -373,7 +504,7 @@ class PostController extends Controller
             }
         }
         
-        $posts = $query->with('user')
+        $posts = $query->with(['user', 'media'])
             ->orderBy('created_at', 'desc')
             ->paginate(20);
         

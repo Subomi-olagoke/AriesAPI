@@ -15,13 +15,14 @@ class Post extends Model {
         'title', 
         'body', 
         'user_id', 
-        'media_link', 
-        'media_type', 
-        'media_thumbnail', 
+        'media_link',  // Kept for backward compatibility
+        'media_type',  // Kept for backward compatibility
+        'media_thumbnail', // Kept for backward compatibility
         'visibility',
-        'original_filename',
-        'mime_type',
+        'original_filename', // Kept for backward compatibility
+        'mime_type',  // Kept for backward compatibility
         'share_key',
+        'has_multiple_media',
     ];
 
     protected $appends = ['file_extension', 'share_url'];
@@ -30,6 +31,7 @@ class Post extends Model {
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'has_multiple_media' => 'boolean',
     ];
 
     // Define the visibility attribute
@@ -184,5 +186,13 @@ class Post extends Model {
     public function reports()
     {
         return $this->morphMany(Report::class, 'reportable');
+    }
+    
+    /**
+     * Get the media files for this post.
+     */
+    public function media()
+    {
+        return $this->hasMany(PostMedia::class)->orderBy('order');
     }
 }
