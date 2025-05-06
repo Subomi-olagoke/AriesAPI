@@ -1,4 +1,4 @@
-@extends('admin.layout')
+@extends('admin.dashboard-layout')
 
 @section('content')
 <div class="flex justify-between items-center mb-6">

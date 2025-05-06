@@ -26,13 +26,15 @@ class Channel extends Model
         'join_code',
         'is_active',
         'max_members',
-        'requires_approval'
+        'requires_approval',
+        'is_public'
     ];
     
     protected $casts = [
         'is_active' => 'boolean',
         'max_members' => 'integer',
-        'requires_approval' => 'boolean'
+        'requires_approval' => 'boolean',
+        'is_public' => 'boolean'
     ];
     
     // Automatically generate UUID when creating a new channel

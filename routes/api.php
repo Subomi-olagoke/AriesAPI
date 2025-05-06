@@ -648,6 +648,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('channels')->group(function () {
         Route::get('/', [\App\Http\Controllers\ChannelController::class, 'index']);
         Route::post('/', [\App\Http\Controllers\ChannelController::class, 'store']);
+        Route::get('/discover', [\App\Http\Controllers\ChannelController::class, 'discover']);
         Route::get('/pending-requests', [\App\Http\Controllers\ChannelController::class, 'pendingRequests']);
         Route::get('/pending-member-requests', [\App\Http\Controllers\ChannelController::class, 'pendingMemberRequests']);
         Route::get('/{id}', [\App\Http\Controllers\ChannelController::class, 'show']);
@@ -674,6 +675,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('channel')->group(function () {
         Route::get('/', [\App\Http\Controllers\ChannelController::class, 'index']);
         Route::post('/', [\App\Http\Controllers\ChannelController::class, 'store']);
+        Route::get('/discover', [\App\Http\Controllers\ChannelController::class, 'discover']);
         Route::get('/pending-requests', [\App\Http\Controllers\ChannelController::class, 'pendingRequests']);
         Route::get('/pending-member-requests', [\App\Http\Controllers\ChannelController::class, 'pendingMemberRequests']);
         Route::get('/{id}', [\App\Http\Controllers\ChannelController::class, 'show']);

@@ -108,6 +108,38 @@ class ChannelController extends Controller
     }
     
     /**
+     * Get all public channels available for discovery
+     */
+    public function discover(Request $request)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Get all public channels
+        $publicChannels = Channel::where('is_public', true)
+            ->where('is_active', true)
+            ->with(['creator'])
+            ->orderBy('updated_at', 'desc')
+            ->paginate(20);
+            
+        // Check if the user is already a member of each channel
+        $publicChannels->getCollection()->transform(function ($channel) use ($user) {
+            $membership = $channel->members()->where('user_id', $user->id)->first();
+            $channel->is_member = $membership && $membership->status === 'approved';
+            $channel->has_pending_request = $membership && $membership->status === 'pending';
+            $channel->member_count = $channel->approvedMembers()->count();
+            return $channel;
+        });
+        
+        return response()->json([
+            'public_channels' => $publicChannels
+        ]);
+    }
+
+    /**
      * Create a new channel
      */
     public function store(Request $request)
@@ -124,7 +156,8 @@ class ChannelController extends Controller
             'description' => 'nullable|string|max:1000',
             'picture' => 'nullable|image|max:5120', // 5MB max
             'max_members' => 'integer|min:2|max:20',
-            'requires_approval' => 'boolean'
+            'requires_approval' => 'boolean',
+            'is_public' => 'boolean'
         ]);
         
         // All users can create channels now
@@ -145,6 +178,7 @@ class ChannelController extends Controller
                 'creator_id' => $user->id,
                 'max_members' => $validated['max_members'] ?? 10,
                 'requires_approval' => $validated['requires_approval'] ?? false,
+                'is_public' => $validated['is_public'] ?? false,
                 'join_code' => strtoupper(Str::random(8))
                 // share_link will be generated in the model using the channel's ID
             ];
@@ -279,6 +313,7 @@ class ChannelController extends Controller
             'picture' => 'nullable|image|max:5120', // 5MB max
             'max_members' => 'integer|min:2|max:20',
             'requires_approval' => 'boolean',
+            'is_public' => 'boolean',
             'remove_picture' => 'nullable|boolean'
         ]);
         
