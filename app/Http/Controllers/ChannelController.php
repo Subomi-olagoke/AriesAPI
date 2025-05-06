@@ -295,7 +295,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is an admin
-        if (!$channel->isAdmin($user)) {
+        if ($channel->isAdmin($user) === 0) {
             return response()->json(['message' => 'Only channel admins can update channel details'], 403);
         }
         
@@ -431,7 +431,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is a member
-        if (!$channel->isMember($user)) {
+        if ($channel->isMember($user) === 0) {
             return response()->json(['message' => 'You are not a member of this channel'], 403);
         }
         
@@ -624,7 +624,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is an admin of the channel
-        if (!$channel->isAdmin($user)) {
+        if ($channel->isAdmin($user) === 0) {
             return response()->json(['message' => 'Only channel admins can approve join requests'], 403);
         }
         
@@ -687,7 +687,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is an admin of the channel
-        if (!$channel->isAdmin($user)) {
+        if ($channel->isAdmin($user) === 0) {
             return response()->json(['message' => 'Only channel admins can reject join requests'], 403);
         }
         
@@ -752,7 +752,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is an admin of the channel
-        if (!$channel->isAdmin($user)) {
+        if ($channel->isAdmin($user) === 0) {
             return response()->json(['message' => 'Only channel admins can add members'], 403);
         }
         
@@ -850,7 +850,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is an admin of the channel or removing themselves
-        if (!$channel->isAdmin($user) && $user->id !== $validated['user_id']) {
+        if ($channel->isAdmin($user) === 0 && $user->id !== $validated['user_id']) {
             return response()->json(['message' => 'Only channel admins can remove other members'], 403);
         }
         
@@ -904,7 +904,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is an admin of the channel
-        if (!$channel->isAdmin($user)) {
+        if ($channel->isAdmin($user) === 0) {
             return response()->json(['message' => 'Only channel admins can update member roles'], 403);
         }
         
@@ -1088,7 +1088,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is a member
-        if (!$channel->isMember($user)) {
+        if ($channel->isMember($user) === 0) {
             return response()->json(['message' => 'You are not a member of this channel'], 403);
         }
         
@@ -1129,7 +1129,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is a member
-        if (!$channel->isMember($user)) {
+        if ($channel->isMember($user) === 0) {
             return response()->json(['message' => 'You are not a member of this channel'], 403);
         }
         
@@ -1169,7 +1169,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is a member
-        if (!$channel->isMember($user)) {
+        if ($channel->isMember($user) === 0) {
             return response()->json(['message' => 'You are not a member of this channel'], 403);
         }
         
@@ -1210,7 +1210,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is an admin
-        if (!$channel->isAdmin($user)) {
+        if ($channel->isAdmin($user) === 0) {
             return response()->json(['message' => 'Only channel admins can regenerate the share link'], 403);
         }
         
@@ -1249,7 +1249,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is an admin
-        if (!$channel->isAdmin($user)) {
+        if ($channel->isAdmin($user) === 0) {
             return response()->json(['message' => 'Only channel admins can regenerate the join code'], 403);
         }
         
@@ -1300,7 +1300,7 @@ class ChannelController extends Controller
         $channel = Channel::findOrFail($id);
         
         // Check if user is a member
-        if (!$channel->isMember($user)) {
+        if ($channel->isMember($user) === 0) {
             return response()->json(['message' => 'You are not a member of this channel'], 403);
         }
         
@@ -1308,7 +1308,7 @@ class ChannelController extends Controller
         $educator = User::findOrFail($educatorId);
         
         // Check if educator is a member of the channel
-        if (!$channel->isMember($educator)) {
+        if ($channel->isMember($educator) === 0) {
             return response()->json(['message' => 'The educator is not a member of this channel'], 403);
         }
         

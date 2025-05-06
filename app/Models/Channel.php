@@ -120,38 +120,47 @@ class Channel extends Model
     
     /**
      * Check if a user is a member of the channel.
+     * Returns 1 for true, 0 for false as boolean values.
      */
     public function isMember(User $user)
     {
-        return $this->members()
+        $isMember = $this->members()
             ->where('user_id', $user->id)
             ->where('status', 'approved')
             ->where('is_active', true)
             ->exists();
+            
+        return $isMember ? 1 : 0;
     }
     
     /**
      * Check if a user is an admin of the channel.
+     * Returns 1 for true, 0 for false as boolean values.
      */
     public function isAdmin(User $user)
     {
-        return $this->members()
+        $isAdmin = $this->members()
             ->where('user_id', $user->id)
             ->where('role', 'admin')
             ->where('status', 'approved')
             ->where('is_active', true)
             ->exists();
+            
+        return $isAdmin ? 1 : 0;
     }
     
     /**
      * Check if a user has a pending join request for the channel.
+     * Returns 1 for true, 0 for false as boolean values.
      */
     public function hasPendingRequest(User $user)
     {
-        return $this->members()
+        $hasPending = $this->members()
             ->where('user_id', $user->id)
             ->where('status', 'pending')
             ->exists();
+            
+        return $hasPending ? 1 : 0;
     }
     
     /**
