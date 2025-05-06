@@ -59,7 +59,7 @@ class User extends Authenticatable {
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
-        'isAdmin' => 'boolean',
+        'isAdmin' => 'integer',
         'is_banned' => 'boolean',
         'banned_at' => 'datetime',
         'alex_points' => 'integer',
