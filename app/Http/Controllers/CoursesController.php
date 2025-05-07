@@ -22,6 +22,55 @@ class CoursesController extends Controller {
     }
     
     /**
+     * Get all featured courses
+     * 
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getFeaturedCourses()
+    {
+        $featuredCourses = Course::with(['user', 'topic'])
+            ->featured()
+            ->orderBy('created_at', 'desc')
+            ->get();
+            
+        return response()->json([
+            'success' => true,
+            'featured_courses' => $featuredCourses
+        ]);
+    }
+    
+    /**
+     * Toggle featured status for a course
+     * Only course owners or admins can toggle featured status
+     * 
+     * @param int $id Course ID
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function toggleFeatured($id)
+    {
+        $course = Course::findOrFail($id);
+        $user = auth()->user();
+        
+        // Check if user is the course owner or an admin
+        if ($user->id !== $course->user_id && !$user->isAdmin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You do not have permission to feature this course'
+            ], 403);
+        }
+        
+        // Toggle featured status
+        $course->is_featured = !$course->is_featured;
+        $course->save();
+        
+        return response()->json([
+            'success' => true,
+            'message' => $course->is_featured ? 'Course is now featured' : 'Course is no longer featured',
+            'course' => $course
+        ]);
+    }
+    
+    /**
      * Create a new course with both local and S3 storage options.
      */
     /**

@@ -231,6 +231,12 @@ Route::view('/payment-methods/failed', 'payment-methods.failed')->name('payment-
 Route::view('/subscription/success', 'subscription.success')->name('subscription.success');
 Route::view('/subscription/failed', 'subscription.failed')->name('subscription.failed');
 
+// Premium Subscription Storefront Routes
+Route::get('/premium', [App\Http\Controllers\PremiumStorefrontController::class, 'index'])->name('premium.storefront');
+Route::get('/premium/subscribe', [App\Http\Controllers\PremiumStorefrontController::class, 'subscribe'])->name('premium.subscribe');
+Route::get('/premium/success', [App\Http\Controllers\PremiumStorefrontController::class, 'success'])->name('premium.success');
+Route::get('/premium/failed', [App\Http\Controllers\PremiumStorefrontController::class, 'failed'])->name('premium.failed');
+
 // Enrollment success/failure pages
 Route::view('/enrollment/success', 'enrollment.success')->name('enrollment.success');
 Route::view('/enrollment/failed', 'enrollment.failed')->name('enrollment.failed');

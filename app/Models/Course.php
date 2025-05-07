@@ -22,14 +22,16 @@ class Course extends Model {
         'duration_minutes',
         'difficulty_level',
         'topic_id',
-        'user_id'
+        'user_id',
+        'is_featured'
     ];
 
     protected $casts = [
         'price' => 'decimal:2',
         'learning_outcomes' => 'array',
         'prerequisites' => 'array',
-        'completion_criteria' => 'array'
+        'completion_criteria' => 'array',
+        'is_featured' => 'boolean'
     ];
 
     public function user(){
@@ -178,6 +180,14 @@ class Course extends Model {
         return $query->withCount(['enrollments' => function($query) {
             $query->whereIn('status', ['active', 'completed']);
         }])->orderBy('enrollments_count', 'desc');
+    }
+    
+    /**
+     * Scope a query to only include featured courses.
+     */
+    public function scopeFeatured($query)
+    {
+        return $query->where('is_featured', true);
     }
     
     /**

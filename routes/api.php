@@ -196,6 +196,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/courses/{id}', [CoursesController::class, 'deleteCourse']);
     Route::get('/course-by-topic', [CoursesController::class, 'getCoursesByTopic']); // Additional route
     Route::get('/courses-by-topic', [CoursesController::class, 'getCoursesByTopic']);
+    Route::get('/featured-courses', [CoursesController::class, 'getFeaturedCourses']);
+    Route::get('/featured-course', [CoursesController::class, 'getFeaturedCourses']);
+    Route::post('/courses/{id}/toggle-featured', [CoursesController::class, 'toggleFeatured']);
+    Route::post('/course/{id}/toggle-featured', [CoursesController::class, 'toggleFeatured']);
 
     // Course Section routes
     Route::get('/courses/{courseId}/sections', [CourseSectionController::class, 'index']);
@@ -826,6 +830,17 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::put('/levels/{id}', [\App\Http\Controllers\AlexPointsController::class, 'updateLevel']);
             Route::post('/adjust', [\App\Http\Controllers\AlexPointsController::class, 'adjustPoints']);
         });
+    });
+    
+    // Premium routes
+    Route::prefix('premium')->group(function () {
+        Route::get('/status', [\App\Http\Controllers\PremiumController::class, 'getPremiumStatus']);
+        Route::get('/features', [\App\Http\Controllers\PremiumController::class, 'getPremiumFeatures']);
+        Route::post('/purchase', [\App\Http\Controllers\PremiumController::class, 'initiatePremiumPurchase']);
+        
+        // Post analysis (premium feature)
+        Route::get('/posts/{postId}/analyze', [\App\Http\Controllers\PostAnalysisController::class, 'analyzePost']);
+        Route::get('/posts/{postId}/recommendations', [\App\Http\Controllers\PostAnalysisController::class, 'getPostRecommendations']);
     });
     
     // Cognition routes

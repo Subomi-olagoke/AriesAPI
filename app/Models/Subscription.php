@@ -21,7 +21,10 @@ class Subscription extends Model
         'is_active',
         'is_recurring',
         'can_create_channels',
-        'available_credits'
+        'available_credits',
+        'max_video_size_kb',
+        'max_image_size_kb',
+        'can_analyze_posts'
     ];
 
     protected $casts = [
@@ -32,6 +35,9 @@ class Subscription extends Model
         'can_create_channels' => 'boolean',
         'available_credits' => 'integer',
         'amount' => 'decimal:2',
+        'max_video_size_kb' => 'integer',
+        'max_image_size_kb' => 'integer',
+        'can_analyze_posts' => 'boolean',
     ];
 
     /**
@@ -142,5 +148,29 @@ class Subscription extends Model
     public function canJoinLiveClasses()
     {
         return $this->isValid();
+    }
+    
+    /**
+     * Get the maximum allowed video size in KB.
+     */
+    public function getMaxVideoSizeKb()
+    {
+        return $this->max_video_size_kb;
+    }
+    
+    /**
+     * Get the maximum allowed image size in KB.
+     */
+    public function getMaxImageSizeKb()
+    {
+        return $this->max_image_size_kb;
+    }
+    
+    /**
+     * Check if subscription can analyze posts with Cogni.
+     */
+    public function canAnalyzePosts()
+    {
+        return $this->isValid() && $this->can_analyze_posts;
     }
 }

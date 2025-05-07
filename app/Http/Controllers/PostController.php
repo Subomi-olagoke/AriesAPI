@@ -45,16 +45,64 @@ class PostController extends Controller
     public function store(Request $request)
     {
         // Validate the incoming request parameters
+        // Get user's subscription limits
+        $user = auth()->user();
+        $maxVideoSizeKb = $user->getMaxVideoSizeKb();
+        $maxImageSizeKb = $user->getMaxImageSizeKb();
+        
+        // Convert KB to bytes for validation
+        $maxVideoSize = $maxVideoSizeKb * 1024;
+        $maxImageSize = $maxImageSizeKb * 1024;
+        
+        // Validate the incoming request parameters
         $request->validate([
             // Text content is now completely optional
             'text_content' => 'nullable|string',
             // Media files array
             'media_files'  => 'nullable|array',
-            'media_files.*' => 'file|max:102400', // 100MB each file
+            'media_files.*' => [
+                'file',
+                function ($attribute, $value, $fail) use ($maxVideoSize, $maxImageSize) {
+                    $mime = $value->getMimeType();
+                    $size = $value->getSize();
+                    
+                    if (Str::startsWith($mime, 'video/')) {
+                        if ($size > $maxVideoSize) {
+                            $fail('Video file size exceeds your plan limit of ' . 
+                                  round($maxVideoSize / (1024 * 1024), 1) . 'MB. ' .
+                                  'Upgrade to Premium for larger uploads.');
+                        }
+                    } elseif (Str::startsWith($mime, 'image/')) {
+                        if ($size > $maxImageSize) {
+                            $fail('Image file size exceeds your plan limit of ' . 
+                                  round($maxImageSize / (1024 * 1024), 1) . 'MB. ' .
+                                  'Upgrade to Premium for larger uploads.');
+                        }
+                    } else {
+                        // For other file types, use the lower of the two limits
+                        $maxSize = min($maxVideoSize, $maxImageSize);
+                        if ($size > $maxSize) {
+                            $fail('File size exceeds your plan limit of ' . 
+                                  round($maxSize / (1024 * 1024), 1) . 'MB. ' .
+                                  'Upgrade to Premium for larger uploads.');
+                        }
+                    }
+                }
+            ],
             'visibility'   => 'nullable|in:public,private,followers',
-            'title'        => 'nullable|string|max:255'
+            'title'        => 'nullable|string|max:255',
+            // Optional AI analysis request
+            'analyze_with_ai' => 'nullable|boolean'
         ]);
 
+        // Check if AI analysis is requested by a non-premium user
+        if ($request->has('analyze_with_ai') && $request->analyze_with_ai && !$user->canAnalyzePosts()) {
+            return response()->json([
+                'message' => 'AI post analysis is a premium feature. Please upgrade your subscription to use this feature.',
+                'premium_required' => true
+            ], 403);
+        }
+        
         try {
             DB::beginTransaction();
             
@@ -159,11 +207,38 @@ class PostController extends Controller
             
             // Load the media relationship for the response
             $newPost->load('media');
+            
+            // If AI analysis was requested and user has premium access
+            $aiAnalysis = null;
+            if ($request->has('analyze_with_ai') && $request->analyze_with_ai && $user->canAnalyzePosts()) {
+                try {
+                    $cogniService = app(\App\Services\CogniService::class);
+                    $content = $newPost->title . "\n\n" . $newPost->body;
+                    
+                    // Request analysis from Cogni
+                    $prompt = "Analyze this post and provide insights. Include: " .
+                              "1) Main topics and keywords, " .
+                              "2) Writing style assessment, " . 
+                              "3) Potential audience, " .
+                              "4) Suggestions for improvements or engagement. " .
+                              "Format as JSON with fields: topics (array), style (string), audience (string), suggestions (array)";
+                    
+                    $result = $cogniService->askQuestion($prompt . "\n\nHere's the content:\n" . $content);
+                    
+                    if ($result['success']) {
+                        $aiAnalysis = $result['answer'];
+                    }
+                } catch (\Exception $e) {
+                    // Log error but don't fail the post creation
+                    Log::error('AI analysis failed: ' . $e->getMessage());
+                }
+            }
 
             return response()->json([
                 'message' => 'Post created successfully',
                 'post' => $newPost,
-                'share_url' => route('shared.post', ['shareKey' => $newPost->share_key])
+                'share_url' => route('shared.post', ['shareKey' => $newPost->share_key]),
+                'ai_analysis' => $aiAnalysis
             ], 201);
 
         } catch (\Exception $e) {
@@ -221,15 +296,84 @@ class PostController extends Controller
             ], 403);
         }
         
+        // Get user's subscription limits
+        $user = auth()->user();
+        $maxVideoSizeKb = $user->getMaxVideoSizeKb();
+        $maxImageSizeKb = $user->getMaxImageSizeKb();
+        
+        // Convert KB to bytes for validation
+        $maxVideoSize = $maxVideoSizeKb * 1024;
+        $maxImageSize = $maxImageSizeKb * 1024;
+        
         $request->validate([
             'title' => 'sometimes|required|string|max:255',
             'body' => 'sometimes|required|string',
             'visibility' => 'nullable|in:public,private,followers',
-            'media' => 'nullable|file|max:102400', // 100MB
+            'media' => [
+                'nullable',
+                'file',
+                function ($attribute, $value, $fail) use ($maxVideoSize, $maxImageSize) {
+                    if (!$value) return;
+                    
+                    $mime = $value->getMimeType();
+                    $size = $value->getSize();
+                    
+                    if (Str::startsWith($mime, 'video/')) {
+                        if ($size > $maxVideoSize) {
+                            $fail('Video file size exceeds your plan limit of ' . 
+                                  round($maxVideoSize / (1024 * 1024), 1) . 'MB. ' .
+                                  'Upgrade to Premium for larger uploads.');
+                        }
+                    } elseif (Str::startsWith($mime, 'image/')) {
+                        if ($size > $maxImageSize) {
+                            $fail('Image file size exceeds your plan limit of ' . 
+                                  round($maxImageSize / (1024 * 1024), 1) . 'MB. ' .
+                                  'Upgrade to Premium for larger uploads.');
+                        }
+                    } else {
+                        // For other file types, use the lower of the two limits
+                        $maxSize = min($maxVideoSize, $maxImageSize);
+                        if ($size > $maxSize) {
+                            $fail('File size exceeds your plan limit of ' . 
+                                  round($maxSize / (1024 * 1024), 1) . 'MB. ' .
+                                  'Upgrade to Premium for larger uploads.');
+                        }
+                    }
+                }
+            ],
             'media_files' => 'nullable|array',
-            'media_files.*' => 'file|max:102400', // 100MB each file
+            'media_files.*' => [
+                'file',
+                function ($attribute, $value, $fail) use ($maxVideoSize, $maxImageSize) {
+                    $mime = $value->getMimeType();
+                    $size = $value->getSize();
+                    
+                    if (Str::startsWith($mime, 'video/')) {
+                        if ($size > $maxVideoSize) {
+                            $fail('Video file size exceeds your plan limit of ' . 
+                                  round($maxVideoSize / (1024 * 1024), 1) . 'MB. ' .
+                                  'Upgrade to Premium for larger uploads.');
+                        }
+                    } elseif (Str::startsWith($mime, 'image/')) {
+                        if ($size > $maxImageSize) {
+                            $fail('Image file size exceeds your plan limit of ' . 
+                                  round($maxImageSize / (1024 * 1024), 1) . 'MB. ' .
+                                  'Upgrade to Premium for larger uploads.');
+                        }
+                    } else {
+                        // For other file types, use the lower of the two limits
+                        $maxSize = min($maxVideoSize, $maxImageSize);
+                        if ($size > $maxSize) {
+                            $fail('File size exceeds your plan limit of ' . 
+                                  round($maxSize / (1024 * 1024), 1) . 'MB. ' .
+                                  'Upgrade to Premium for larger uploads.');
+                        }
+                    }
+                }
+            ],
             'delete_media_ids' => 'nullable|array', // IDs of media to delete
-            'delete_media_ids.*' => 'numeric|exists:post_media,id'
+            'delete_media_ids.*' => 'numeric|exists:post_media,id',
+            'analyze_with_ai' => 'nullable|boolean'
         ]);
 
         if ($request->has('title')) {

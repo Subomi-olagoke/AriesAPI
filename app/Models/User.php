@@ -368,6 +368,54 @@ class User extends Authenticatable {
     }
     
     /**
+     * Get the maximum allowed video size for this user in KB
+     */
+    public function getMaxVideoSizeKb()
+    {
+        $subscription = $this->activeSubscription;
+        
+        // Default for free users: 50MB (50,000 KB)
+        $defaultLimit = 50000;
+        
+        if ($subscription) {
+            return $subscription->max_video_size_kb;
+        }
+        
+        return $defaultLimit;
+    }
+    
+    /**
+     * Get the maximum allowed image size for this user in KB
+     */
+    public function getMaxImageSizeKb()
+    {
+        $subscription = $this->activeSubscription;
+        
+        // Default for free users: 5MB (5,000 KB)
+        $defaultLimit = 5000;
+        
+        if ($subscription) {
+            return $subscription->max_image_size_kb;
+        }
+        
+        return $defaultLimit;
+    }
+    
+    /**
+     * Check if user can analyze posts with Cogni
+     */
+    public function canAnalyzePosts()
+    {
+        $subscription = $this->activeSubscription;
+        
+        if ($subscription) {
+            return $subscription->canAnalyzePosts();
+        }
+        
+        return false;
+    }
+    
+    /**
      * Check if user can message an educator
      */
     public function canMessageEducator(User $educator)
