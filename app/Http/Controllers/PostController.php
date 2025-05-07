@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Post;
+use App\Models\PostMedia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -444,7 +445,7 @@ class PostController extends Controller
                     $mediaLink = $this->fileUploadService->uploadFile($file, $mediaFolder);
                     
                     // Create media record
-                    $media = new \App\Models\PostMedia([
+                    $media = new PostMedia([
                         'post_id' => $post->id,
                         'media_link' => $mediaLink,
                         'media_type' => $mimeType,
@@ -468,7 +469,7 @@ class PostController extends Controller
             // Handle media deletions if requested
             if ($request->has('delete_media_ids') && is_array($request->delete_media_ids)) {
                 foreach ($request->delete_media_ids as $mediaId) {
-                    $media = \App\Models\PostMedia::where('id', $mediaId)
+                    $media = PostMedia::where('id', $mediaId)
                         ->where('post_id', $post->id)
                         ->first();
                         
