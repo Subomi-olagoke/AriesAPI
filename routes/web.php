@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthManager;
 use App\Http\Controllers\SharedPostController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\ChannelController;
+use App\Http\Controllers\WaitlistController;
 
 /*
 |--------------------------------------------------------------------------
@@ -30,6 +31,12 @@ Route::get('/', function () {
 Route::get('/posts/shared/{shareKey}', [PostController::class, 'viewSharedPost'])
     ->name('posts.shared')
     ->withoutMiddleware(['auth:sanctum']);
+
+// Admin waitlist view routes
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::get('/admin/waitlist', [WaitlistController::class, 'adminIndex'])->name('admin.waitlist');
+    Route::post('/admin/waitlist/send-email', [WaitlistController::class, 'sendEmail'])->name('admin.waitlist.send-email');
+});
 
 // Channel deep linking route
 Route::get('/channel/{id}', function($id) {
@@ -240,4 +247,3 @@ Route::get('/premium/failed', [App\Http\Controllers\PremiumStorefrontController:
 // Enrollment success/failure pages
 Route::view('/enrollment/success', 'enrollment.success')->name('enrollment.success');
 Route::view('/enrollment/failed', 'enrollment.failed')->name('enrollment.failed');
-

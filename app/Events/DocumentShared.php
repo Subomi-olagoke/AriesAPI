@@ -21,27 +21,24 @@ class DocumentShared implements ShouldBroadcast
     public $content;
     public $space;
     public $channel;
+    public $sourceChannel;
+    public $targetChannel;
     public $sharedBy;
-    public $sharedWith;
-    public $role;
 
     /**
      * Create a new event instance.
      */
     public function __construct(
-        CollaborativeContent $content, 
         CollaborativeSpace $space, 
-        Channel $channel, 
-        User $sharedBy, 
-        User $sharedWith, 
-        string $role
+        Channel $sourceChannel, 
+        Channel $targetChannel, 
+        User $sharedBy
     ) {
-        $this->content = $content;
         $this->space = $space;
-        $this->channel = $channel;
+        $this->channel = $targetChannel; // Set to target channel for backwards compatibility
+        $this->sourceChannel = $sourceChannel;
+        $this->targetChannel = $targetChannel;
         $this->sharedBy = $sharedBy;
-        $this->sharedWith = $sharedWith;
-        $this->role = $role;
     }
 
     /**
@@ -52,7 +49,8 @@ class DocumentShared implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('user.' . $this->sharedWith->id),
+            new PresenceChannel('channel.' . $this->sourceChannel->id),
+            new PresenceChannel('channel.' . $this->targetChannel->id),
         ];
     }
     
@@ -66,20 +64,23 @@ class DocumentShared implements ShouldBroadcast
         return [
             'document' => [
                 'id' => $this->space->id,
-                'content_id' => $this->content->id,
                 'title' => $this->space->title,
                 'description' => $this->space->description,
                 'type' => $this->space->type,
-                'content_type' => $this->content->content_type,
-                'channel_id' => $this->channel->id,
-                'channel_name' => $this->channel->name
+            ],
+            'source_channel' => [
+                'id' => $this->sourceChannel->id,
+                'name' => $this->sourceChannel->name,
+            ],
+            'target_channel' => [
+                'id' => $this->targetChannel->id,
+                'name' => $this->targetChannel->name,
             ],
             'shared_by' => [
                 'id' => $this->sharedBy->id,
                 'name' => $this->sharedBy->name,
                 'avatar' => $this->sharedBy->avatar
             ],
-            'role' => $this->role,
             'timestamp' => now()->toIso8601String()
         ];
     }

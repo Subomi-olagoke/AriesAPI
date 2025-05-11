@@ -716,9 +716,6 @@ class EnhancedCogniService extends CogniService
     /**
      * Create a study plan for a readlist
      *
-     /**
-     * Create a study plan for a readlist
-     *
      * @param int $readlistId The readlist ID
      * @param array $params Additional parameters for the plan
      * @return array Response with success/error status and study plan

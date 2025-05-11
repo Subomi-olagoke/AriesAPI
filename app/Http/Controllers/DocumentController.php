@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Events\CollaborationOperation;
+use App\Events\DocumentShared;
 use App\Models\Channel;
 use App\Models\CollaborativeContent;
 use App\Models\CollaborativeSpace;
+use App\Models\ContentPermission;
 use App\Models\ContentVersion;
 use App\Models\Operation;
 use App\Models\User;
@@ -54,7 +56,8 @@ class DocumentController extends Controller
                 'created_at' => $space->created_at,
                 'updated_at' => $space->updated_at,
                 'created_by' => $space->creator->name,
-                'can_edit' => $space->canEdit($user)
+                'can_edit' => $space->canEdit($user),
+                'is_shared' => $space->is_shared ?? false
             ];
             
             // Get last modified timestamp from the most recent content
@@ -106,7 +109,8 @@ class DocumentController extends Controller
                 'description' => $validated['description'] ?? null,
                 'type' => 'document',
                 'settings' => null,
-                'created_by' => $user->id
+                'created_by' => $user->id,
+                'is_shared' => false
             ]);
             
             // Initial content can be empty, supplied content, or a template
@@ -207,6 +211,20 @@ class DocumentController extends Controller
             ->unique('id')
             ->values();
         
+        // Get shared status and shared with channels
+        $sharedWith = [];
+        if ($space->is_shared) {
+            $sharedWith = CollaborativeSpace::where('shared_from_id', $space->id)
+                ->with('channel:id,name')
+                ->get()
+                ->map(function($sharedSpace) {
+                    return [
+                        'channel_id' => $sharedSpace->channel->id,
+                        'channel_name' => $sharedSpace->channel->name
+                    ];
+                });
+        }
+        
         // Prepare the document response
         $document = [
             'id' => $space->id,
@@ -224,7 +242,10 @@ class DocumentController extends Controller
             ],
             'collaborators' => $activeUsers,
             'can_edit' => $content->canEdit($user),
-            'can_comment' => $content->canComment($user)
+            'can_comment' => $content->canComment($user),
+            'is_shared' => $space->is_shared ?? false,
+            'shared_with' => $sharedWith,
+            'is_shared_copy' => !empty($space->shared_from_id)
         ];
         
         return response()->json([
@@ -305,6 +326,16 @@ class DocumentController extends Controller
             // Update space updated_at time
             $space->touch();
             
+            // If this is a shared document, update all shared copies
+            if ($space->is_shared) {
+                $this->updateSharedCopies($space, $content);
+            }
+            
+            // If this is a shared copy, update the original
+            if (!empty($space->shared_from_id)) {
+                $this->updateOriginalDocument($space, $content);
+            }
+            
             DB::commit();
             
             return response()->json([
@@ -371,6 +402,16 @@ class DocumentController extends Controller
                 $metadata['title'] = $validated['title'];
                 $content->metadata = $metadata;
                 $content->save();
+            }
+            
+            // If this is a shared document, update the titles of shared copies
+            if ($space->is_shared) {
+                $this->updateSharedCopiesTitles($space);
+            }
+            
+            // If this is a shared copy, update the original's title
+            if (!empty($space->shared_from_id)) {
+                $this->updateOriginalTitle($space);
             }
             
             DB::commit();
@@ -583,6 +624,16 @@ class DocumentController extends Controller
             // Update space updated_at time
             $space->touch();
             
+            // If this is a shared document, update all shared copies
+            if ($space->is_shared) {
+                $this->updateSharedCopies($space, $content);
+            }
+            
+            // If this is a shared copy, update the original
+            if (!empty($space->shared_from_id)) {
+                $this->updateOriginalDocument($space, $content);
+            }
+            
             DB::commit();
             
             return response()->json([
@@ -682,6 +733,16 @@ class DocumentController extends Controller
                 
                 // Update space updated_at time
                 $space->touch();
+                
+                // If this is a shared document, apply the operation to all shared copies
+                if ($space->is_shared) {
+                    $this->applyOperationToSharedCopies($space, $operation, $content);
+                }
+                
+                // If this is a shared copy, apply the operation to the original
+                if (!empty($space->shared_from_id)) {
+                    $this->applyOperationToOriginal($space, $operation, $content);
+                }
             }
             
             // Broadcast the operation to all connected clients
@@ -925,5 +986,453 @@ class DocumentController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+    
+    /**
+     * Share a document with another channel
+     */
+    public function shareDocument(Request $request, $channelId, $documentId)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Validate request
+        $validated = $request->validate([
+            'target_channel_ids' => 'required|array',
+            'target_channel_ids.*' => 'required|exists:channels,id'
+        ]);
+        
+        // Get source channel
+        $sourceChannel = Channel::findOrFail($channelId);
+        
+        // Check if user is a member of source channel
+        if (!$sourceChannel->isMember($user)) {
+            return response()->json(['message' => 'You are not a member of this channel'], 403);
+        }
+        
+        // Get document space
+        $space = CollaborativeSpace::where('channel_id', $channelId)
+            ->where('id', $documentId)
+            ->firstOrFail();
+        
+        // Check if user is space owner or channel admin
+        if ($space->created_by !== $user->id && !$sourceChannel->isAdmin($user)) {
+            return response()->json(['message' => 'You do not have permission to share this document'], 403);
+        }
+        
+        // Get the content
+        $content = $space->contents()->latest()->first();
+        if (!$content) {
+            return response()->json(['message' => 'Document content not found'], 404);
+        }
+        
+        try {
+            DB::beginTransaction();
+            
+            // Mark the original document as shared
+            $space->is_shared = true;
+            $space->save();
+            
+            $sharedWith = [];
+            
+            // Process each target channel
+            foreach ($validated['target_channel_ids'] as $targetChannelId) {
+                // Skip if same as source channel
+                if ($targetChannelId == $channelId) {
+                    continue;
+                }
+                
+                // Get target channel
+                $targetChannel = Channel::find($targetChannelId);
+                if (!$targetChannel) {
+                    continue;
+                }
+                
+                // Check if user is a member of target channel
+                if (!$targetChannel->isMember($user)) {
+                    continue;
+                }
+                
+                // Check if document is already shared with this channel
+                $existingShare = CollaborativeSpace::where('channel_id', $targetChannelId)
+                    ->where('shared_from_id', $space->id)
+                    ->first();
+                
+                if ($existingShare) {
+                    $sharedWith[] = [
+                        'channel_id' => $targetChannel->id,
+                        'channel_name' => $targetChannel->name,
+                        'already_shared' => true
+                    ];
+                    continue;
+                }
+                
+                // Create a new shared document space in the target channel
+                $sharedSpace = CollaborativeSpace::create([
+                    'channel_id' => $targetChannelId,
+                    'title' => $space->title,
+                    'description' => $space->description,
+                    'type' => 'document',
+                    'settings' => $space->settings,
+                    'created_by' => $user->id,
+                    'shared_from_id' => $space->id,
+                    'is_shared' => false
+                ]);
+                
+                // Create a copy of the content
+                $sharedContent = CollaborativeContent::create([
+                    'space_id' => $sharedSpace->id,
+                    'content_type' => $content->content_type,
+                    'content_data' => $content->content_data,
+                    'metadata' => $content->metadata,
+                    'version' => $content->version,
+                    'created_by' => $user->id
+                ]);
+                
+                // Add owner permission
+                ContentPermission::create([
+                    'content_id' => $sharedContent->id,
+                    'user_id' => $user->id,
+                    'role' => 'owner',
+                    'granted_by' => $user->id
+                ]);
+                
+                // Broadcast document shared event
+                broadcast(new DocumentShared($sharedSpace, $sourceChannel, $targetChannel, $user));
+                
+                $sharedWith[] = [
+                    'channel_id' => $targetChannel->id,
+                    'channel_name' => $targetChannel->name,
+                    'space_id' => $sharedSpace->id
+                ];
+            }
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Document shared successfully',
+                'shared_with' => $sharedWith
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to share document: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to share document',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Stop sharing a document with a specific channel
+     */
+    public function stopSharingDocument(Request $request, $channelId, $documentId, $targetChannelId)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Get source channel
+        $sourceChannel = Channel::findOrFail($channelId);
+        
+        // Check if user is a member of source channel
+        if (!$sourceChannel->isMember($user)) {
+            return response()->json(['message' => 'You are not a member of this channel'], 403);
+        }
+        
+        // Get document space
+        $space = CollaborativeSpace::where('channel_id', $channelId)
+            ->where('id', $documentId)
+            ->firstOrFail();
+        
+        // Check if user is space owner or channel admin
+        if ($space->created_by !== $user->id && !$sourceChannel->isAdmin($user)) {
+            return response()->json(['message' => 'You do not have permission to manage document sharing'], 403);
+        }
+        
+        try {
+            DB::beginTransaction();
+            
+            // Find shared document in target channel
+            $sharedSpace = CollaborativeSpace::where('channel_id', $targetChannelId)
+                ->where('shared_from_id', $space->id)
+                ->first();
+            
+            if (!$sharedSpace) {
+                return response()->json(['message' => 'Document is not shared with this channel'], 404);
+            }
+            
+            // Delete the shared document
+            $sharedSpace->delete();
+            
+            // Check if document is still shared with any channels
+            $remainingShares = CollaborativeSpace::where('shared_from_id', $space->id)->count();
+            
+            if ($remainingShares === 0) {
+                // If no more shares, mark as unshared
+                $space->is_shared = false;
+                $space->save();
+            }
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Document sharing stopped successfully',
+                'remaining_shares' => $remainingShares
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to stop document sharing: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to stop document sharing',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * List channels the document is shared with
+     */
+    public function getSharedChannels($channelId, $documentId)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        // Get channel
+        $channel = Channel::findOrFail($channelId);
+        
+        // Check if user is a member
+        if (!$channel->isMember($user)) {
+            return response()->json(['message' => 'You are not a member of this channel'], 403);
+        }
+        
+        // Get document space
+        $space = CollaborativeSpace::where('channel_id', $channelId)
+            ->where('id', $documentId)
+            ->firstOrFail();
+        
+        // Get shared channels
+        $sharedSpaces = CollaborativeSpace::where('shared_from_id', $space->id)
+            ->with('channel:id,name')
+            ->get();
+        
+        $sharedChannels = $sharedSpaces->map(function($sharedSpace) {
+            return [
+                'channel_id' => $sharedSpace->channel->id,
+                'channel_name' => $sharedSpace->channel->name,
+                'space_id' => $sharedSpace->id,
+                'shared_at' => $sharedSpace->created_at
+            ];
+        });
+        
+        return response()->json([
+            'is_shared' => $space->is_shared,
+            'shared_with' => $sharedChannels
+        ]);
+    }
+    
+    /**
+     * Update all shared copies of a document
+     */
+    private function updateSharedCopies($space, $content)
+    {
+        // Find all shared copies
+        $sharedSpaces = CollaborativeSpace::where('shared_from_id', $space->id)->get();
+        
+        foreach ($sharedSpaces as $sharedSpace) {
+            // Get the shared content
+            $sharedContent = $sharedSpace->contents()->latest()->first();
+            if (!$sharedContent) {
+                continue;
+            }
+            
+            // Update the shared content
+            $sharedContent->content_data = $content->content_data;
+            $sharedContent->metadata = $content->metadata;
+            $sharedContent->version = $content->version;
+            $sharedContent->save();
+            
+            // Update the shared space
+            $sharedSpace->touch();
+        }
+    }
+    
+    /**
+     * Update the original document from a shared copy
+     */
+    private function updateOriginalDocument($space, $content)
+    {
+        // Get the original space
+        $originalSpace = CollaborativeSpace::find($space->shared_from_id);
+        if (!$originalSpace) {
+            return;
+        }
+        
+        // Get the original content
+        $originalContent = $originalSpace->contents()->latest()->first();
+        if (!$originalContent) {
+            return;
+        }
+        
+        // Update the original content
+        $originalContent->content_data = $content->content_data;
+        $originalContent->metadata = $content->metadata;
+        $originalContent->version = $content->version;
+        $originalContent->save();
+        
+        // Update the original space
+        $originalSpace->touch();
+    }
+    
+    /**
+     * Update titles of all shared copies
+     */
+    private function updateSharedCopiesTitles($space)
+    {
+        // Find all shared copies
+        $sharedSpaces = CollaborativeSpace::where('shared_from_id', $space->id)->get();
+        
+        foreach ($sharedSpaces as $sharedSpace) {
+            // Update the shared space title
+            $sharedSpace->title = $space->title;
+            $sharedSpace->save();
+            
+            // Update the content metadata
+            $sharedContent = $sharedSpace->contents()->latest()->first();
+            if ($sharedContent) {
+                $metadata = $sharedContent->metadata ?? [];
+                $metadata['title'] = $space->title;
+                $sharedContent->metadata = $metadata;
+                $sharedContent->save();
+            }
+        }
+    }
+    
+    /**
+     * Update the original document title from a shared copy
+     */
+    private function updateOriginalTitle($space)
+    {
+        // Get the original space
+        $originalSpace = CollaborativeSpace::find($space->shared_from_id);
+        if (!$originalSpace) {
+            return;
+        }
+        
+        // Update the original space title
+        $originalSpace->title = $space->title;
+        $originalSpace->save();
+        
+        // Update the content metadata
+        $originalContent = $originalSpace->contents()->latest()->first();
+        if ($originalContent) {
+            $metadata = $originalContent->metadata ?? [];
+            $metadata['title'] = $space->title;
+            $originalContent->metadata = $metadata;
+            $originalContent->save();
+        }
+    }
+    
+    /**
+     * Apply an operation to all shared copies
+     */
+    private function applyOperationToSharedCopies($space, $operation, $content)
+    {
+        // Find all shared copies
+        $sharedSpaces = CollaborativeSpace::where('shared_from_id', $space->id)->get();
+        
+        foreach ($sharedSpaces as $sharedSpace) {
+            // Get the shared content
+            $sharedContent = $sharedSpace->contents()->latest()->first();
+            if (!$sharedContent) {
+                continue;
+            }
+            
+            // Apply the operation
+            $newContentData = $operation->apply($sharedContent->content_data);
+            $sharedContent->content_data = $newContentData;
+            $sharedContent->version++;
+            $sharedContent->save();
+            
+            // Update the shared space
+            $sharedSpace->touch();
+            
+            // Broadcast the operation to all connected clients in the target channel
+            $sharedOperation = new Operation([
+                'content_id' => $sharedContent->id,
+                'user_id' => $operation->user_id,
+                'type' => $operation->type,
+                'position' => $operation->position,
+                'length' => $operation->length,
+                'text' => $operation->text,
+                'version' => $sharedContent->version - 1,
+                'meta' => $operation->meta
+            ]);
+            
+            broadcast(new CollaborationOperation(
+                $sharedOperation,
+                $sharedContent,
+                $sharedSpace->channel_id,
+                $sharedSpace->id,
+                User::find($operation->user_id)
+            ));
+        }
+    }
+    
+    /**
+     * Apply an operation to the original document
+     */
+    private function applyOperationToOriginal($space, $operation, $content)
+    {
+        // Get the original space
+        $originalSpace = CollaborativeSpace::find($space->shared_from_id);
+        if (!$originalSpace) {
+            return;
+        }
+        
+        // Get the original content
+        $originalContent = $originalSpace->contents()->latest()->first();
+        if (!$originalContent) {
+            return;
+        }
+        
+        // Apply the operation
+        $newContentData = $operation->apply($originalContent->content_data);
+        $originalContent->content_data = $newContentData;
+        $originalContent->version++;
+        $originalContent->save();
+        
+        // Update the original space
+        $originalSpace->touch();
+        
+        // Broadcast the operation to all connected clients in the original channel
+        $originalOperation = new Operation([
+            'content_id' => $originalContent->id,
+            'user_id' => $operation->user_id,
+            'type' => $operation->type,
+            'position' => $operation->position,
+            'length' => $operation->length,
+            'text' => $operation->text,
+            'version' => $originalContent->version - 1,
+            'meta' => $operation->meta
+        ]);
+        
+        broadcast(new CollaborationOperation(
+            $originalOperation,
+            $originalContent,
+            $originalSpace->channel_id,
+            $originalSpace->id,
+            User::find($operation->user_id)
+        ));
     }
 }

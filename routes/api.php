@@ -35,6 +35,7 @@ use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\FileController;
+use App\Http\Controllers\WaitlistController;
 
 /*
 |--------------------------------------------------------------------------
@@ -46,14 +47,16 @@ use App\Http\Controllers\FileController;
 | be assigned to the "api" middleware group. Make something great!
 |
 */
-// Public route to view a shared post
+// Public routes
 Route::post('/cloudinary/notification', function (Request $request) {
     Log::info('Cloudinary notification received', ['data' => $request->all()]);
     return response()->json(['status' => 'success']);
 });
-//
 Route::get('/posts/shared/{shareKey}', [PostController::class, 'viewSharedPost'])
      ->name('shared.post');
+
+// Waitlist route (public)
+Route::post('/waitlist', [WaitlistController::class, 'store']);
 
 // Define file upload routes with specific throttling middleware
 Route::middleware(['auth:sanctum', 'file.upload'])->group(function () {
@@ -535,6 +538,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/bank-info', [App\Http\Controllers\EducatorEarningsController::class, 'updateBankInfo']);
         Route::get('/', [App\Http\Controllers\EducatorEarningsController::class, 'getEarnings']);
         Route::get('/{splitId}', [App\Http\Controllers\EducatorEarningsController::class, 'getEarningDetails']);
+    });
+
+    // Admin waitlist routes
+    Route::middleware('admin')->group(function () {
+        Route::get('/admin/waitlist', [WaitlistController::class, 'index']);
+        Route::post('/admin/waitlist/send-email', [WaitlistController::class, 'sendEmail']);
     });
 });
 
