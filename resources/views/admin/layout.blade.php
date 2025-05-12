@@ -215,7 +215,11 @@
                         <i class="fa-solid fa-book-open w-5 h-5 mr-3"></i>
                         <span>Libraries</span>
                     </a>
-                    <a href="{{ route('admin.reports') }}" class="sidebar-item {{ request()->routeIs('admin.reports.*') ? 'active' : '' }} animate-slide-in stagger-5">
+                    <a href="{{ route('admin.waitlist') }}" class="sidebar-item {{ request()->routeIs('admin.waitlist') ? 'active' : '' }} animate-slide-in stagger-5">
+                        <i class="fa-solid fa-user-plus w-5 h-5 mr-3"></i>
+                        <span>Waitlist</span>
+                    </a>
+                    <a href="{{ route('admin.reports') }}" class="sidebar-item {{ request()->routeIs('admin.reports.*') ? 'active' : '' }} animate-slide-in stagger-6">
                         <i class="fa-solid fa-flag w-5 h-5 mr-3"></i>
                         <span>Reports</span>
                     </a>

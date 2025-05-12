@@ -112,6 +112,19 @@ class AdminAuthController extends Controller
             $pendingLibraries = collect(); // Empty collection if error
         }
         
+        // Get waitlist stats
+        try {
+            $totalWaitlist = \App\Models\Waitlist::count();
+            $waitlistThisWeek = \App\Models\Waitlist::where('created_at', '>=', $carbon->now()->subWeek())->count();
+            $recentWaitlistEntries = \App\Models\Waitlist::orderBy('created_at', 'desc')->limit(5)->get();
+            $totalWaitlistEmails = \App\Models\WaitlistEmail::count();
+        } catch (\Exception $e) {
+            $totalWaitlist = 0;
+            $waitlistThisWeek = 0;
+            $recentWaitlistEntries = collect();
+            $totalWaitlistEmails = 0;
+        }
+        
         // Compile stats for the dashboard
         $stats = [
             'users' => [
@@ -130,6 +143,11 @@ class AdminAuthController extends Controller
             'revenue' => [
                 'total' => $totalRevenue,
                 'this_month' => $revenueThisMonth,
+            ],
+            'waitlist' => [
+                'total' => $totalWaitlist,
+                'new_this_week' => $waitlistThisWeek,
+                'total_emails' => $totalWaitlistEmails,
             ],
         ];
         
@@ -153,6 +171,11 @@ class AdminAuthController extends Controller
                 'total' => 0,
                 'this_month' => 0,
             ],
+            'waitlist' => [
+                'total' => 0,
+                'new_this_week' => 0,
+                'total_emails' => 0,
+            ],
         ];
         
         // Merge default stats with actual stats to ensure all keys exist
@@ -162,7 +185,8 @@ class AdminAuthController extends Controller
         return view('admin.dashboard', [
             'stats' => $mergedStats,
             'recentUsers' => $recentUsers,
-            'pendingLibraries' => $pendingLibraries ?? collect()
+            'pendingLibraries' => $pendingLibraries ?? collect(),
+            'recentWaitlistEntries' => $recentWaitlistEntries ?? collect()
         ]);
     }
 
@@ -211,6 +235,17 @@ class AdminAuthController extends Controller
             $revenueThisMonth = 0;
         }
         
+        // Get waitlist stats
+        try {
+            $totalWaitlist = \App\Models\Waitlist::count();
+            $waitlistThisWeek = \App\Models\Waitlist::where('created_at', '>=', $carbon->now()->subWeek())->count();
+            $totalWaitlistEmails = \App\Models\WaitlistEmail::count();
+        } catch (\Exception $e) {
+            $totalWaitlist = 0;
+            $waitlistThisWeek = 0;
+            $totalWaitlistEmails = 0;
+        }
+        
         // Compile stats for the CSV
         $stats = [
             'Date' => $carbon->toDateString(),
@@ -225,6 +260,9 @@ class AdminAuthController extends Controller
             'Pending Libraries' => $pendingLibraries,
             'Total Revenue' => $totalRevenue,
             'Revenue This Month' => $revenueThisMonth,
+            'Total Waitlist' => $totalWaitlist,
+            'New Waitlist This Week' => $waitlistThisWeek,
+            'Total Waitlist Emails' => $totalWaitlistEmails,
         ];
         
         // Generate CSV content

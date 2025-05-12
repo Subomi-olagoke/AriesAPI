@@ -1,4 +1,4 @@
-@extends('admin.layout')
+@extends('admin.dashboard-layout')
 
 @section('title', 'Library Details')
 

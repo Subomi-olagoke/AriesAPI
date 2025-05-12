@@ -16,16 +16,16 @@
                     },
                     colors: {
                         'primary': {
-                            50: '#f5f5f5',
-                            100: '#ebebeb',
-                            200: '#d6d6d6',
-                            300: '#b3b3b3',
-                            400: '#8c8c8c',
-                            500: '#666666',
-                            600: '#4d4d4d',
-                            700: '#333333',
-                            800: '#1a1a1a',
-                            900: '#0a0a0a',
+                            50: '#f6f8fe',
+                            100: '#edf1fe',
+                            200: '#d6e0fc',
+                            300: '#b3c6f9',
+                            400: '#849ff4',
+                            500: '#5a78ee',
+                            600: '#3f5ae3',
+                            700: '#324ad0',
+                            800: '#2b3ca9',
+                            900: '#273782',
                         },
                         'neutral': {
                             50: '#f9f9f9',
@@ -104,11 +104,11 @@
         <div class="bg-white rounded-lg border border-neutral-200 shadow-md p-8 animate-slide-down">
             <div class="text-center mb-6">
                 <div class="flex justify-center mb-4">
-                    <div class="w-16 h-16 bg-primary-800 rounded-full flex items-center justify-center animate-float">
+                    <div class="w-16 h-16 bg-primary-600 rounded-full flex items-center justify-center animate-float">
                         <i class="fa-solid fa-book-open text-white text-2xl"></i>
                     </div>
                 </div>
-                <h1 class="text-2xl font-semibold text-primary-800">Alexandria Admin</h1>
+                <h1 class="text-2xl font-semibold text-primary-700">Alexandria Admin</h1>
                 <p class="mt-2 text-sm text-neutral-500">Sign in to access your admin dashboard</p>
             </div>
             
@@ -162,7 +162,7 @@
 
                 <div>
                     <button type="submit" 
-                        class="login-btn w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-800 hover:bg-primary-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-700">
+                        class="login-btn w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
                         Sign in to Dashboard
                     </button>
                 </div>

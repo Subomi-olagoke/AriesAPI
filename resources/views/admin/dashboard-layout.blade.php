@@ -150,6 +150,9 @@
                     <a href="{{ route('admin.content') }}" class="px-3 py-2 rounded-md {{ request()->routeIs('admin.content') ? 'bg-primary-100 text-primary-700' : 'bg-white hover:bg-neutral-50 text-neutral-700' }} font-medium text-sm">
                         <i class="fa-solid fa-file-lines mr-1"></i> Content
                     </a>
+                    <a href="{{ route('admin.waitlist') }}" class="px-3 py-2 rounded-md {{ request()->routeIs('admin.waitlist') ? 'bg-primary-100 text-primary-700' : 'bg-white hover:bg-neutral-50 text-neutral-700' }} font-medium text-sm">
+                        <i class="fa-solid fa-user-plus mr-1"></i> Waitlist
+                    </a>
                     <a href="{{ route('admin.reports') }}" class="px-3 py-2 rounded-md {{ request()->routeIs('admin.reports') ? 'bg-primary-100 text-primary-700' : 'bg-white hover:bg-neutral-50 text-neutral-700' }} font-medium text-sm">
                         <i class="fa-solid fa-flag mr-1"></i> Reports
                     </a>
