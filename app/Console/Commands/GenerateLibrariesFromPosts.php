@@ -73,7 +73,8 @@ class GenerateLibrariesFromPosts extends Command
                 if (isset($result['libraries']) && is_array($result['libraries'])) {
                     $this->line("\nCreated libraries:");
                     foreach ($result['libraries'] as $index => $library) {
-                        $this->line("{$index + 1}. {$library->name} - {$library->description}");
+                        $index++;
+                        $this->line("{$index}. {$library->name} - {$library->description}");
                     }
                 }
                 
