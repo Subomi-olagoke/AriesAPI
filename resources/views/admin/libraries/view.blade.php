@@ -87,10 +87,41 @@
                 </div>
                 @endif
                 
+                @if($library->ai_generated)
+                <div class="flex justify-between">
+                    <span class="text-sm text-neutral-600">AI Generated</span>
+                    <span class="text-sm font-medium text-purple-600">Yes</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-neutral-600">Generation Date</span>
+                    <span class="text-sm font-medium">{{ $library->ai_generation_date ? $library->ai_generation_date->format('M d, Y') : 'Unknown' }}</span>
+                </div>
+                @endif
+                
+                @if($library->has_ai_cover)
+                <div class="flex justify-between">
+                    <span class="text-sm text-neutral-600">AI Cover</span>
+                    <span class="text-sm font-medium">{{ $library->ai_model_used ?? 'AI Generated' }}</span>
+                </div>
+                @endif
+                
                 @if($library->has_ai_cover && $library->cover_prompt)
                 <div>
                     <span class="text-sm text-neutral-600">Cover Image Prompt</span>
                     <p class="text-sm text-neutral-500 mt-1">{{ $library->cover_prompt }}</p>
+                </div>
+                @endif
+                
+                @if($library->keywords && count($library->keywords) > 0)
+                <div>
+                    <span class="text-sm text-neutral-600">Keywords</span>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        @foreach($library->keywords as $keyword)
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                            {{ $keyword }}
+                        </span>
+                        @endforeach
+                    </div>
                 </div>
                 @endif
             </div>
@@ -213,17 +244,21 @@
 <div id="coverModal" class="hidden fixed inset-0 bg-neutral-900 bg-opacity-50 flex items-center justify-center z-50">
     <div class="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
         <h3 class="text-lg font-medium text-neutral-900 mb-4">Generate Cover Image</h3>
-        <p class="text-neutral-600 mb-4">Generate an AI cover image for this library using GPT-4o's DALL-E model?</p>
+        <p class="text-neutral-600 mb-4">Generate an AI cover image for this library using GPT-4o?</p>
+        
+        <div class="mt-2 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700">
+            <p><i class="fa-solid fa-wand-magic-sparkles mr-2"></i>This will generate an abstract image that represents the library's content using GPT-4o's image generation capabilities.</p>
+        </div>
         
         <div class="mt-2 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-700">
-            <p><i class="fa-solid fa-triangle-exclamation mr-2"></i>This will use OpenAI API credits and may take a few moments to generate.</p>
+            <p><i class="fa-solid fa-triangle-exclamation mr-2"></i>This will use OpenAI API credits and may take up to 1 minute to generate the image.</p>
         </div>
         
         <div class="flex justify-end space-x-3">
             <button type="button" class="btn btn-secondary" onclick="closeCoverModal()">Cancel</button>
             <form action="{{ route('admin.libraries.generate-cover', $library->id) }}" method="POST">
                 @csrf
-                <button type="submit" class="btn btn-primary">Generate Cover</button>
+                <button type="submit" class="btn btn-primary">Generate Cover with GPT-4o</button>
             </form>
         </div>
     </div>

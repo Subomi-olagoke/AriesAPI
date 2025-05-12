@@ -15,6 +15,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AdminController extends Controller
 {
@@ -1059,5 +1060,446 @@ class AdminController extends Controller
             
             throw $e;
         }
+    }
+    
+    /**
+     * Display the content dashboard
+     *
+     * @return \Illuminate\View\View
+     */
+    public function contentDashboard()
+    {
+        if (!$this->isAdmin()) {
+            return redirect()->route('admin.login');
+        }
+        
+        $carbon = new \Carbon\Carbon();
+        
+        // Get content stats
+        $totalPosts = Post::count();
+        $postsToday = Post::whereDate('created_at', $carbon->today())->count();
+        $postsThisWeek = Post::where('created_at', '>=', $carbon->now()->subWeek())->count();
+        $postsThisMonth = Post::where('created_at', '>=', $carbon->now()->startOfMonth())->count();
+        
+        $totalCourses = Course::count();
+        $coursesThisMonth = Course::where('created_at', '>=', $carbon->now()->startOfMonth())->count();
+        
+        $totalEnrollments = \App\Models\CourseEnrollment::count();
+        $enrollmentsThisMonth = \App\Models\CourseEnrollment::where('created_at', '>=', $carbon->now()->startOfMonth())->count();
+        
+        // Get library stats
+        try {
+            $totalLibraries = \App\Models\OpenLibrary::count();
+            $pendingLibraries = \App\Models\OpenLibrary::where('approval_status', 'pending')->count();
+            $approvedLibraries = \App\Models\OpenLibrary::where('approval_status', 'approved')->count();
+            $rejectedLibraries = \App\Models\OpenLibrary::where('approval_status', 'rejected')->count();
+            
+            $recentLibraries = \App\Models\OpenLibrary::orderBy('created_at', 'desc')
+                ->take(10)
+                ->get();
+        } catch (\Exception $e) {
+            $totalLibraries = 0;
+            $pendingLibraries = 0;
+            $approvedLibraries = 0;
+            $rejectedLibraries = 0;
+            $recentLibraries = collect();
+        }
+        
+        // Get top content
+        $topPosts = Post::withCount('likes')
+            ->orderBy('likes_count', 'desc')
+            ->take(10)
+            ->get();
+            
+        $topCourses = Course::withCount('enrollments')
+            ->orderBy('enrollments_count', 'desc')
+            ->take(10)
+            ->get();
+        
+        // Get content by topics
+        $contentByTopic = DB::table('topics')
+            ->select(
+                'topics.id',
+                'topics.name',
+                DB::raw('COUNT(DISTINCT courses.id) as courses_count'),
+                DB::raw('COUNT(DISTINCT posts.id) as posts_count')
+            )
+            ->leftJoin('courses', 'topics.id', '=', 'courses.topic_id')
+            ->leftJoin('posts', function ($join) {
+                $join->on('topics.id', '=', DB::raw('JSON_CONTAINS(posts.topics, CAST(topics.id AS CHAR))'));
+            })
+            ->groupBy('topics.id', 'topics.name')
+            ->orderByRaw('(COUNT(DISTINCT courses.id) + COUNT(DISTINCT posts.id)) DESC')
+            ->limit(10)
+            ->get();
+            
+        // Get content growth over time
+        $postGrowth = Post::where('created_at', '>=', $carbon->now()->subMonths(12))
+            ->select(
+                DB::raw('DATE_FORMAT(created_at, "%Y-%m") as month'),
+                DB::raw('COUNT(*) as count')
+            )
+            ->groupBy('month')
+            ->orderBy('month')
+            ->get();
+            
+        $courseGrowth = Course::where('created_at', '>=', $carbon->now()->subMonths(12))
+            ->select(
+                DB::raw('DATE_FORMAT(created_at, "%Y-%m") as month'),
+                DB::raw('COUNT(*) as count')
+            )
+            ->groupBy('month')
+            ->orderBy('month')
+            ->get();
+            
+        $libraryGrowth = [];
+        try {
+            $libraryGrowth = \App\Models\OpenLibrary::where('created_at', '>=', $carbon->now()->subMonths(12))
+                ->select(
+                    DB::raw('DATE_FORMAT(created_at, "%Y-%m") as month'),
+                    DB::raw('COUNT(*) as count')
+                )
+                ->groupBy('month')
+                ->orderBy('month')
+                ->get();
+        } catch (\Exception $e) {
+            $libraryGrowth = collect();
+        }
+        
+        return view('admin.content', [
+            'stats' => [
+                'posts' => [
+                    'total' => $totalPosts,
+                    'today' => $postsToday,
+                    'this_week' => $postsThisWeek,
+                    'this_month' => $postsThisMonth,
+                ],
+                'courses' => [
+                    'total' => $totalCourses,
+                    'this_month' => $coursesThisMonth,
+                ],
+                'enrollments' => [
+                    'total' => $totalEnrollments,
+                    'this_month' => $enrollmentsThisMonth,
+                ],
+                'libraries' => [
+                    'total' => $totalLibraries,
+                    'pending' => $pendingLibraries,
+                    'approved' => $approvedLibraries,
+                    'rejected' => $rejectedLibraries,
+                ],
+            ],
+            'topPosts' => $topPosts,
+            'topCourses' => $topCourses,
+            'contentByTopic' => $contentByTopic,
+            'postGrowth' => $postGrowth,
+            'courseGrowth' => $courseGrowth,
+            'libraryGrowth' => $libraryGrowth,
+            'recentLibraries' => $recentLibraries,
+        ]);
+    }
+    
+    /**
+     * Export content statistics as CSV
+     *
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     */
+    public function exportContentStats()
+    {
+        if (!$this->isAdmin()) {
+            return response()->json([
+                'message' => 'Unauthorized'
+            ], 403);
+        }
+        
+        $carbon = new \Carbon\Carbon();
+        
+        // Get content stats
+        $totalPosts = Post::count();
+        $postsToday = Post::whereDate('created_at', $carbon->today())->count();
+        $postsThisWeek = Post::where('created_at', '>=', $carbon->now()->subWeek())->count();
+        $postsThisMonth = Post::where('created_at', '>=', $carbon->now()->startOfMonth())->count();
+        
+        $totalCourses = Course::count();
+        $coursesThisMonth = Course::where('created_at', '>=', $carbon->now()->startOfMonth())->count();
+        
+        $totalEnrollments = \App\Models\CourseEnrollment::count();
+        $enrollmentsThisMonth = \App\Models\CourseEnrollment::where('created_at', '>=', $carbon->now()->startOfMonth())->count();
+        
+        // Get library stats
+        try {
+            $totalLibraries = \App\Models\OpenLibrary::count();
+            $pendingLibraries = \App\Models\OpenLibrary::where('approval_status', 'pending')->count();
+            $approvedLibraries = \App\Models\OpenLibrary::where('approval_status', 'approved')->count();
+            $rejectedLibraries = \App\Models\OpenLibrary::where('approval_status', 'rejected')->count();
+        } catch (\Exception $e) {
+            $totalLibraries = 0;
+            $pendingLibraries = 0;
+            $approvedLibraries = 0;
+            $rejectedLibraries = 0;
+        }
+        
+        // Compile stats for the CSV
+        $stats = [
+            'Date' => $carbon->toDateString(),
+            'Total Posts' => $totalPosts,
+            'Posts Today' => $postsToday,
+            'Posts This Week' => $postsThisWeek,
+            'Posts This Month' => $postsThisMonth,
+            'Total Courses' => $totalCourses,
+            'Courses This Month' => $coursesThisMonth,
+            'Total Enrollments' => $totalEnrollments,
+            'Enrollments This Month' => $enrollmentsThisMonth,
+            'Total Libraries' => $totalLibraries,
+            'Pending Libraries' => $pendingLibraries,
+            'Approved Libraries' => $approvedLibraries,
+            'Rejected Libraries' => $rejectedLibraries,
+        ];
+        
+        // Generate CSV content
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="content-stats-' . $carbon->toDateString() . '.csv"',
+        ];
+        
+        $callback = function() use ($stats) {
+            $file = fopen('php://output', 'w');
+            
+            // Add headers
+            fputcsv($file, array_keys($stats));
+            
+            // Add values
+            fputcsv($file, array_values($stats));
+            
+            fclose($file);
+        };
+        
+        return response()->stream($callback, 200, $headers);
+    }
+    
+    /**
+     * Display the reports dashboard
+     *
+     * @return \Illuminate\View\View
+     */
+    public function reportsDashboard()
+    {
+        if (!$this->isAdmin()) {
+            return redirect()->route('admin.login');
+        }
+        
+        $pendingReports = Report::where('status', 'pending')->count();
+        $resolvedReports = Report::where('status', 'resolved')->count();
+        $rejectedReports = Report::where('status', 'rejected')->count();
+        $totalReports = Report::count();
+        
+        $recentReports = Report::with(['reporter', 'reportable'])
+            ->orderBy('created_at', 'desc')
+            ->take(10)
+            ->get();
+            
+        // Group reports by type
+        $reportsByType = Report::select('reportable_type', DB::raw('count(*) as count'))
+            ->groupBy('reportable_type')
+            ->get()
+            ->map(function($item) {
+                // Get clean type name without namespace
+                $typeParts = explode('\\', $item->reportable_type);
+                $item->type_name = end($typeParts);
+                return $item;
+            });
+            
+        return view('admin.reports', [
+            'pendingReports' => $pendingReports,
+            'resolvedReports' => $resolvedReports,
+            'rejectedReports' => $rejectedReports,
+            'totalReports' => $totalReports,
+            'recentReports' => $recentReports,
+            'reportsByType' => $reportsByType
+        ]);
+    }
+    
+    /**
+     * Display all reports with pagination
+     *
+     * @param Request $request
+     * @return \Illuminate\View\View
+     */
+    public function allReports(Request $request)
+    {
+        if (!$this->isAdmin()) {
+            return redirect()->route('admin.login');
+        }
+        
+        $query = Report::with(['reporter', 'reportable']);
+        
+        // Filter by status if provided
+        if ($request->has('status') && in_array($request->status, ['pending', 'resolved', 'rejected'])) {
+            $query->where('status', $request->status);
+        }
+        
+        // Filter by type if provided
+        if ($request->has('type')) {
+            $query->where('reportable_type', 'LIKE', '%' . $request->type . '%');
+        }
+        
+        // Search by reporter name if provided
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->whereHas('reporter', function($q) use ($search) {
+                $q->where('first_name', 'LIKE', '%' . $search . '%')
+                  ->orWhere('last_name', 'LIKE', '%' . $search . '%')
+                  ->orWhere('email', 'LIKE', '%' . $search . '%');
+            });
+        }
+        
+        $reports = $query->orderBy('created_at', 'desc')
+            ->paginate(20)
+            ->withQueryString();
+        
+        return view('admin.reports-all', [
+            'reports' => $reports,
+            'pendingCount' => Report::where('status', 'pending')->count(),
+            'resolvedCount' => Report::where('status', 'resolved')->count(),
+            'rejectedCount' => Report::where('status', 'rejected')->count(),
+            'filters' => [
+                'status' => $request->status ?? '',
+                'type' => $request->type ?? '',
+                'search' => $request->search ?? ''
+            ]
+        ]);
+    }
+    
+    /**
+     * View a specific report
+     *
+     * @param int $id
+     * @return \Illuminate\View\View
+     */
+    public function viewReport($id)
+    {
+        if (!$this->isAdmin()) {
+            return redirect()->route('admin.login');
+        }
+        
+        $report = Report::with(['reporter', 'reportable'])->findOrFail($id);
+        
+        return view('admin.report-view', [
+            'report' => $report
+        ]);
+    }
+    
+    /**
+     * Update report status
+     *
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function updateReportStatus(Request $request, $id)
+    {
+        if (!$this->isAdmin()) {
+            return redirect()->route('admin.login');
+        }
+        
+        $request->validate([
+            'status' => 'required|in:pending,resolved,rejected',
+            'notes' => 'nullable|string|max:1000'
+        ]);
+        
+        $report = Report::findOrFail($id);
+        $report->status = $request->status;
+        
+        if ($request->has('notes')) {
+            $report->admin_notes = $request->notes;
+        }
+        
+        $report->save();
+        
+        return redirect()->back()->with('success', 'Report status updated successfully');
+    }
+    
+    /**
+     * Display the settings dashboard
+     *
+     * @return \Illuminate\View\View
+     */
+    public function settingsDashboard()
+    {
+        if (!$this->isAdmin()) {
+            return redirect()->route('admin.login');
+        }
+        
+        // Get system settings
+        $appName = config('app.name');
+        $appEnv = config('app.env');
+        $appDebug = config('app.debug');
+        $appUrl = config('app.url');
+        
+        // Mail settings
+        $mailDriver = config('mail.default');
+        $mailHost = config('mail.mailers.smtp.host');
+        $mailPort = config('mail.mailers.smtp.port');
+        $mailEncryption = config('mail.mailers.smtp.encryption');
+        $mailFromAddress = config('mail.from.address');
+        
+        // Third-party services
+        $cloudinaryEnabled = !empty(config('cloudinary.cloud_name'));
+        $paystackEnabled = !empty(config('services.paystack.secret_key'));
+        $googleEnabled = !empty(config('services.google.client_id'));
+        
+        // AI services
+        $openaiEnabled = !empty(config('services.openai.api_key'));
+        $aiFeatureEnabled = config('ai.features.personalized_learning_paths.enabled', false);
+        
+        // File storage
+        $fileSystem = config('filesystems.default');
+        $s3Enabled = $fileSystem === 's3' && !empty(config('filesystems.disks.s3.key'));
+        
+        return view('admin.settings', [
+            'app' => [
+                'name' => $appName,
+                'environment' => $appEnv,
+                'debug' => $appDebug,
+                'url' => $appUrl,
+                'version' => '1.0.0', // You might want to get this from somewhere else
+            ],
+            'mail' => [
+                'driver' => $mailDriver,
+                'host' => $mailHost,
+                'port' => $mailPort,
+                'encryption' => $mailEncryption,
+                'from_address' => $mailFromAddress,
+                'enabled' => !empty($mailHost),
+            ],
+            'services' => [
+                'cloudinary' => [
+                    'enabled' => $cloudinaryEnabled,
+                    'cloud_name' => config('cloudinary.cloud_name'),
+                ],
+                'paystack' => [
+                    'enabled' => $paystackEnabled,
+                    'public_key' => config('services.paystack.public_key'),
+                ],
+                'google' => [
+                    'enabled' => $googleEnabled,
+                ],
+                'openai' => [
+                    'enabled' => $openaiEnabled,
+                    'model' => config('services.openai.model', 'gpt-3.5-turbo'),
+                ],
+            ],
+            'storage' => [
+                'driver' => $fileSystem,
+                's3_enabled' => $s3Enabled,
+                's3_bucket' => config('filesystems.disks.s3.bucket'),
+                's3_region' => config('filesystems.disks.s3.region'),
+            ],
+            'features' => [
+                'ai_learning_paths' => config('ai.features.personalized_learning_paths.enabled', false),
+                'ai_teaching_assistant' => config('ai.features.ai_teaching_assistant.enabled', false),
+                'social_learning' => config('ai.features.social_learning.enabled', false),
+            ],
+        ]);
     }
 }

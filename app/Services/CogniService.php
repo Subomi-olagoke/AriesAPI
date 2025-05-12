@@ -307,4 +307,95 @@ class CogniService
         
         return $this->askQuestion($prompt);
     }
+    
+    /**
+     * Categorize a collection of posts into library topics
+     * 
+     * @param array $posts Array of posts to categorize
+     * @param int $minPostsPerLibrary Minimum number of posts required for a library (default: 5)
+     * @return array Response with success/error status and categorized libraries
+     */
+    public function categorizePosts(array $posts, int $minPostsPerLibrary = 5): array
+    {
+        $prompt = "You will be given a collection of posts from an education platform. Your task is to analyze these posts and group them into coherent libraries or collections based on their topics, themes, and content. Each library should have a minimum of {$minPostsPerLibrary} posts.\n\n";
+        $prompt .= "Here are the posts to categorize:\n\n";
+        
+        foreach ($posts as $index => $post) {
+            $id = $post['id'] ?? $index;
+            $title = $post['title'] ?? 'Untitled';
+            $content = $post['body'] ?? $post['content'] ?? '';
+            
+            // Truncate content if it's too long
+            if (strlen($content) > 500) {
+                $content = substr($content, 0, 500) . '...';
+            }
+            
+            $prompt .= "Post ID: {$id}\n";
+            $prompt .= "Title: {$title}\n";
+            $prompt .= "Content: {$content}\n\n";
+        }
+        
+        $prompt .= "For each library you identify, please provide:\n";
+        $prompt .= "1. A descriptive name for the library\n";
+        $prompt .= "2. A brief description of what this library covers\n";
+        $prompt .= "3. A list of post IDs that belong in this library\n";
+        $prompt .= "4. A short explanation of why these posts are grouped together\n";
+        $prompt .= "5. 3-5 relevant keywords for this library\n\n";
+        
+        $prompt .= "Format your response as a JSON object with the following structure:\n";
+        $prompt .= "{\n";
+        $prompt .= "  \"libraries\": [\n";
+        $prompt .= "    {\n";
+        $prompt .= "      \"name\": \"Library name\",\n";
+        $prompt .= "      \"description\": \"A clear description of this library's focus\",\n";
+        $prompt .= "      \"post_ids\": [1, 2, 3, 4, 5],\n";
+        $prompt .= "      \"rationale\": \"Why these posts belong together\",\n";
+        $prompt .= "      \"keywords\": [\"keyword1\", \"keyword2\", \"keyword3\"]\n";
+        $prompt .= "    }\n";
+        $prompt .= "  ]\n";
+        $prompt .= "}\n\n";
+        
+        $prompt .= "Important notes:\n";
+        $prompt .= "- Only create libraries with at least {$minPostsPerLibrary} posts\n";
+        $prompt .= "- A post can belong to multiple libraries if relevant\n";
+        $prompt .= "- Focus on educational value and coherence when creating libraries\n";
+        $prompt .= "- Use clear, descriptive names that reflect the content\n";
+        
+        $result = $this->askQuestion($prompt);
+        
+        if (!$result['success']) {
+            return $result;
+        }
+        
+        try {
+            // Extract JSON from the answer
+            $jsonStart = strpos($result['answer'], '{');
+            $jsonEnd = strrpos($result['answer'], '}') + 1;
+            $jsonStr = substr($result['answer'], $jsonStart, $jsonEnd - $jsonStart);
+            
+            $categorizedData = json_decode($jsonStr, true);
+            
+            if (json_last_error() === JSON_ERROR_NONE && isset($categorizedData['libraries'])) {
+                return [
+                    'success' => true,
+                    'libraries' => $categorizedData['libraries'],
+                    'code' => 200
+                ];
+            }
+            
+            // Fallback if JSON parsing fails
+            return [
+                'success' => true,
+                'answer' => $result['answer'],
+                'code' => 200
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Post categorization error: ' . $e->getMessage());
+            return [
+                'success' => true,
+                'answer' => $result['answer'],
+                'code' => 200
+            ];
+        }
+    }
 }

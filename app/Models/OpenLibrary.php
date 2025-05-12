@@ -14,19 +14,30 @@ class OpenLibrary extends Model
         'description',
         'type',
         'thumbnail_url',
+        'cover_image_url',
         'course_id',
         'criteria',
+        'keywords',
         'is_approved',
         'approval_status',
         'approval_date',
-        'approved_by'
+        'approved_by',
+        'rejection_reason',
+        'cover_prompt',
+        'ai_generated',
+        'ai_generation_date',
+        'ai_model_used',
+        'has_ai_cover'
     ];
 
     protected $casts = [
         'criteria' => 'array',
+        'keywords' => 'array',
         'is_approved' => 'boolean',
         'has_ai_cover' => 'boolean',
+        'ai_generated' => 'boolean',
         'approval_date' => 'datetime',
+        'ai_generation_date' => 'datetime',
     ];
 
     /**

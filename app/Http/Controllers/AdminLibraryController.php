@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\OpenLibrary;
 use App\Models\LibraryContent;
+use App\Models\Post;
 use App\Models\User;
 use App\Services\LibraryApiService;
+use App\Services\OpenLibraryService;
+use App\Services\AICoverImageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -21,11 +24,26 @@ class AdminLibraryController extends Controller
     protected $libraryApiService;
     
     /**
+     * The open library service for AI-powered functions
+     */
+    protected $openLibraryService;
+    
+    /**
+     * The AI cover image service
+     */
+    protected $coverImageService;
+    
+    /**
      * Create a new controller instance
      */
-    public function __construct(LibraryApiService $libraryApiService)
-    {
+    public function __construct(
+        LibraryApiService $libraryApiService,
+        OpenLibraryService $openLibraryService,
+        AICoverImageService $coverImageService
+    ) {
         $this->libraryApiService = $libraryApiService;
+        $this->openLibraryService = $openLibraryService;
+        $this->coverImageService = $coverImageService;
     }
     
     /**
@@ -619,6 +637,126 @@ class AdminLibraryController extends Controller
             
             return redirect()->route('admin.libraries.view', $id)
                 ->with('warning', 'Content removed from library locally but failed to sync with API due to error: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Show the form for generating AI libraries from posts
+     */
+    public function showGenerateLibrariesForm()
+    {
+        // Get total post count for reference
+        $totalPostCount = Post::count();
+        $recentPostCount = Post::where('created_at', '>=', now()->subDays(30))->count();
+        
+        // Get recent posts with high engagement for preview
+        $topPosts = Post::where('created_at', '>=', now()->subDays(30))
+            ->withCount(['likes', 'comments'])
+            ->orderByRaw('likes_count + comments_count DESC')
+            ->take(10)
+            ->get();
+        
+        return view('admin.libraries.generate', [
+            'totalPostCount' => $totalPostCount,
+            'recentPostCount' => $recentPostCount,
+            'topPosts' => $topPosts
+        ]);
+    }
+    
+    /**
+     * Generate libraries from posts using AI
+     */
+    public function generateLibraries(Request $request)
+    {
+        $request->validate([
+            'days' => 'required|integer|min:1|max:365',
+            'min_posts' => 'required|integer|min:5|max:100',
+            'auto_approve' => 'nullable|boolean'
+        ]);
+        
+        $days = $request->input('days', 30);
+        $minPosts = $request->input('min_posts', 10);
+        $autoApprove = $request->boolean('auto_approve', false);
+        
+        try {
+            // Get posts based on filters
+            $posts = Post::where('created_at', '>=', now()->subDays($days));
+            
+            // Add additional filters if provided
+            if ($request->has('min_likes')) {
+                $posts->has('likes', '>=', $request->min_likes);
+            }
+            
+            if ($request->has('min_comments')) {
+                $posts->has('comments', '>=', $request->min_comments);
+            }
+            
+            $posts = $posts->orderBy('created_at', 'desc')
+                ->limit(200)
+                ->get();
+            
+            // Check if we have enough posts
+            if ($posts->count() < $minPosts) {
+                return redirect()->back()->with('error', 
+                    "Not enough posts found with the current filters. Found {$posts->count()}, but need at least {$minPosts}."
+                );
+            }
+            
+            // Generate libraries
+            $result = $this->openLibraryService->createLibrariesFromPosts(
+                $posts,
+                $minPosts,
+                true, // Generate covers
+                $autoApprove
+            );
+            
+            if (!$result['success']) {
+                return redirect()->back()->with('error', 
+                    "Failed to generate libraries: " . ($result['message'] ?? 'Unknown error')
+                );
+            }
+            
+            $librariesCount = count($result['libraries'] ?? []);
+            return redirect()->route('admin.libraries.index')
+                ->with('success', "Successfully generated {$librariesCount} libraries from posts!");
+                
+        } catch (\Exception $e) {
+            Log::error('Error generating libraries from posts: ' . $e->getMessage());
+            return redirect()->back()->with('error', 
+                "An error occurred while generating libraries: " . $e->getMessage()
+            );
+        }
+    }
+    
+    /**
+     * Regenerate a cover image for a library
+     */
+    public function regenerateCoverImage($id)
+    {
+        $library = OpenLibrary::findOrFail($id);
+        
+        try {
+            // Generate a new cover image
+            $coverUrl = $this->coverImageService->generateCoverImage($library);
+            
+            if (!$coverUrl) {
+                return redirect()->back()->with('error', 'Failed to generate cover image');
+            }
+            
+            // Update the library
+            $library->cover_image_url = $coverUrl;
+            $library->thumbnail_url = $coverUrl;
+            $library->has_ai_cover = true;
+            $library->save();
+            
+            return redirect()->route('admin.libraries.view', $id)
+                ->with('success', 'Cover image regenerated successfully');
+                
+        } catch (\Exception $e) {
+            Log::error('Error regenerating library cover: ' . $e->getMessage());
+            return redirect()->back()->with('error', 
+                "An error occurred while regenerating the cover image: " . $e->getMessage()
+            );
         }
     }
 }

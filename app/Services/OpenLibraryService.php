@@ -7,11 +7,31 @@ use App\Models\LibraryContent;
 use App\Models\Course;
 use App\Models\Post;
 use App\Models\Topic;
+use App\Services\CogniService;
+use App\Services\AICoverImageService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class OpenLibraryService
 {
+    /**
+     * The Cogni service instance for AI analysis
+     */
+    protected $cogniService;
+    
+    /**
+     * The AI cover image service for generating library covers
+     */
+    protected $coverImageService;
+    
+    /**
+     * Create a new service instance
+     */
+    public function __construct(CogniService $cogniService, AICoverImageService $coverImageService)
+    {
+        $this->cogniService = $cogniService;
+        $this->coverImageService = $coverImageService;
+    }
     /**
      * Create a course-specific library that contains all materials from a course
      *
@@ -461,6 +481,176 @@ class OpenLibraryService
                 'content_type' => get_class($post),
                 'relevance_score' => 0.8
             ]);
+        }
+    }
+    
+    /**
+     * Create libraries from a collection of posts using AI categorization
+     *
+     * @param array|Collection $posts Collection of posts to categorize
+     * @param int $minPostsPerLibrary Minimum number of posts required for a library (default: 10)
+     * @param bool $generateCovers Whether to generate cover images for the libraries (default: true)
+     * @param bool $autoApprove Whether to automatically approve the libraries (default: false)
+     * @return array Response with success/error status and created libraries
+     */
+    public function createLibrariesFromPosts($posts, int $minPostsPerLibrary = 10, bool $generateCovers = true, bool $autoApprove = false)
+    {
+        try {
+            // Prepare posts for analysis
+            $postsForAnalysis = collect($posts)->map(function ($post) {
+                return [
+                    'id' => $post->id,
+                    'title' => $post->title ?? 'Untitled',
+                    'body' => $post->body ?? $post->content ?? '',
+                    'user_id' => $post->user_id,
+                    'created_at' => $post->created_at
+                ];
+            })->toArray();
+            
+            // Skip if there aren't enough posts
+            if (count($postsForAnalysis) < $minPostsPerLibrary) {
+                return [
+                    'success' => false,
+                    'message' => 'Not enough posts to create libraries. Minimum required: ' . $minPostsPerLibrary,
+                    'code' => 400
+                ];
+            }
+            
+            // Use Cogni to categorize posts into potential libraries
+            $cogniResult = $this->cogniService->categorizePosts($postsForAnalysis, $minPostsPerLibrary);
+            
+            if (!$cogniResult['success'] || !isset($cogniResult['libraries'])) {
+                Log::error('Failed to categorize posts with Cogni', [
+                    'message' => $cogniResult['message'] ?? 'Unknown error',
+                    'code' => $cogniResult['code'] ?? 500
+                ]);
+                
+                return [
+                    'success' => false,
+                    'message' => 'Failed to categorize posts for libraries',
+                    'code' => 500
+                ];
+            }
+            
+            // Start creating libraries based on Cogni's categorization
+            $createdLibraries = [];
+            
+            DB::beginTransaction();
+            
+            foreach ($cogniResult['libraries'] as $libraryData) {
+                // Create library
+                $library = new OpenLibrary();
+                $library->name = $libraryData['name'];
+                $library->description = $libraryData['description'];
+                $library->type = 'auto_cogni';
+                $library->criteria = [
+                    'post_ids' => $libraryData['post_ids'],
+                    'rationale' => $libraryData['rationale'],
+                    'keywords' => $libraryData['keywords'] ?? []
+                ];
+                $library->keywords = $libraryData['keywords'] ?? [];
+                $library->ai_generated = true;
+                $library->ai_generation_date = now();
+                $library->is_approved = $autoApprove;
+                $library->approval_status = $autoApprove ? 'approved' : 'pending';
+                $library->has_ai_cover = false;
+                $library->save();
+                
+                // Add posts to the library
+                foreach ($libraryData['post_ids'] as $postId) {
+                    $post = Post::find($postId);
+                    if ($post) {
+                        LibraryContent::create([
+                            'library_id' => $library->id,
+                            'content_id' => $post->id,
+                            'content_type' => Post::class,
+                            'relevance_score' => 1.0
+                        ]);
+                    }
+                }
+                
+                // Generate cover image if requested
+                if ($generateCovers) {
+                    $coverUrl = $this->coverImageService->generateCoverImage($library);
+                    if ($coverUrl) {
+                        $library->thumbnail_url = $coverUrl;
+                        $library->cover_image_url = $coverUrl;
+                        $library->has_ai_cover = true;
+                        $library->save();
+                    }
+                }
+                
+                $createdLibraries[] = $library;
+            }
+            
+            DB::commit();
+            
+            return [
+                'success' => true,
+                'libraries' => $createdLibraries,
+                'count' => count($createdLibraries),
+                'code' => 200
+            ];
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to create libraries from posts: ' . $e->getMessage());
+            
+            return [
+                'success' => false,
+                'message' => 'Failed to create libraries: ' . $e->getMessage(),
+                'code' => 500
+            ];
+        }
+    }
+    
+    /**
+     * Check for recent popular posts and create libraries if threshold is met
+     * 
+     * @param int $days Number of days to look back for posts
+     * @param int $minPosts Minimum number of posts required for categorization
+     * @param bool $autoApprove Whether to automatically approve created libraries
+     * @return array Result of the operation
+     */
+    public function checkAndCreateLibrariesFromRecentPosts(int $days = 7, int $minPosts = 10, bool $autoApprove = false)
+    {
+        try {
+            // Get recent posts with sufficient interactions
+            $recentPosts = Post::where('created_at', '>=', now()->subDays($days))
+                ->where(function($query) {
+                    // Posts with good interaction metrics
+                    $query->has('likes', '>=', 5)
+                          ->orHas('comments', '>=', 3);
+                })
+                ->orderBy('created_at', 'desc')
+                ->limit(100)
+                ->get();
+            
+            // If we have enough posts, create libraries
+            if ($recentPosts->count() >= $minPosts) {
+                return $this->createLibrariesFromPosts(
+                    $recentPosts, 
+                    $minPosts, 
+                    true, // Generate covers
+                    $autoApprove
+                );
+            }
+            
+            return [
+                'success' => false,
+                'message' => 'Not enough recent popular posts to create libraries',
+                'count' => $recentPosts->count(),
+                'min_required' => $minPosts,
+                'code' => 200
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error checking for recent posts to create libraries: ' . $e->getMessage());
+            
+            return [
+                'success' => false,
+                'message' => 'Error checking for recent posts: ' . $e->getMessage(),
+                'code' => 500
+            ];
         }
     }
 }

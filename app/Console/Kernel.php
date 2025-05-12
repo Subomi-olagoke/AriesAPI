@@ -15,6 +15,9 @@ class Kernel extends ConsoleKernel {
 		
 		// Update Cognition readlists for all users once a week (every Monday at 1am)
 		$schedule->command('cognition:update --batch=100 --max_items=5')->weekly()->mondays()->at('01:00');
+		
+		// Generate libraries from popular posts once a week (every Tuesday at 2am)
+		$schedule->command('libraries:generate-from-posts --days=7 --min-posts=10')->weekly()->tuesdays()->at('02:00');
 	}
 
 	protected $commands = [
@@ -23,6 +26,8 @@ class Kernel extends ConsoleKernel {
 		\App\Console\Commands\BackfillPostShareKeys::class,
 		\App\Console\Commands\SeedAlexPointsSystem::class,
 		\App\Console\Commands\UpdateCognitionReadlists::class,
+		\App\Console\Commands\GenerateLibrariesFromPosts::class,
+		\App\Console\Commands\GenerateOpenLibraries::class,
 	];
 
 	/**

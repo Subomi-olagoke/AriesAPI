@@ -4,6 +4,9 @@
 <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-semibold text-neutral-900">Content Libraries</h1>
     <div class="flex space-x-2">
+        <a href="{{ route('admin.libraries.generate-form') }}" class="btn btn-success">
+            <i class="fa-solid fa-wand-sparkles mr-2"></i> Generate with AI
+        </a>
         <a href="{{ route('admin.libraries.create') }}" class="btn btn-primary">
             <i class="fa-solid fa-plus mr-2"></i> Create Library
         </a>

@@ -201,11 +201,11 @@ Route::prefix('admin')->group(function () {
             Route::get('/{id}', [App\Http\Controllers\AdminLibraryController::class, 'viewLibrary'])->name('view');
             Route::post('/{id}/approve', [App\Http\Controllers\AdminLibraryController::class, 'approveLibrary'])->name('approve');
             Route::post('/{id}/reject', [App\Http\Controllers\AdminLibraryController::class, 'rejectLibrary'])->name('reject');
-            Route::post('/{id}/generate-cover', function($id) {
-                $controller = new \App\Http\Controllers\AdminLibraryController();
-                $library = \App\Models\OpenLibrary::findOrFail($id);
-                return $controller->approveLibrary(request()->merge(['generate_cover' => true]), $id);
-            })->name('generate-cover');
+            Route::post('/{id}/generate-cover', [App\Http\Controllers\AdminLibraryController::class, 'regenerateCoverImage'])->name('generate-cover');
+            
+            // AI Library Generation
+            Route::get('/generate', [App\Http\Controllers\AdminLibraryController::class, 'showGenerateLibrariesForm'])->name('generate-form');
+            Route::post('/generate', [App\Http\Controllers\AdminLibraryController::class, 'generateLibraries'])->name('generate');
             
             // Content management routes
             Route::get('/{id}/add-content', [App\Http\Controllers\AdminLibraryController::class, 'addContentForm'])->name('add-content-form');
@@ -230,7 +230,14 @@ Route::prefix('admin')->group(function () {
         
         // Other admin routes
         Route::get('/content', [App\Http\Controllers\AdminController::class, 'contentDashboard'])->name('admin.content');
+        Route::get('/content/export', [App\Http\Controllers\AdminController::class, 'exportContentStats'])->name('admin.content.export');
+        
+        // Reports routes
         Route::get('/reports', [App\Http\Controllers\AdminController::class, 'reportsDashboard'])->name('admin.reports');
+        Route::get('/reports/all', [App\Http\Controllers\AdminController::class, 'allReports'])->name('admin.reports.all');
+        Route::get('/reports/{id}', [App\Http\Controllers\AdminController::class, 'viewReport'])->name('admin.reports.view');
+        Route::put('/reports/{id}/status', [App\Http\Controllers\AdminController::class, 'updateReportStatus'])->name('admin.reports.status');
+        
         Route::get('/revenue', [App\Http\Controllers\AdminController::class, 'revenueDashboard'])->name('admin.revenue');
         Route::get('/verifications', [App\Http\Controllers\AdminController::class, 'verificationsDashboard'])->name('admin.verifications');
         Route::get('/settings', [App\Http\Controllers\AdminController::class, 'settingsDashboard'])->name('admin.settings');
