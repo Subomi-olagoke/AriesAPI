@@ -64,19 +64,19 @@
             <div class="p-4 bg-gray-50 rounded-lg">
                 <div class="text-sm text-neutral-500 mb-1">Course Enrollments</div>
                 <div class="text-xl font-bold">₦{{ number_format($revenue_by_type['course']) }}</div>
-                <div class="text-xs text-neutral-500 mt-1">{{ round(($revenue_by_type['course'] / $stats['total_revenue']) * 100) }}% of total revenue</div>
+                <div class="text-xs text-neutral-500 mt-1">{{ $stats['total_revenue'] > 0 ? round(($revenue_by_type['course'] / $stats['total_revenue']) * 100) : 0 }}% of total revenue</div>
             </div>
             
             <div class="p-4 bg-gray-50 rounded-lg">
                 <div class="text-sm text-neutral-500 mb-1">Subscriptions</div>
                 <div class="text-xl font-bold">₦{{ number_format($revenue_by_type['subscription']) }}</div>
-                <div class="text-xs text-neutral-500 mt-1">{{ round(($revenue_by_type['subscription'] / $stats['total_revenue']) * 100) }}% of total revenue</div>
+                <div class="text-xs text-neutral-500 mt-1">{{ $stats['total_revenue'] > 0 ? round(($revenue_by_type['subscription'] / $stats['total_revenue']) * 100) : 0 }}% of total revenue</div>
             </div>
             
             <div class="p-4 bg-gray-50 rounded-lg">
                 <div class="text-sm text-neutral-500 mb-1">Tutoring Sessions</div>
                 <div class="text-xl font-bold">₦{{ number_format($revenue_by_type['tutoring']) }}</div>
-                <div class="text-xs text-neutral-500 mt-1">{{ round(($revenue_by_type['tutoring'] / $stats['total_revenue']) * 100) }}% of total revenue</div>
+                <div class="text-xs text-neutral-500 mt-1">{{ $stats['total_revenue'] > 0 ? round(($revenue_by_type['tutoring'] / $stats['total_revenue']) * 100) : 0 }}% of total revenue</div>
             </div>
         </div>
     </div>
