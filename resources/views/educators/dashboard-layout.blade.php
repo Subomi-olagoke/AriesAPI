@@ -129,7 +129,7 @@
                 <div class="flex items-center justify-between mb-4">
                     <div class="text-xl font-semibold">Alexandria Educator</div>
                     <div class="flex items-center space-x-4">
-                        <a href="{{ route('api.profile.show') }}" class="text-sm text-neutral-700 hover:text-neutral-900">
+                        <a href="/profile" class="text-sm text-neutral-700 hover:text-neutral-900">
                             <i class="fa-solid fa-user-circle mr-1"></i> My Profile
                         </a>
                         <form method="POST" action="{{ route('educator.logout') }}" class="inline">
