@@ -273,10 +273,12 @@ class EducatorDashboardController extends Controller
             ->select(
                 'courses.id',
                 'courses.title',
+                'courses.price',
                 DB::raw('COUNT(course_enrollments.id) as enrollment_count'),
-                DB::raw('SUM(courses.price) as total')
+                DB::raw('SUM(courses.price) as total'),
+                DB::raw('MAX(course_enrollments.created_at) as latest_enrollment')
             )
-            ->groupBy('courses.id', 'courses.title')
+            ->groupBy('courses.id', 'courses.title', 'courses.price')
             ->orderBy('total', 'desc')
             ->get();
             
@@ -306,7 +308,10 @@ class EducatorDashboardController extends Controller
             $earningsGrowth = (($currentMonthEarnings - $lastMonthEarnings) / $lastMonthEarnings) * 100;
         }
         
-        return view('educators.earnings', compact('monthlyEarnings', 'earningsByCourse', 'totalEarnings', 'currentMonthEarnings', 'lastMonthEarnings', 'earningsGrowth'));
+        // Get the user's bank information from profile
+        $bankInfo = $user->profile;
+        
+        return view('educators.earnings', compact('monthlyEarnings', 'earningsByCourse', 'totalEarnings', 'currentMonthEarnings', 'lastMonthEarnings', 'earningsGrowth', 'bankInfo'));
     }
     
     /**
