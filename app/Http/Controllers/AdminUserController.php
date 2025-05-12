@@ -425,12 +425,18 @@ class AdminUserController extends Controller
             }
         }
         
-        // Filter by creation date
-        if ($request->has('created_after')) {
+        // Filter by creation date - use export-specific date fields if provided
+        if ($request->has('export_date_from') && !empty($request->export_date_from)) {
+            $query->where('users.created_at', '>=', $request->export_date_from);
+        } elseif ($request->has('created_after') && !empty($request->created_after)) {
             $query->where('users.created_at', '>=', $request->created_after);
         }
         
-        if ($request->has('created_before')) {
+        if ($request->has('export_date_to') && !empty($request->export_date_to)) {
+            // Add one day to include the entire day
+            $dateTo = date('Y-m-d', strtotime($request->export_date_to . ' +1 day'));
+            $query->where('users.created_at', '<', $dateTo);
+        } elseif ($request->has('created_before') && !empty($request->created_before)) {
             $query->where('users.created_at', '<=', $request->created_before);
         }
         
@@ -450,42 +456,73 @@ class AdminUserController extends Controller
         // Get all users matching the criteria
         $users = $query->get();
         
+        // Determine export format
+        $exportFormat = $request->input('export_format', 'csv');
+        
+        // Handle Excel export
+        if ($exportFormat === 'xlsx') {
+            return $this->exportToExcel($users, $request);
+        }
+        
+        // Get selected fields or use defaults
+        $selectedFields = $request->input('export_fields', [
+            'id', 'username', 'email', 'first_name', 'last_name', 'role',
+            'isAdmin', 'is_banned', 'created_at', 'last_login_at', 'email_verified_at'
+        ]);
+        
+        // Map field names to display names
+        $fieldMappings = [
+            'id' => 'ID',
+            'username' => 'Username',
+            'email' => 'Email',
+            'first_name' => 'First Name',
+            'last_name' => 'Last Name',
+            'role' => 'Role',
+            'isAdmin' => 'Admin',
+            'is_banned' => 'Banned',
+            'created_at' => 'Registered Date',
+            'last_login_at' => 'Last Login',
+            'email_verified_at' => 'Verified'
+        ];
+        
         // Generate a filename for the export
         $filename = 'users_export_' . date('Y-m-d_His') . '.csv';
         
         // Open output stream
         $handle = fopen('php://temp', 'r+');
         
-        // Add CSV header
-        fputcsv($handle, [
-            'ID',
-            'Username',
-            'Email',
-            'First Name',
-            'Last Name',
-            'Role',
-            'Admin',
-            'Banned',
-            'Registered Date',
-            'Last Login',
-            'Verified'
-        ]);
+        // Add CSV header with only selected fields
+        $headerRow = [];
+        foreach ($selectedFields as $field) {
+            $headerRow[] = $fieldMappings[$field] ?? ucwords(str_replace('_', ' ', $field));
+        }
+        fputcsv($handle, $headerRow);
         
-        // Add user data
+        // Add user data with only selected fields
         foreach ($users as $user) {
-            fputcsv($handle, [
-                $user->id,
-                $user->username,
-                $user->email,
-                $user->first_name,
-                $user->last_name,
-                $user->role,
-                $user->isAdmin ? 'Yes' : 'No',
-                $user->is_banned ? 'Yes' : 'No',
-                $user->created_at->format('Y-m-d H:i:s'),
-                $user->last_login_at ? $user->last_login_at->format('Y-m-d H:i:s') : 'Never',
-                $user->email_verified_at ? 'Yes' : 'No'
-            ]);
+            $row = [];
+            foreach ($selectedFields as $field) {
+                switch ($field) {
+                    case 'isAdmin':
+                        $row[] = $user->isAdmin ? 'Yes' : 'No';
+                        break;
+                    case 'is_banned':
+                        $row[] = $user->is_banned ? 'Yes' : 'No';
+                        break;
+                    case 'created_at':
+                        $row[] = $user->created_at ? $user->created_at->format('Y-m-d H:i:s') : '';
+                        break;
+                    case 'last_login_at':
+                        $row[] = $user->last_login_at ? $user->last_login_at->format('Y-m-d H:i:s') : 'Never';
+                        break;
+                    case 'email_verified_at':
+                        $row[] = $user->email_verified_at ? 'Yes' : 'No';
+                        break;
+                    default:
+                        $row[] = $user->{$field};
+                }
+            }
+            fputcsv($handle, $row);
         }
         
         // Reset pointer to the beginning
@@ -504,6 +541,113 @@ class AdminUserController extends Controller
         ]);
         
         return $response;
+    }
+    
+    /**
+     * Export users to Excel format
+     * 
+     * @param Collection $users
+     * @param Request $request
+     * @return Response
+     */
+    private function exportToExcel($users, $request)
+    {
+        // Since we don't have PHPSpreadsheet installed, we'll return a JSON response
+        // instructing the admin to install the necessary package
+        
+        return response()->json([
+            'error' => 'Excel export requires PhpSpreadsheet. Please install it using: composer require phpoffice/phpspreadsheet',
+            'message' => 'Please run the command: composer require phpoffice/phpspreadsheet to enable Excel exports'
+        ], 501);
+        
+        /*
+        // This is the implementation you would use with PhpSpreadsheet installed
+        
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        
+        // Get selected fields or use defaults
+        $selectedFields = $request->input('export_fields', [
+            'id', 'username', 'email', 'first_name', 'last_name', 
+            'role', 'isAdmin', 'is_banned', 'created_at', 'last_login_at', 'email_verified_at'
+        ]);
+        
+        // Field mappings (same as in the CSV export)
+        $fieldMappings = [
+            'id' => 'ID',
+            'username' => 'Username',
+            'email' => 'Email',
+            'first_name' => 'First Name',
+            'last_name' => 'Last Name',
+            'role' => 'Role',
+            'isAdmin' => 'Admin', 
+            'is_banned' => 'Banned',
+            'created_at' => 'Registered Date',
+            'last_login_at' => 'Last Login',
+            'email_verified_at' => 'Verified'
+        ];
+        
+        // Add headers
+        $column = 1;
+        foreach ($selectedFields as $field) {
+            $sheet->setCellValueByColumnAndRow(
+                $column++, 
+                1, 
+                $fieldMappings[$field] ?? ucwords(str_replace('_', ' ', $field))
+            );
+        }
+        
+        // Add data
+        $row = 2;
+        foreach ($users as $user) {
+            $column = 1;
+            foreach ($selectedFields as $field) {
+                $value = '';
+                switch ($field) {
+                    case 'isAdmin':
+                        $value = $user->isAdmin ? 'Yes' : 'No';
+                        break;
+                    case 'is_banned':
+                        $value = $user->is_banned ? 'Yes' : 'No';
+                        break;
+                    case 'created_at':
+                        $value = $user->created_at ? $user->created_at->format('Y-m-d H:i:s') : '';
+                        break;
+                    case 'last_login_at':
+                        $value = $user->last_login_at ? $user->last_login_at->format('Y-m-d H:i:s') : 'Never';
+                        break;
+                    case 'email_verified_at':
+                        $value = $user->email_verified_at ? 'Yes' : 'No';
+                        break;
+                    default:
+                        $value = $user->{$field};
+                }
+                $sheet->setCellValueByColumnAndRow($column++, $row, $value);
+            }
+            $row++;
+        }
+        
+        // Style the header row
+        $headerRow = $sheet->getRowDimension(1);
+        $headerRow->setRowHeight(20);
+        
+        // Auto-size columns
+        foreach (range(1, count($selectedFields)) as $col) {
+            $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+        }
+        
+        // Generate filename
+        $filename = 'users_export_' . date('Y-m-d_His') . '.xlsx';
+        
+        // Create Excel file
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $temp_file = tempnam(sys_get_temp_dir(), 'excel_');
+        $writer->save($temp_file);
+        
+        return response()->download($temp_file, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+        */
     }
 
     /**

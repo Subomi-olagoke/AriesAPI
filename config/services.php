@@ -57,4 +57,9 @@ return [
         'production' => env('APNS_PRODUCTION', false),
     ],
 
+    'heroku_api' => [
+        'url' => env('HEROKU_API_URL', 'https://ariesmvp-9903a26b3095.herokuapp.com/api'),
+        'admin_token' => env('HEROKU_ADMIN_API_TOKEN'),
+    ],
+
 ];

@@ -18,45 +18,41 @@ class PostAnalysisController extends Controller
     }
 
     /**
-     * Analyze a post with AI (premium feature)
+     * Analyze any post with AI
      * 
      * @param int $postId The ID of the post to analyze
      * @return \Illuminate\Http\JsonResponse
      */
     public function analyzePost($postId)
     {
-        $user = Auth::user();
-        
-        // Check if user has premium access to analyze posts
-        if (!$user->canAnalyzePosts()) {
-            return response()->json([
-                'message' => 'AI post analysis is a premium feature. Please upgrade your subscription.',
-                'premium_required' => true
-            ], 403);
-        }
-        
-        // Find the post
-        $post = Post::findOrFail($postId);
-        
-        // Only post owner can analyze their own posts
-        if ($post->user_id !== $user->id) {
-            return response()->json([
-                'message' => 'You can only analyze your own posts'
-            ], 403);
-        }
+        // Find the post with media
+        $post = Post::with('media')->findOrFail($postId);
         
         try {
             // Prepare post content for analysis
             $content = $post->title . "\n\n" . $post->body;
             
+            // Add media descriptions if available
+            if ($post->media && $post->media->count() > 0) {
+                $content .= "\n\nThis post includes the following media:\n";
+                
+                foreach ($post->media as $index => $media) {
+                    $mediaType = $media->type ?? 'file';
+                    $mediaUrl = $media->url ?? 'Not available';
+                    $mediaName = $media->name ?? 'Unnamed';
+                    
+                    $content .= "- {$mediaType}: {$mediaName}\n";
+                }
+            }
+            
             // Request analysis from Cogni
-            $prompt = "Analyze this post and provide insights. Include: " .
-                      "1) Main topics and keywords (extract 3-5 key topics), " .
-                      "2) Writing style assessment (formal/informal, technical/casual, etc), " . 
-                      "3) Potential audience that would be interested in this content, " .
-                      "4) Suggestions for improvements or increasing engagement (2-3 actionable tips), " .
-                      "5) Overall strengths. " .
-                      "Format as JSON with fields: topics (array), style (string), audience (string), suggestions (array), strengths (array)";
+            $prompt = "Analyze this post and provide a clear breakdown in a conversational style. Include: " .
+                      "1) A brief summary of the main points, " .
+                      "2) Key topics discussed, " . 
+                      "3) The general tone and perspective of the post, " .
+                      "4) Any notable information, facts, or insights shared. " .
+                      "If the post mentions it includes images or documents, acknowledge those in your analysis. " .
+                      "Write in a natural, helpful tone as if explaining to someone what this post is about.";
             
             $result = $this->cogniService->askQuestion($prompt . "\n\nHere's the content:\n" . $content);
             
@@ -66,37 +62,11 @@ class PostAnalysisController extends Controller
                 ], 500);
             }
             
-            // Try to parse JSON response, but fallback to raw text if needed
-            try {
-                $rawResponse = $result['answer'];
-                
-                // Extract JSON if surrounded by other text
-                preg_match('/{.*}/s', $rawResponse, $matches);
-                $jsonStr = $matches[0] ?? $rawResponse;
-                
-                $analysis = json_decode($jsonStr, true);
-                
-                if (json_last_error() === JSON_ERROR_NONE) {
-                    return response()->json([
-                        'success' => true,
-                        'analysis' => $analysis
-                    ]);
-                }
-                
-                // Fallback to raw response
-                return response()->json([
-                    'success' => true,
-                    'analysis_text' => $rawResponse
-                ]);
-                
-            } catch (\Exception $e) {
-                Log::error('Error parsing post analysis: ' . $e->getMessage());
-                
-                return response()->json([
-                    'success' => true,
-                    'analysis_text' => $result['answer']
-                ]);
-            }
+            // Return the analysis directly as text
+            return response()->json([
+                'success' => true,
+                'analysis' => $result['answer']
+            ]);
             
         } catch (\Exception $e) {
             Log::error('Post analysis failed: ' . $e->getMessage());

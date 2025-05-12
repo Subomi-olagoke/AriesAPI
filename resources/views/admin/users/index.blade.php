@@ -7,7 +7,7 @@
         <a href="{{ route('admin.dashboard') }}" class="btn btn-secondary">
             <i class="fa-solid fa-arrow-left mr-2"></i> Back to Dashboard
         </a>
-        <button class="btn btn-primary" onclick="document.getElementById('exportForm').submit();">
+        <button class="btn btn-primary" onclick="showExportModal()">
             <i class="fa-solid fa-file-export mr-2"></i> Export
         </button>
     </div>
@@ -353,19 +353,121 @@
     </div>
 </div>
 
-<!-- Hidden Export Form -->
-<form id="exportForm" action="{{ route('admin.users.export') }}" method="POST" class="hidden">
-    @csrf
-    @foreach($filters as $key => $value)
-    <input type="hidden" name="{{ $key }}" value="{{ $value }}">
-    @endforeach
-</form>
+<!-- Export Modal -->
+<div id="exportModal" x-data="{ show: false }" x-show="show" x-cloak class="fixed inset-0 z-50 overflow-y-auto" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 transition-opacity" aria-hidden="true" @click="show = false">
+            <div class="absolute inset-0 bg-neutral-500 opacity-75"></div>
+        </div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <form id="exportConfigForm" action="{{ route('admin.users.export') }}" method="POST">
+                @csrf
+                <!-- Apply existing filters -->
+                @foreach($filters as $key => $value)
+                <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                @endforeach
+
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div class="sm:flex sm:items-start">
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                            <i class="fa-solid fa-file-export text-blue-600"></i>
+                        </div>
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                            <h3 class="text-lg leading-6 font-medium text-neutral-900" id="modal-title">
+                                Export Users
+                            </h3>
+                            <div class="mt-4 space-y-4">
+                                <div>
+                                    <label for="export_format" class="block text-sm font-medium text-neutral-700 mb-1">Export Format</label>
+                                    <select id="export_format" name="export_format" class="form-input w-full">
+                                        <option value="csv">CSV</option>
+                                        <option value="xlsx">Excel</option>
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-neutral-700 mb-1">Date Range</label>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label for="export_date_from" class="block text-xs text-neutral-500 mb-1">From</label>
+                                            <input type="date" id="export_date_from" name="export_date_from" value="{{ $filters['created_after'] ?? '' }}" class="form-input w-full">
+                                        </div>
+                                        <div>
+                                            <label for="export_date_to" class="block text-xs text-neutral-500 mb-1">To</label>
+                                            <input type="date" id="export_date_to" name="export_date_to" value="{{ $filters['created_before'] ?? '' }}" class="form-input w-full">
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-neutral-700 mb-1">Fields to Export</label>
+                                    <div class="grid grid-cols-2 gap-2 mt-2">
+                                        <div class="flex items-center">
+                                            <input id="field_id" name="export_fields[]" type="checkbox" value="id" class="h-4 w-4 text-primary-600 border-neutral-300 rounded" checked>
+                                            <label for="field_id" class="ml-2 block text-sm text-neutral-700">ID</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input id="field_username" name="export_fields[]" type="checkbox" value="username" class="h-4 w-4 text-primary-600 border-neutral-300 rounded" checked>
+                                            <label for="field_username" class="ml-2 block text-sm text-neutral-700">Username</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input id="field_email" name="export_fields[]" type="checkbox" value="email" class="h-4 w-4 text-primary-600 border-neutral-300 rounded" checked>
+                                            <label for="field_email" class="ml-2 block text-sm text-neutral-700">Email</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input id="field_first_name" name="export_fields[]" type="checkbox" value="first_name" class="h-4 w-4 text-primary-600 border-neutral-300 rounded" checked>
+                                            <label for="field_first_name" class="ml-2 block text-sm text-neutral-700">First Name</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input id="field_last_name" name="export_fields[]" type="checkbox" value="last_name" class="h-4 w-4 text-primary-600 border-neutral-300 rounded" checked>
+                                            <label for="field_last_name" class="ml-2 block text-sm text-neutral-700">Last Name</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input id="field_role" name="export_fields[]" type="checkbox" value="role" class="h-4 w-4 text-primary-600 border-neutral-300 rounded" checked>
+                                            <label for="field_role" class="ml-2 block text-sm text-neutral-700">Role</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input id="field_status" name="export_fields[]" type="checkbox" value="status" class="h-4 w-4 text-primary-600 border-neutral-300 rounded" checked>
+                                            <label for="field_status" class="ml-2 block text-sm text-neutral-700">Status</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input id="field_created_at" name="export_fields[]" type="checkbox" value="created_at" class="h-4 w-4 text-primary-600 border-neutral-300 rounded" checked>
+                                            <label for="field_created_at" class="ml-2 block text-sm text-neutral-700">Registered Date</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input id="field_last_login" name="export_fields[]" type="checkbox" value="last_login_at" class="h-4 w-4 text-primary-600 border-neutral-300 rounded">
+                                            <label for="field_last_login" class="ml-2 block text-sm text-neutral-700">Last Login</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-neutral-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:ml-3 sm:w-auto sm:text-sm">
+                        Export Data
+                    </button>
+                    <button type="button" @click="show = false" class="mt-3 w-full inline-flex justify-center rounded-md border border-neutral-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-neutral-700 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <script>
     function showBanModal(userId, userName) {
         const modal = document.getElementById('banUserModal').__x.$data;
         modal.userId = userId;
         modal.userName = userName;
+        modal.show = true;
+    }
+    
+    function showExportModal() {
+        const modal = document.getElementById('exportModal').__x.$data;
         modal.show = true;
     }
 </script>

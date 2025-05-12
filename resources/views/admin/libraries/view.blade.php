@@ -102,8 +102,11 @@
         <div class="card overflow-hidden">
             <div class="p-4 border-b border-neutral-200 bg-neutral-50 flex justify-between items-center">
                 <h3 class="text-lg font-medium text-neutral-900">Content Items</h3>
-                <div>
+                <div class="flex items-center space-x-2">
                     <input type="text" placeholder="Search items..." class="form-input py-2 text-sm">
+                    <a href="{{ route('admin.libraries.add-content-form', $library->id) }}" class="btn btn-primary">
+                        <i class="fa-solid fa-plus mr-1"></i> Add Content
+                    </a>
                 </div>
             </div>
             
@@ -143,6 +146,15 @@
                                 <a href="{{ $item['url'] }}" target="_blank" class="text-primary-600 hover:text-primary-900 mr-3">
                                     <i class="fa-solid fa-eye"></i>
                                 </a>
+                                
+                                <form action="{{ route('admin.libraries.remove-content', $library->id) }}" method="POST" class="inline">
+                                    @csrf
+                                    <input type="hidden" name="content_id" value="{{ $item['id'] }}">
+                                    <button type="submit" onclick="return confirm('Are you sure you want to remove this item from the library?')" 
+                                        class="text-red-600 hover:text-red-900">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                         @endforeach

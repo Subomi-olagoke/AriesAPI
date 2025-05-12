@@ -5,14 +5,29 @@ namespace App\Http\Controllers;
 use App\Models\OpenLibrary;
 use App\Models\LibraryContent;
 use App\Models\User;
+use App\Services\LibraryApiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class AdminLibraryController extends Controller
 {
+    /**
+     * The library API service instance
+     */
+    protected $libraryApiService;
+    
+    /**
+     * Create a new controller instance
+     */
+    public function __construct(LibraryApiService $libraryApiService)
+    {
+        $this->libraryApiService = $libraryApiService;
+    }
+    
     /**
      * Display a listing of libraries with filtering options
      */
@@ -47,6 +62,104 @@ class AdminLibraryController extends Controller
                 'sort_dir' => $sortDir
             ]
         ]);
+    }
+    
+    /**
+     * Show the form for creating a new library
+     */
+    public function create()
+    {
+        // Get courses for dropdown
+        $courses = \App\Models\Course::select('id', 'title')->get();
+        
+        return view('admin.libraries.create', [
+            'courses' => $courses
+        ]);
+    }
+    
+    /**
+     * Store a newly created library in storage
+     */
+    public function store(Request $request)
+    {
+        // Validate the request
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'required|string|max:1000',
+            'type' => 'required|string|in:curated,dynamic,course',
+            'course_id' => 'nullable|required_if:type,course',
+            'thumbnail_url' => 'nullable|url|max:2000',
+        ]);
+        
+        try {
+            // Create library data
+            $libraryData = [
+                'name' => $request->name,
+                'description' => $request->description,
+                'type' => $request->type,
+                'thumbnail_url' => $request->thumbnail_url,
+                'approval_status' => 'pending',
+                'is_approved' => false,
+            ];
+            
+            if ($request->type === 'course' && $request->course_id) {
+                $libraryData['course_id'] = $request->course_id;
+            }
+            
+            // Create the library via API
+            $response = $this->libraryApiService->createLibrary($libraryData);
+            
+            if (!$response['success']) {
+                // If the API request failed, log the error and create the library locally
+                Log::error('Failed to create library via API', [
+                    'message' => $response['message'] ?? 'Unknown error',
+                    'errors' => $response['errors'] ?? []
+                ]);
+                
+                // Create locally as fallback
+                $library = new OpenLibrary();
+                $library->name = $request->name;
+                $library->description = $request->description;
+                $library->type = $request->type;
+                $library->course_id = $request->course_id;
+                $library->thumbnail_url = $request->thumbnail_url;
+                $library->approval_status = 'pending';
+                $library->is_approved = false;
+                $library->save();
+                
+                // Return with warning
+                return redirect()->route('admin.libraries.view', $library->id)
+                    ->with('warning', 'Library created locally but failed to sync with API. Some features may be limited.');
+            }
+            
+            // If successful, retrieve the library ID from the API response
+            $libraryId = $response['data']['library']['id'] ?? null;
+            
+            if (!$libraryId) {
+                throw new \Exception('Library ID not found in API response');
+            }
+            
+            // Redirect to the library view page
+            return redirect()->route('admin.libraries.view', $libraryId)
+                ->with('success', 'Library created successfully. You can now add content to it.');
+                
+        } catch (\Exception $e) {
+            Log::error('Error creating library: ' . $e->getMessage());
+            
+            // Create locally as fallback
+            $library = new OpenLibrary();
+            $library->name = $request->name;
+            $library->description = $request->description;
+            $library->type = $request->type;
+            $library->course_id = $request->course_id;
+            $library->thumbnail_url = $request->thumbnail_url;
+            $library->approval_status = 'pending';
+            $library->is_approved = false;
+            $library->save();
+            
+            return redirect()->route('admin.libraries.view', $library->id)
+                ->with('warning', 'Library created locally due to API error: ' . $e->getMessage());
+        }
     }
     
     /**
@@ -88,6 +201,7 @@ class AdminLibraryController extends Controller
     public function approveLibrary(Request $request, $id)
     {
         $library = OpenLibrary::findOrFail($id);
+        $generateCover = $request->has('generate_cover');
         
         // Validate minimum content requirement
         $contentCount = $library->contents()->count();
@@ -95,23 +209,77 @@ class AdminLibraryController extends Controller
             return redirect()->back()->with('error', 'Library must have at least 5 content items to be approved.');
         }
         
-        // Generate AI cover image if requested and not already present
-        if ($request->has('generate_cover') && !$library->has_ai_cover) {
-            $coverImageUrl = $this->generateCoverImage($library);
-            if ($coverImageUrl) {
-                $library->cover_image_url = $coverImageUrl;
+        try {
+            // Approve via API
+            $response = $this->libraryApiService->approveLibrary($id, $generateCover);
+            
+            if (!$response['success']) {
+                Log::error('Failed to approve library via API', [
+                    'message' => $response['message'] ?? 'Unknown error',
+                    'errors' => $response['errors'] ?? []
+                ]);
+                
+                // Fallback to local operation
+                // Generate AI cover image if requested and not already present
+                if ($generateCover && !$library->has_ai_cover) {
+                    $coverImageUrl = $this->generateCoverImage($library);
+                    if ($coverImageUrl) {
+                        $library->cover_image_url = $coverImageUrl;
+                        $library->has_ai_cover = true;
+                    }
+                }
+                
+                // Update library status
+                $library->is_approved = true;
+                $library->approval_status = 'approved';
+                $library->approval_date = now();
+                $library->approved_by = Auth::id();
+                $library->save();
+                
+                return redirect()->route('admin.libraries.index')
+                    ->with('warning', 'Library has been approved locally but failed to sync with API.');
+            }
+            
+            // If successful, update the local record to match the remote state
+            $library->is_approved = true;
+            $library->approval_status = 'approved';
+            $library->approval_date = now();
+            $library->approved_by = Auth::id();
+            
+            // Update cover image info if it was generated
+            if ($generateCover && isset($response['data']['library']['cover_image_url'])) {
+                $library->cover_image_url = $response['data']['library']['cover_image_url'];
                 $library->has_ai_cover = true;
             }
+            
+            $library->save();
+            
+            return redirect()->route('admin.libraries.index')
+                ->with('success', 'Library has been approved successfully.');
+                
+        } catch (\Exception $e) {
+            Log::error('Error approving library: ' . $e->getMessage());
+            
+            // Fallback to local operation
+            // Generate AI cover image if requested and not already present
+            if ($generateCover && !$library->has_ai_cover) {
+                $coverImageUrl = $this->generateCoverImage($library);
+                if ($coverImageUrl) {
+                    $library->cover_image_url = $coverImageUrl;
+                    $library->has_ai_cover = true;
+                }
+            }
+            
+            // Update library status
+            $library->is_approved = true;
+            $library->approval_status = 'approved';
+            $library->approval_date = now();
+            $library->approved_by = Auth::id();
+            $library->save();
+            
+            return redirect()->route('admin.libraries.index')
+                ->with('warning', 'Library has been approved locally but failed to sync with API due to error: ' . $e->getMessage());
         }
-        
-        // Update library status
-        $library->is_approved = true;
-        $library->approval_status = 'approved';
-        $library->approval_date = now();
-        $library->approved_by = Auth::id();
-        $library->save();
-        
-        return redirect()->route('admin.libraries.index')->with('success', 'Library has been approved successfully.');
     }
     
     /**
@@ -125,13 +293,47 @@ class AdminLibraryController extends Controller
         
         $library = OpenLibrary::findOrFail($id);
         
-        // Update library status
-        $library->is_approved = false;
-        $library->approval_status = 'rejected';
-        $library->rejection_reason = $request->rejection_reason;
-        $library->save();
-        
-        return redirect()->route('admin.libraries.index')->with('success', 'Library has been rejected.');
+        try {
+            // Reject via API
+            $response = $this->libraryApiService->rejectLibrary($id, $request->rejection_reason);
+            
+            if (!$response['success']) {
+                Log::error('Failed to reject library via API', [
+                    'message' => $response['message'] ?? 'Unknown error',
+                    'errors' => $response['errors'] ?? []
+                ]);
+                
+                // Fallback to local operation
+                $library->is_approved = false;
+                $library->approval_status = 'rejected';
+                $library->rejection_reason = $request->rejection_reason;
+                $library->save();
+                
+                return redirect()->route('admin.libraries.index')
+                    ->with('warning', 'Library has been rejected locally but failed to sync with API.');
+            }
+            
+            // Update local record to match remote state
+            $library->is_approved = false;
+            $library->approval_status = 'rejected';
+            $library->rejection_reason = $request->rejection_reason;
+            $library->save();
+            
+            return redirect()->route('admin.libraries.index')
+                ->with('success', 'Library has been rejected.');
+                
+        } catch (\Exception $e) {
+            Log::error('Error rejecting library: ' . $e->getMessage());
+            
+            // Fallback to local operation
+            $library->is_approved = false;
+            $library->approval_status = 'rejected';
+            $library->rejection_reason = $request->rejection_reason;
+            $library->save();
+            
+            return redirect()->route('admin.libraries.index')
+                ->with('warning', 'Library has been rejected locally but failed to sync with API due to error: ' . $e->getMessage());
+        }
     }
     
     /**
@@ -212,5 +414,211 @@ class AdminLibraryController extends Controller
         }
         
         return '#';
+    }
+    
+    /**
+     * Show form to add content to a library
+     */
+    public function addContentForm($id)
+    {
+        $library = OpenLibrary::with('contents')->findOrFail($id);
+        
+        // Get content that can be added to the library
+        $courses = \App\Models\Course::select('id', 'title', 'description', 'created_at')
+            ->orderBy('created_at', 'desc')
+            ->take(50)
+            ->get();
+            
+        $posts = \App\Models\Post::select('id', 'title', 'content', 'created_at')
+            ->orderBy('created_at', 'desc')
+            ->take(50)
+            ->get();
+        
+        // Format for display
+        $availableContent = [
+            'courses' => $courses->map(function($course) {
+                return [
+                    'id' => $course->id,
+                    'title' => $course->title,
+                    'description' => $course->description ?? substr($course->content ?? '', 0, 100),
+                    'type' => 'Course',
+                    'created_at' => $course->created_at
+                ];
+            }),
+            'posts' => $posts->map(function($post) {
+                return [
+                    'id' => $post->id,
+                    'title' => $post->title ?? 'Untitled Post',
+                    'description' => substr($post->content ?? '', 0, 100),
+                    'type' => 'Post',
+                    'created_at' => $post->created_at
+                ];
+            }),
+        ];
+        
+        return view('admin.libraries.add-content', [
+            'library' => $library,
+            'availableContent' => $availableContent
+        ]);
+    }
+    
+    /**
+     * Add content to a library
+     */
+    public function addContent(Request $request, $id)
+    {
+        $request->validate([
+            'content_id' => 'required',
+            'content_type' => 'required|in:Course,Post',
+            'relevance_score' => 'nullable|numeric|min:0|max:1'
+        ]);
+        
+        $library = OpenLibrary::findOrFail($id);
+        $relevanceScore = $request->relevance_score ?? 0.7;
+        
+        try {
+            // Add content via API
+            $response = $this->libraryApiService->addContent(
+                $id,
+                $request->content_type,
+                $request->content_id,
+                $relevanceScore
+            );
+            
+            if (!$response['success']) {
+                Log::error('Failed to add content to library via API', [
+                    'message' => $response['message'] ?? 'Unknown error',
+                    'errors' => $response['errors'] ?? []
+                ]);
+                
+                // Fallback to local operation
+                // Map content type to full namespace
+                $contentTypeMap = [
+                    'Course' => \App\Models\Course::class,
+                    'Post' => \App\Models\Post::class
+                ];
+                
+                $contentType = $contentTypeMap[$request->content_type];
+                
+                // Check if content exists
+                $content = $contentType::find($request->content_id);
+                if (!$content) {
+                    return redirect()->back()->with('error', 'Content not found');
+                }
+                
+                // Check if content is already in the library
+                $exists = $library->contents()
+                    ->where('content_type', $contentType)
+                    ->where('content_id', $request->content_id)
+                    ->exists();
+                    
+                if ($exists) {
+                    return redirect()->back()->with('error', 'This content is already in the library');
+                }
+                
+                // Add content to library
+                $libraryContent = new \App\Models\LibraryContent();
+                $libraryContent->library_id = $library->id;
+                $libraryContent->content_type = $contentType;
+                $libraryContent->content_id = $request->content_id;
+                $libraryContent->relevance_score = $relevanceScore;
+                $libraryContent->save();
+                
+                return redirect()->route('admin.libraries.view', $library->id)
+                    ->with('warning', 'Content added to library locally but failed to sync with API. Some features may be limited.');
+            }
+            
+            return redirect()->route('admin.libraries.view', $library->id)
+                ->with('success', 'Content added to library successfully');
+                
+        } catch (\Exception $e) {
+            Log::error('Error adding content to library: ' . $e->getMessage());
+            
+            // Fallback to local operation
+            // Map content type to full namespace
+            $contentTypeMap = [
+                'Course' => \App\Models\Course::class,
+                'Post' => \App\Models\Post::class
+            ];
+            
+            $contentType = $contentTypeMap[$request->content_type];
+            
+            // Check if content exists
+            $content = $contentType::find($request->content_id);
+            if (!$content) {
+                return redirect()->back()->with('error', 'Content not found');
+            }
+            
+            // Check if content is already in the library
+            $exists = $library->contents()
+                ->where('content_type', $contentType)
+                ->where('content_id', $request->content_id)
+                ->exists();
+                
+            if ($exists) {
+                return redirect()->back()->with('error', 'This content is already in the library');
+            }
+            
+            // Add content to library
+            $libraryContent = new \App\Models\LibraryContent();
+            $libraryContent->library_id = $library->id;
+            $libraryContent->content_type = $contentType;
+            $libraryContent->content_id = $request->content_id;
+            $libraryContent->relevance_score = $relevanceScore;
+            $libraryContent->save();
+            
+            return redirect()->route('admin.libraries.view', $library->id)
+                ->with('warning', 'Content added to library locally due to API error: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Remove content from a library
+     */
+    public function removeContent(Request $request, $id)
+    {
+        $request->validate([
+            'content_id' => 'required',
+        ]);
+        
+        $libraryContent = \App\Models\LibraryContent::findOrFail($request->content_id);
+        
+        // Check if the content belongs to the specified library
+        if ($libraryContent->library_id != $id) {
+            return redirect()->back()->with('error', 'Content does not belong to this library');
+        }
+        
+        try {
+            // Remove content via API
+            $response = $this->libraryApiService->removeContent($id, $request->content_id);
+            
+            if (!$response['success']) {
+                Log::error('Failed to remove content from library via API', [
+                    'message' => $response['message'] ?? 'Unknown error',
+                    'errors' => $response['errors'] ?? []
+                ]);
+                
+                // Fallback to local operation
+                $libraryContent->delete();
+                
+                return redirect()->route('admin.libraries.view', $id)
+                    ->with('warning', 'Content removed from library locally but failed to sync with API.');
+            }
+            
+            // Delete local record to match remote state
+            $libraryContent->delete();
+            
+            return redirect()->route('admin.libraries.view', $id)
+                ->with('success', 'Content removed from library successfully');
+                
+        } catch (\Exception $e) {
+            Log::error('Error removing content from library: ' . $e->getMessage());
+            
+            // Fallback to local operation
+            $libraryContent->delete();
+            
+            return redirect()->route('admin.libraries.view', $id)
+                ->with('warning', 'Content removed from library locally but failed to sync with API due to error: ' . $e->getMessage());
+        }
     }
 }

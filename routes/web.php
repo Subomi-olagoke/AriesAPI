@@ -196,6 +196,8 @@ Route::prefix('admin')->group(function () {
         // Library management routes
         Route::prefix('libraries')->name('admin.libraries.')->group(function () {
             Route::get('/', [App\Http\Controllers\AdminLibraryController::class, 'listLibraries'])->name('index');
+            Route::get('/create', [App\Http\Controllers\AdminLibraryController::class, 'create'])->name('create');
+            Route::post('/', [App\Http\Controllers\AdminLibraryController::class, 'store'])->name('store');
             Route::get('/{id}', [App\Http\Controllers\AdminLibraryController::class, 'viewLibrary'])->name('view');
             Route::post('/{id}/approve', [App\Http\Controllers\AdminLibraryController::class, 'approveLibrary'])->name('approve');
             Route::post('/{id}/reject', [App\Http\Controllers\AdminLibraryController::class, 'rejectLibrary'])->name('reject');
@@ -204,6 +206,11 @@ Route::prefix('admin')->group(function () {
                 $library = \App\Models\OpenLibrary::findOrFail($id);
                 return $controller->approveLibrary(request()->merge(['generate_cover' => true]), $id);
             })->name('generate-cover');
+            
+            // Content management routes
+            Route::get('/{id}/add-content', [App\Http\Controllers\AdminLibraryController::class, 'addContentForm'])->name('add-content-form');
+            Route::post('/{id}/add-content', [App\Http\Controllers\AdminLibraryController::class, 'addContent'])->name('add-content');
+            Route::post('/{id}/remove-content', [App\Http\Controllers\AdminLibraryController::class, 'removeContent'])->name('remove-content');
         });
         
         // User management routes
