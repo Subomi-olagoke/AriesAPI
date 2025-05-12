@@ -246,11 +246,17 @@ Route::prefix('admin')->group(function () {
 
 // Educator Routes
 Route::prefix('educator')->group(function () {
+    // Guest routes for educators
+    Route::middleware('guest')->group(function () {
+        Route::get('/login', [App\Http\Controllers\EducatorAuthController::class, 'showLoginForm'])->name('educator.login');
+        Route::post('/login', [App\Http\Controllers\EducatorAuthController::class, 'login']);
+    });
+    
     // Auth protected routes - must be an educator
     Route::middleware(['auth', 'educator', 'not.banned'])->group(function () {
         // Dashboard
         Route::get('/dashboard', [App\Http\Controllers\EducatorDashboardController::class, 'index'])->name('educator.dashboard');
-        Route::post('/logout', [App\Http\Controllers\AdminAuthController::class, 'logout'])->name('educator.logout');
+        Route::post('/logout', [App\Http\Controllers\EducatorAuthController::class, 'logout'])->name('educator.logout');
         
         // Courses Management
         Route::prefix('courses')->name('educator.courses.')->group(function () {
