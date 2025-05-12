@@ -69,6 +69,7 @@ class Kernel extends HttpKernel {
         'abilities' => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,
         'ability' => \Laravel\Sanctum\Http\Middleware\CheckForAnyAbility::class,
         'admin' => \App\Http\Middleware\AdminOnly::class,
+        'educator' => \App\Http\Middleware\EducatorOnly::class,
         'not.banned' => \App\Http\Middleware\CheckUserBanned::class,
     ];
 }

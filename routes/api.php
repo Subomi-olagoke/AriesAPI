@@ -308,6 +308,49 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/educator/with-follow-status', [EducatorsController::class, 'getAllEducatorsWithFollowStatus']); // Additional route
     Route::get('/educators/verified', [EducatorsController::class, 'getVerifiedEducators']);
     Route::get('/educator/verified', [EducatorsController::class, 'getVerifiedEducators']); // Additional route
+    
+    // Educator Dashboard API Routes
+    Route::middleware(['auth:sanctum'])->prefix('educator-dashboard')->group(function () {
+        // Dashboard stats
+        Route::get('/stats', [App\Http\Controllers\EducatorDashboardController::class, 'getDashboardStats']);
+        
+        // Courses Management
+        Route::prefix('courses')->group(function () {
+            Route::get('/', [App\Http\Controllers\EducatorCoursesController::class, 'getCourses']);
+            Route::post('/', [App\Http\Controllers\EducatorCoursesController::class, 'storeAPI']);
+            Route::get('/{id}', [App\Http\Controllers\EducatorCoursesController::class, 'showAPI']);
+            Route::put('/{id}', [App\Http\Controllers\EducatorCoursesController::class, 'updateAPI']);
+            Route::delete('/{id}', [App\Http\Controllers\EducatorCoursesController::class, 'destroyAPI']);
+            Route::post('/{id}/toggle-featured', [App\Http\Controllers\EducatorCoursesController::class, 'toggleFeaturedAPI']);
+            
+            // Course Sections
+            Route::get('/{courseId}/sections', [App\Http\Controllers\EducatorCoursesController::class, 'getSections']);
+            Route::post('/{courseId}/sections', [App\Http\Controllers\EducatorCoursesController::class, 'storeSectionAPI']);
+            Route::get('/{courseId}/sections/{sectionId}', [App\Http\Controllers\EducatorCoursesController::class, 'getSectionAPI']);
+            Route::put('/{courseId}/sections/{sectionId}', [App\Http\Controllers\EducatorCoursesController::class, 'updateSectionAPI']);
+            Route::delete('/{courseId}/sections/{sectionId}', [App\Http\Controllers\EducatorCoursesController::class, 'destroySectionAPI']);
+            
+            // Course Lessons
+            Route::get('/{courseId}/lessons', [App\Http\Controllers\EducatorCoursesController::class, 'getLessons']);
+            Route::post('/{courseId}/sections/{sectionId}/lessons', [App\Http\Controllers\EducatorCoursesController::class, 'storeLessonAPI']);
+            Route::get('/{courseId}/lessons/{lessonId}', [App\Http\Controllers\EducatorCoursesController::class, 'getLessonAPI']);
+            Route::put('/{courseId}/lessons/{lessonId}', [App\Http\Controllers\EducatorCoursesController::class, 'updateLessonAPI']);
+            Route::delete('/{courseId}/lessons/{lessonId}', [App\Http\Controllers\EducatorCoursesController::class, 'destroyLessonAPI']);
+        });
+        
+        // Students Management
+        Route::get('/students', [App\Http\Controllers\EducatorDashboardController::class, 'getStudents']);
+        Route::get('/students/{userId}', [App\Http\Controllers\EducatorDashboardController::class, 'getStudentDetails']);
+        
+        // Earnings
+        Route::get('/earnings', [App\Http\Controllers\EducatorDashboardController::class, 'getEarnings']);
+        Route::get('/earnings/monthly', [App\Http\Controllers\EducatorDashboardController::class, 'getMonthlyEarnings']);
+        Route::get('/earnings/by-course', [App\Http\Controllers\EducatorDashboardController::class, 'getEarningsByCourse']);
+        
+        // Settings
+        Route::get('/settings', [App\Http\Controllers\EducatorDashboardController::class, 'getSettings']);
+        Route::post('/settings', [App\Http\Controllers\EducatorDashboardController::class, 'updateSettings']);
+    });
 
     // Enrollment routes
     Route::post('/courses/{courseId}/enroll', [EnrollmentController::class, 'enrollInCourse']);

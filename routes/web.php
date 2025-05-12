@@ -244,6 +244,52 @@ Route::prefix('admin')->group(function () {
     });
 });
 
+// Educator Routes
+Route::prefix('educator')->group(function () {
+    // Auth protected routes - must be an educator
+    Route::middleware(['auth', 'educator', 'not.banned'])->group(function () {
+        // Dashboard
+        Route::get('/dashboard', [App\Http\Controllers\EducatorDashboardController::class, 'index'])->name('educator.dashboard');
+        Route::post('/logout', [App\Http\Controllers\AdminAuthController::class, 'logout'])->name('educator.logout');
+        
+        // Courses Management
+        Route::prefix('courses')->name('educator.courses.')->group(function () {
+            Route::get('/', [App\Http\Controllers\EducatorCoursesController::class, 'index'])->name('index');
+            Route::get('/create', [App\Http\Controllers\EducatorCoursesController::class, 'create'])->name('create');
+            Route::post('/', [App\Http\Controllers\EducatorCoursesController::class, 'store'])->name('store');
+            Route::get('/{id}', [App\Http\Controllers\EducatorCoursesController::class, 'show'])->name('show');
+            Route::get('/{id}/edit', [App\Http\Controllers\EducatorCoursesController::class, 'edit'])->name('edit');
+            Route::put('/{id}', [App\Http\Controllers\EducatorCoursesController::class, 'update'])->name('update');
+            Route::delete('/{id}', [App\Http\Controllers\EducatorCoursesController::class, 'destroy'])->name('destroy');
+            Route::post('/{id}/toggle-featured', [App\Http\Controllers\EducatorCoursesController::class, 'toggleFeatured'])->name('toggle-featured');
+            
+            // Course Sections
+            Route::get('/{id}/sections/create', [App\Http\Controllers\EducatorCoursesController::class, 'createSection'])->name('sections.create');
+            Route::post('/{id}/sections', [App\Http\Controllers\EducatorCoursesController::class, 'storeSection'])->name('sections.store');
+            Route::get('/{courseId}/sections/{sectionId}/edit', [App\Http\Controllers\EducatorCoursesController::class, 'editSection'])->name('sections.edit');
+            Route::put('/{courseId}/sections/{sectionId}', [App\Http\Controllers\EducatorCoursesController::class, 'updateSection'])->name('sections.update');
+            Route::delete('/{courseId}/sections/{sectionId}', [App\Http\Controllers\EducatorCoursesController::class, 'destroySection'])->name('sections.destroy');
+            
+            // Course Lessons
+            Route::get('/{courseId}/sections/{sectionId}/lessons/create', [App\Http\Controllers\EducatorCoursesController::class, 'createLesson'])->name('lessons.create');
+            Route::post('/{courseId}/sections/{sectionId}/lessons', [App\Http\Controllers\EducatorCoursesController::class, 'storeLesson'])->name('lessons.store');
+            Route::get('/{courseId}/lessons/{lessonId}/edit', [App\Http\Controllers\EducatorCoursesController::class, 'editLesson'])->name('lessons.edit');
+            Route::put('/{courseId}/lessons/{lessonId}', [App\Http\Controllers\EducatorCoursesController::class, 'updateLesson'])->name('lessons.update');
+            Route::delete('/{courseId}/lessons/{lessonId}', [App\Http\Controllers\EducatorCoursesController::class, 'destroyLesson'])->name('lessons.destroy');
+        });
+        
+        // Students Management
+        Route::get('/students', [App\Http\Controllers\EducatorDashboardController::class, 'students'])->name('educator.students');
+        
+        // Earnings
+        Route::get('/earnings', [App\Http\Controllers\EducatorDashboardController::class, 'earnings'])->name('educator.earnings');
+        
+        // Settings
+        Route::get('/settings', [App\Http\Controllers\EducatorDashboardController::class, 'settings'])->name('educator.settings');
+        Route::post('/settings', [App\Http\Controllers\EducatorDashboardController::class, 'updateSettings'])->name('educator.settings.update');
+    });
+});
+
 // Payment success/failure pages
 Route::view('/payment-methods/success', 'payment-methods.success')->name('payment-methods.success');
 Route::view('/payment-methods/failed', 'payment-methods.failed')->name('payment-methods.failed');
