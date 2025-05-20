@@ -470,6 +470,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{shareKey}/messages', [CogniController::class, 'addMessage']);
         Route::delete('/{shareKey}', [CogniController::class, 'deleteChat']);
     });
+    
+    // Cogni Personalized Facts
+    Route::get('/cogni/facts', [CogniController::class, 'getInterestingFacts']);
+    Route::get('/cogni/daily-fact', [CogniController::class, 'getDailyFact']);
 
     // Enhanced Cogni routes
     Route::post('/cogni/enhanced/readlist', [EnhancedCogniController::class, 'generateReadlist']);

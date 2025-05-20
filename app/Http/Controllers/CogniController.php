@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CogniChat;
 use App\Models\CogniChatMessage;
 use App\Services\CogniService;
+use App\Services\PersonalizedFactsService;
 use App\Services\YouTubeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,11 +18,16 @@ class CogniController extends Controller
 {
     protected $cogniService;
     protected $youtubeService;
+    protected $factsService;
 
-    public function __construct(CogniService $cogniService, YouTubeService $youtubeService)
-    {
+    public function __construct(
+        CogniService $cogniService, 
+        YouTubeService $youtubeService,
+        PersonalizedFactsService $factsService
+    ) {
         $this->cogniService = $cogniService;
         $this->youtubeService = $youtubeService;
+        $this->factsService = $factsService;
     }
 
     /**
@@ -1356,5 +1362,77 @@ class CogniController extends Controller
                 'message' => 'Failed to delete chat: ' . $e->getMessage()
             ], 500);
         }
+    }
+    
+    /**
+     * Get interesting facts for the user based on their interests
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getInterestingFacts(Request $request)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated'
+            ], 401);
+        }
+        
+        $topic = $request->input('topic');
+        $count = $request->input('count', 1);
+        
+        // Limit count to reasonable number
+        $count = min(max(1, $count), 5);
+        
+        // Get facts based on user interests or specified topic
+        $result = $this->factsService->getInterestingFacts($user, $topic, $count);
+        
+        if ($result['success']) {
+            return response()->json([
+                'success' => true,
+                'topic' => $result['topic'],
+                'facts' => $result['facts']
+            ]);
+        }
+        
+        return response()->json([
+            'success' => false,
+            'message' => $result['message'] ?? 'Failed to retrieve interesting facts'
+        ], $result['code'] ?? 500);
+    }
+    
+    /**
+     * Get a daily interesting fact for the user
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getDailyFact()
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated'
+            ], 401);
+        }
+        
+        $result = $this->factsService->getDailyFact($user);
+        
+        if ($result['success']) {
+            return response()->json([
+                'success' => true,
+                'topic' => $result['topic'],
+                'fact' => $result['facts'][0] ?? null
+            ]);
+        }
+        
+        return response()->json([
+            'success' => false,
+            'message' => $result['message'] ?? 'Failed to retrieve daily fact'
+        ], $result['code'] ?? 500);
     }
 }
