@@ -135,14 +135,15 @@ class PersonalizedFactsService
                 return Cache::get($cacheKey);
             }
             
-            // Use Cogni to generate interesting facts
+            // Use Cogni to generate interesting facts - optimized for widget display
             $prompt = "Generate {$count} fascinating and surprising fact" . ($count > 1 ? 's' : '') . 
                       " about {$topic} that would captivate someone interested in this subject. " . 
-                      "The fact" . ($count > 1 ? 's' : '') . " should be specific, accurate, and attention-grabbing. " .
-                      "Make them sound interesting enough that someone would want to share them. " .
-                      "Include 1-2 sentence explanation for each fact that provides context or additional information. " .
+                      "The fact" . ($count > 1 ? 's' : '') . " MUST be very concise (maximum 100 characters) and attention-grabbing. " .
+                      "These will be displayed on a small iOS widget, so brevity is essential. " .
+                      "Provide a very short explanation (maximum 1 short sentence) for each fact. " .
+                      "Focus on memorable, unusual, or counterintuitive facts that would make someone want to learn more. " .
                       "Format your response as a JSON object with this structure: " .
-                      "{ \"facts\": [{ \"fact\": \"The surprising fact\", \"explanation\": \"More context about why this is interesting\" }] }";
+                      "{ \"facts\": [{ \"fact\": \"The surprising fact (keep under 100 chars)\", \"explanation\": \"Brief context (1 short sentence)\" }] }";
             
             $result = $this->cogniService->askQuestion($prompt);
             

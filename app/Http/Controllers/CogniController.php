@@ -1387,15 +1387,23 @@ class CogniController extends Controller
         // Limit count to reasonable number
         $count = min(max(1, $count), 5);
         
-        // Get facts based on user interests or specified topic
+        // Get facts based on user interests or specified topic - optimized for widgets
         $result = $this->factsService->getInterestingFacts($user, $topic, $count);
         
         if ($result['success']) {
-            return response()->json([
+            // Format optimized for iOS widgets - flat structure for easy consumption
+            $widgetFriendlyResponse = [
                 'success' => true,
                 'topic' => $result['topic'],
-                'facts' => $result['facts']
-            ]);
+                'facts' => array_map(function($fact) {
+                    return [
+                        'fact' => mb_substr($fact['fact'] ?? '', 0, 100), // Ensure widget-friendly length
+                        'explanation' => mb_substr($fact['explanation'] ?? '', 0, 150)
+                    ];
+                }, $result['facts'])
+            ];
+            
+            return response()->json($widgetFriendlyResponse);
         }
         
         return response()->json([
@@ -1423,10 +1431,16 @@ class CogniController extends Controller
         $result = $this->factsService->getDailyFact($user);
         
         if ($result['success']) {
+            $fact = $result['facts'][0] ?? null;
+            
+            // Format optimized for iOS widgets
             return response()->json([
                 'success' => true,
                 'topic' => $result['topic'],
-                'fact' => $result['facts'][0] ?? null
+                'fact' => $fact ? [
+                    'fact' => mb_substr($fact['fact'] ?? '', 0, 100), // Ensure widget-friendly length
+                    'explanation' => mb_substr($fact['explanation'] ?? '', 0, 150)
+                ] : null
             ]);
         }
         
