@@ -37,7 +37,7 @@ class ReadlistController extends Controller
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'is_public' => 'nullable|string',
-            'image' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
+            'image' => 'required|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
         ]);
         
         $user = $request->user();
@@ -59,25 +59,23 @@ class ReadlistController extends Controller
             $readlist->user_id = $user->id;
             $readlist->share_key = Str::random(10);
             
-            // Handle image upload if provided
-            if ($request->hasFile('image')) {
-                $imageUrl = $this->fileUploadService->uploadFile(
-                    $request->file('image'),
-                    'readlist_images',
-                    [
-                        'process_image' => true,
-                        'width' => 800,
-                        'height' => 450,
-                        'fit' => true
-                    ]
-                );
-                
-                if (!$imageUrl) {
-                    throw new \Exception('Failed to upload image');
-                }
-                
-                $readlist->image_url = $imageUrl;
+            // Handle image upload (required)
+            $imageUrl = $this->fileUploadService->uploadFile(
+                $request->file('image'),
+                'readlist_images',
+                [
+                    'process_image' => true,
+                    'width' => 800,
+                    'height' => 450,
+                    'fit' => true
+                ]
+            );
+            
+            if (!$imageUrl) {
+                throw new \Exception('Failed to upload image');
             }
+            
+            $readlist->image_url = $imageUrl;
             
             // Save the readlist
             $saveResult = $readlist->save();
@@ -339,7 +337,7 @@ class ReadlistController extends Controller
             'title' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
             'is_public' => 'nullable|string',
-            'image' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:5120', // 5MB max, optional for updates
         ]);
         
         try {

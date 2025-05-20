@@ -408,6 +408,8 @@ class ProfileController extends Controller
             'following' => $following,
             'likes' => $likedPostIds,
             'posts' => $posts,
+            'is_verified' => $user->is_verified ?? false,
+            'verification_status' => $user->verification_status ?? 'pending',
             'educator_profile' => $educatorProfile
         ], 200);
     }
@@ -506,6 +508,8 @@ class ProfileController extends Controller
             'following' => $following,
             'likes' => $likedPostIds,
             'posts' => $posts,
+            'is_verified' => $user->is_verified ?? false,
+            'verification_status' => $user->verification_status ?? 'pending',
             'educator_profile' => $educatorProfile
         ], 200);
     }
@@ -602,6 +606,8 @@ class ProfileController extends Controller
             'following' => $following,
             'likes' => $likedPostIds,
             'posts' => $posts,
+            'is_verified' => $user->is_verified ?? false,
+            'verification_status' => $user->verification_status ?? 'pending',
             'educator_profile' => $educatorProfile
         ], 200);
     }
