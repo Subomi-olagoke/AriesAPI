@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Post;
 use App\Services\CogniService;
+use App\Services\ExaSearchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -11,10 +12,12 @@ use Illuminate\Support\Facades\Log;
 class PostAnalysisController extends Controller
 {
     protected $cogniService;
+    protected $exaSearchService;
 
-    public function __construct(CogniService $cogniService)
+    public function __construct(CogniService $cogniService, ExaSearchService $exaSearchService)
     {
         $this->cogniService = $cogniService;
+        $this->exaSearchService = $exaSearchService;
     }
 
     /**
@@ -162,6 +165,103 @@ class PostAnalysisController extends Controller
             return response()->json([
                 'message' => 'An error occurred while generating recommendations',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get a summary and learning resources related to a post
+     * 
+     * @param int $postId The ID of the post to find resources for
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getLearningResources($postId)
+    {
+        $user = Auth::user();
+        
+        // Find the post with media
+        $post = Post::with('media')->findOrFail($postId);
+        
+        try {
+            // Check if Exa service is configured
+            if (!$this->exaSearchService->isConfigured()) {
+                return response()->json([
+                    'message' => 'Learning resources unavailable - missing configuration',
+                    'success' => false
+                ], 500);
+            }
+            
+            // Prepare post content for analysis
+            $content = $post->title . "\n\n" . $post->body;
+            
+            // STEP 1: Generate a summary of the post first
+            $summaryPrompt = "Provide a concise summary (3-5 sentences) of this post in a helpful, informative tone. " . 
+                            "Focus on the main topic, key points, and any important context. " .
+                            "If the post is about a medical condition, educational concept, or technical topic, " .
+                            "provide a clear, accurate explanation that would help someone understand the basics.";
+            
+            $summaryResult = $this->cogniService->askQuestion($summaryPrompt . "\n\nHere's the content:\n" . $content);
+            
+            if (!$summaryResult['success']) {
+                return response()->json([
+                    'message' => 'Failed to generate post summary',
+                    'success' => false
+                ], 500);
+            }
+            
+            $summary = $summaryResult['answer'];
+            
+            // STEP 2: Identify key topics in the post
+            $topicsPrompt = "Analyze this post and identify the 3-5 main educational topics or concepts it covers. " .
+                     "Return these topics as a simple comma-separated list. Be specific and focused.";
+            
+            $topicsResult = $this->cogniService->askQuestion($topicsPrompt . "\n\nHere's the content:\n" . $content);
+            
+            if (!$topicsResult['success']) {
+                return response()->json([
+                    'message' => 'Failed to analyze post topics',
+                    'success' => false
+                ], 500);
+            }
+            
+            // Extract topics from AI response
+            $topics = $topicsResult['answer'];
+            
+            // STEP 3: Use Exa to find learning resources based on these topics
+            $resourcesResult = $this->exaSearchService->findRelatedContent($topics, 7);
+            
+            if (!$resourcesResult['success'] || empty($resourcesResult['results'])) {
+                // Fallback to direct post content search if topic extraction didn't yield good results
+                $resourcesResult = $this->exaSearchService->findRelatedContent($content, 7);
+            }
+            
+            // STEP 4: Get categorized resources for a more structured response
+            $categorizedResources = [];
+            
+            // Try to get categorized resources for more specific learning paths
+            if (!empty($topics)) {
+                $categorizedResult = $this->exaSearchService->getCategorizedResources($topics);
+                if ($categorizedResult['success']) {
+                    $categorizedResources = $categorizedResult['categories'];
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'post_id' => $postId,
+                'summary' => $summary,
+                'topics' => $topics,
+                'resources' => $resourcesResult['results'],
+                'categorized_resources' => $categorizedResources
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Post summary and learning resources lookup failed: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'An error occurred while analyzing the post',
+                'error' => $e->getMessage(),
+                'success' => false
             ], 500);
         }
     }

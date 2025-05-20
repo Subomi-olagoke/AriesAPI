@@ -228,4 +228,20 @@ class Channel extends Model
     {
         return $this->hasMany(CollaborativeSpace::class);
     }
+    
+    /**
+     * Check if a user is a moderator of the channel.
+     * Returns 1 for true, 0 for false as boolean values.
+     */
+    public function isModerator(User $user)
+    {
+        $isModerator = $this->members()
+            ->where('user_id', $user->id)
+            ->whereIn('role', ['moderator', 'admin']) // Both admin and moderator roles
+            ->where('status', 'approved')
+            ->where('is_active', true)
+            ->exists();
+            
+        return $isModerator ? 1 : 0;
+    }
 }

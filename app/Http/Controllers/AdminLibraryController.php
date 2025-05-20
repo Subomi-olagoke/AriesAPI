@@ -87,11 +87,21 @@ class AdminLibraryController extends Controller
      */
     public function create()
     {
-        // Get courses for dropdown
-        $courses = \App\Models\Course::select('id', 'title')->get();
+        // Get courses for dropdown and content selection
+        $courses = \App\Models\Course::select('id', 'title', 'description', 'created_at')
+            ->orderBy('created_at', 'desc')
+            ->take(50)
+            ->get();
+        
+        // Get posts for content selection
+        $posts = \App\Models\Post::select('id', 'title', 'body', 'created_at')
+            ->orderBy('created_at', 'desc')
+            ->take(50)
+            ->get();
         
         return view('admin.libraries.create', [
-            'courses' => $courses
+            'courses' => $courses,
+            'posts' => $posts
         ]);
     }
     
@@ -107,6 +117,11 @@ class AdminLibraryController extends Controller
             'type' => 'required|string|in:curated,dynamic,course',
             'course_id' => 'nullable|required_if:type,course',
             'thumbnail_url' => 'nullable|url|max:2000',
+            'generate_cover' => 'nullable|boolean',
+            'selected_content' => 'nullable|array',
+            'selected_content.*.id' => 'required_with:selected_content|string',
+            'selected_content.*.type' => 'required_with:selected_content|string|in:Course,Post',
+            'selected_content.*.relevance_score' => 'nullable|numeric|min:0|max:1',
         ]);
         
         try {
@@ -123,6 +138,9 @@ class AdminLibraryController extends Controller
             if ($request->type === 'course' && $request->course_id) {
                 $libraryData['course_id'] = $request->course_id;
             }
+            
+            // Check if AI cover generation was requested
+            $generateCover = $request->has('generate_cover') && $request->generate_cover == 1;
             
             // Create the library via API
             $response = $this->libraryApiService->createLibrary($libraryData);
@@ -145,6 +163,22 @@ class AdminLibraryController extends Controller
                 $library->is_approved = false;
                 $library->save();
                 
+                // Process content selection for curated libraries
+                if ($request->type === 'curated' && $request->has('selected_content')) {
+                    $this->addInitialContentToLibrary($library, $request->selected_content);
+                }
+                
+                // Generate cover if requested
+                if ($generateCover) {
+                    $coverUrl = $this->generateCoverImage($library);
+                    if ($coverUrl) {
+                        $library->cover_image_url = $coverUrl;
+                        $library->thumbnail_url = $coverUrl;
+                        $library->has_ai_cover = true;
+                        $library->save();
+                    }
+                }
+                
                 // Return with warning
                 return redirect()->route('admin.libraries.view', $library->id)
                     ->with('warning', 'Library created locally but failed to sync with API. Some features may be limited.');
@@ -157,9 +191,28 @@ class AdminLibraryController extends Controller
                 throw new \Exception('Library ID not found in API response');
             }
             
+            // Get the created library
+            $library = OpenLibrary::findOrFail($libraryId);
+            
+            // Process content selection for curated libraries
+            if ($request->type === 'curated' && $request->has('selected_content')) {
+                $this->addInitialContentToLibrary($library, $request->selected_content);
+            }
+            
+            // Generate cover if requested
+            if ($generateCover) {
+                $coverUrl = $this->generateCoverImage($library);
+                if ($coverUrl) {
+                    $library->cover_image_url = $coverUrl;
+                    $library->thumbnail_url = $coverUrl;
+                    $library->has_ai_cover = true;
+                    $library->save();
+                }
+            }
+            
             // Redirect to the library view page
             return redirect()->route('admin.libraries.view', $libraryId)
-                ->with('success', 'Library created successfully. You can now add content to it.');
+                ->with('success', 'Library created successfully with ' . count($request->selected_content ?? []) . ' content items.');
                 
         } catch (\Exception $e) {
             Log::error('Error creating library: ' . $e->getMessage());
@@ -175,8 +228,82 @@ class AdminLibraryController extends Controller
             $library->is_approved = false;
             $library->save();
             
+            // Process content selection for curated libraries
+            if ($request->type === 'curated' && $request->has('selected_content')) {
+                $this->addInitialContentToLibrary($library, $request->selected_content);
+            }
+            
+            // Generate cover if requested
+            if ($generateCover) {
+                $coverUrl = $this->generateCoverImage($library);
+                if ($coverUrl) {
+                    $library->cover_image_url = $coverUrl;
+                    $library->thumbnail_url = $coverUrl;
+                    $library->has_ai_cover = true;
+                    $library->save();
+                }
+            }
+            
             return redirect()->route('admin.libraries.view', $library->id)
                 ->with('warning', 'Library created locally due to API error: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Add initial content items to a newly created library
+     *
+     * @param OpenLibrary $library The library to add content to
+     * @param array $selectedContent Array of selected content items
+     * @return void
+     */
+    private function addInitialContentToLibrary(OpenLibrary $library, array $selectedContent)
+    {
+        // Map content types to model classes
+        $contentTypeMap = [
+            'Course' => \App\Models\Course::class,
+            'Post' => \App\Models\Post::class
+        ];
+        
+        foreach ($selectedContent as $content) {
+            // Skip if id or type is missing
+            if (!isset($content['id']) || !isset($content['type'])) {
+                continue;
+            }
+            
+            $contentType = $contentTypeMap[$content['type']] ?? null;
+            
+            // Skip if content type is not recognized
+            if (!$contentType) {
+                continue;
+            }
+            
+            // Check if content exists
+            $contentItem = $contentType::find($content['id']);
+            if (!$contentItem) {
+                continue;
+            }
+            
+            // Check for duplicates
+            $existingContent = LibraryContent::where('library_id', $library->id)
+                ->where('content_type', $contentType)
+                ->where('content_id', $content['id'])
+                ->first();
+                
+            if ($existingContent) {
+                continue;
+            }
+            
+            // Set relevance score (default to 0.7 if not provided)
+            $relevanceScore = isset($content['relevance_score']) ? 
+                floatval($content['relevance_score']) : 0.7;
+            
+            // Create the library content association
+            LibraryContent::create([
+                'library_id' => $library->id,
+                'content_id' => $content['id'],
+                'content_type' => $contentType,
+                'relevance_score' => $relevanceScore
+            ]);
         }
     }
     

@@ -460,6 +460,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/cogni/generate-cognition', [CogniController::class, 'generateCognitionReadlist']);
     Route::post('/cogni/conversations/clear', [CogniController::class, 'clearConversation']);
     Route::post('/cogni/conversation/clear', [CogniController::class, 'clearConversation']); // Additional route
+    
+    // New Cogni Chat routes
+    Route::prefix('cogni/chats')->group(function () {
+        Route::get('/', [CogniController::class, 'getChats']);
+        Route::post('/', [CogniController::class, 'createChat']);
+        Route::post('/shared', [CogniController::class, 'createChatFromShared']);
+        Route::get('/{shareKey}', [CogniController::class, 'getChat']);
+        Route::post('/{shareKey}/messages', [CogniController::class, 'addMessage']);
+        Route::delete('/{shareKey}', [CogniController::class, 'deleteChat']);
+    });
 
     // Enhanced Cogni routes
     Route::post('/cogni/enhanced/readlist', [EnhancedCogniController::class, 'generateReadlist']);
@@ -874,6 +884,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/levels', [\App\Http\Controllers\AlexPointsController::class, 'levels']);
         Route::get('/leaderboard', [\App\Http\Controllers\AlexPointsController::class, 'leaderboard']);
         
+        // Points payment routes
+        Route::get('/balance', [\App\Http\Controllers\AlexPointsPaymentController::class, 'getPointsBalance']);
+        Route::get('/calculate/course/{courseId}', [\App\Http\Controllers\AlexPointsPaymentController::class, 'calculatePointsForCourse']);
+        Route::post('/purchase/course/{courseId}', [\App\Http\Controllers\AlexPointsPaymentController::class, 'purchaseCourseWithPoints']);
+        Route::post('/calculate/hire', [\App\Http\Controllers\AlexPointsPaymentController::class, 'calculatePointsForHiring']);
+        Route::post('/hire/educator', [\App\Http\Controllers\AlexPointsPaymentController::class, 'hireEducatorWithPoints']);
+        Route::get('/transaction-history', [\App\Http\Controllers\AlexPointsPaymentController::class, 'getTransactionHistory']);
+        
         // Admin-only routes
         Route::middleware('admin')->group(function() {
             Route::post('/rules', [\App\Http\Controllers\AlexPointsController::class, 'createRule']);
@@ -893,6 +911,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Post analysis (premium feature)
         Route::get('/posts/{postId}/analyze', [\App\Http\Controllers\PostAnalysisController::class, 'analyzePost']);
         Route::get('/posts/{postId}/recommendations', [\App\Http\Controllers\PostAnalysisController::class, 'getPostRecommendations']);
+        Route::get('/posts/{postId}/learning-resources', [\App\Http\Controllers\PostAnalysisController::class, 'getLearningResources']);
     });
     
     // Cognition routes

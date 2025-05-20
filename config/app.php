@@ -177,6 +177,7 @@ return [
         App\Providers\AlexPointsServiceProvider::class,
         App\Providers\CognitionServiceProvider::class,
         App\Providers\ApiClientServiceProvider::class,
+        App\Providers\ExaServiceProvider::class,
     ])->toArray(),
 
     /*

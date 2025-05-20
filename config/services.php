@@ -61,5 +61,14 @@ return [
         'url' => env('HEROKU_API_URL', 'https://ariesmvp-9903a26b3095.herokuapp.com/api'),
         'admin_token' => env('HEROKU_ADMIN_API_TOKEN'),
     ],
+    
+    'exa' => [
+        'api_key' => env('EXA_API_KEY'),
+        'endpoint' => env('EXA_ENDPOINT', 'https://api.exa.ai'),
+    ],
+    
+    'youtube' => [
+        'api_key' => env('YOUTUBE_API_KEY'),
+    ],
 
 ];

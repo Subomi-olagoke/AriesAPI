@@ -745,13 +745,15 @@ class DocumentController extends Controller
                 }
             }
             
-            // Broadcast the operation to all connected clients
-            broadcast(new CollaborationOperation(
+            // Broadcast the operation to all connected clients using the new SyncOperation event
+            broadcast(new \App\Events\SyncOperation(
                 $operation,
                 $content,
                 $channelId,
                 $documentId,
-                $user
+                $user,
+                false, // Not a cursor operation
+                "sync_group_{$content->id}" // Create a sync group for better conflict resolution
             ));
             
             DB::commit();
@@ -827,14 +829,15 @@ class DocumentController extends Controller
                 ]
             ]);
             
-            // Broadcast the cursor update
-            broadcast(new CollaborationOperation(
+            // Broadcast the cursor update using the new SyncOperation event
+            broadcast(new \App\Events\SyncOperation(
                 $operation,
                 $content,
                 $channelId,
                 $documentId,
                 $user,
-                true // isCursor flag
+                true, // This is a cursor operation
+                "cursor_group_{$content->id}" // Separate sync group for cursors
             ));
             
             return response()->json([
@@ -1379,12 +1382,14 @@ class DocumentController extends Controller
                 'meta' => $operation->meta
             ]);
             
-            broadcast(new CollaborationOperation(
+            broadcast(new \App\Events\SyncOperation(
                 $sharedOperation,
                 $sharedContent,
                 $sharedSpace->channel_id,
                 $sharedSpace->id,
-                User::find($operation->user_id)
+                User::find($operation->user_id),
+                false, // Not a cursor operation
+                "sync_shared_{$content->id}" // Sync group for shared documents
             ));
         }
     }
@@ -1427,12 +1432,14 @@ class DocumentController extends Controller
             'meta' => $operation->meta
         ]);
         
-        broadcast(new CollaborationOperation(
+        broadcast(new \App\Events\SyncOperation(
             $originalOperation,
             $originalContent,
             $originalSpace->channel_id,
             $originalSpace->id,
-            User::find($operation->user_id)
+            User::find($operation->user_id),
+            false, // Not a cursor operation
+            "sync_original_{$content->id}" // Sync group for original document
         ));
     }
 }

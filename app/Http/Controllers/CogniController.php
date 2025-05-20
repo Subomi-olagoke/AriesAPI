@@ -2,19 +2,26 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CogniChat;
+use App\Models\CogniChatMessage;
 use App\Services\CogniService;
+use App\Services\YouTubeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 
 class CogniController extends Controller
 {
     protected $cogniService;
+    protected $youtubeService;
 
-    public function __construct(CogniService $cogniService)
+    public function __construct(CogniService $cogniService, YouTubeService $youtubeService)
     {
         $this->cogniService = $cogniService;
+        $this->youtubeService = $youtubeService;
     }
 
     /**
@@ -560,5 +567,794 @@ class CogniController extends Controller
             'success' => false,
             'message' => $result['message'] ?? 'Failed to generate a readlist'
         ], $result['code'] ?? 500);
+    }
+    
+    /**
+     * Get all chats for the authenticated user
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getChats()
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated'
+            ], 401);
+        }
+        
+        try {
+            $chats = CogniChat::where('user_id', $user->id)
+                ->orderBy('updated_at', 'desc')
+                ->get()
+                ->map(function($chat) {
+                    // Get the last message for preview
+                    $lastMessage = $chat->messages()->latest()->first();
+                    
+                    return [
+                        'id' => $chat->id,
+                        'title' => $chat->title,
+                        'share_key' => $chat->share_key,
+                        'is_public' => $chat->is_public,
+                        'created_at' => $chat->created_at,
+                        'updated_at' => $chat->updated_at,
+                        'message_count' => $chat->messages()->count(),
+                        'last_message' => $lastMessage ? [
+                            'content_type' => $lastMessage->content_type,
+                            'sender_type' => $lastMessage->sender_type,
+                            'preview' => $this->getMessagePreview($lastMessage),
+                            'created_at' => $lastMessage->created_at
+                        ] : null
+                    ];
+                });
+            
+            return response()->json([
+                'success' => true,
+                'chats' => $chats
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to get chats: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get chats: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get a preview of a message based on its content type
+     *
+     * @param CogniChatMessage $message
+     * @return string
+     */
+    private function getMessagePreview($message)
+    {
+        switch ($message->content_type) {
+            case 'text':
+                // Return a shortened version of the text
+                return strlen($message->content) > 100 
+                    ? substr($message->content, 0, 97) . '...' 
+                    : $message->content;
+                
+            case 'link':
+                return 'Shared a link: ' . parse_url($message->content, PHP_URL_HOST);
+                
+            case 'image':
+                return 'Shared an image';
+                
+            case 'document':
+                $filename = $message->metadata['filename'] ?? 'document';
+                return 'Shared a document: ' . $filename;
+                
+            default:
+                return 'Message';
+        }
+    }
+    
+    /**
+     * Get a specific chat with its messages
+     *
+     * @param string $shareKey
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getChat($shareKey)
+    {
+        $user = Auth::user();
+        
+        try {
+            $chat = CogniChat::where('share_key', $shareKey)->first();
+            
+            if (!$chat) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Chat not found'
+                ], 404);
+            }
+            
+            // Check if user has access to this chat
+            if (!$chat->is_public && (!$user || $chat->user_id !== $user->id)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have permission to view this chat'
+                ], 403);
+            }
+            
+            // Get messages with proper formatting
+            $messages = $chat->messages()
+                ->orderBy('created_at', 'asc')
+                ->get()
+                ->map(function($message) {
+                    return $message->formattedContent();
+                });
+            
+            return response()->json([
+                'success' => true,
+                'chat' => [
+                    'id' => $chat->id,
+                    'title' => $chat->title,
+                    'share_key' => $chat->share_key,
+                    'is_public' => $chat->is_public,
+                    'created_at' => $chat->created_at,
+                    'updated_at' => $chat->updated_at,
+                    'messages' => $messages
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to get chat: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get chat: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Create a new chat
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function createChat(Request $request)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated'
+            ], 401);
+        }
+        
+        $validator = Validator::make($request->all(), [
+            'title' => 'nullable|string|max:255',
+            'initial_message' => 'nullable|string',
+            'is_public' => 'nullable|boolean',
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        try {
+            // Create a new chat
+            $chat = new CogniChat();
+            $chat->user_id = $user->id;
+            $chat->title = $request->input('title');
+            $chat->is_public = $request->input('is_public', false);
+            $chat->save();
+            
+            // Add initial message if provided
+            $initialMessage = $request->input('initial_message');
+            if (!empty($initialMessage)) {
+                $message = new CogniChatMessage();
+                $message->chat_id = $chat->id;
+                $message->sender_type = 'user';
+                $message->content_type = 'text';
+                $message->content = $initialMessage;
+                $message->save();
+                
+                // Get response from Cogni
+                $cogniResponse = $this->cogniService->askQuestion($initialMessage);
+                
+                if ($cogniResponse['success'] && isset($cogniResponse['answer'])) {
+                    $responseMessage = new CogniChatMessage();
+                    $responseMessage->chat_id = $chat->id;
+                    $responseMessage->sender_type = 'cogni';
+                    $responseMessage->content_type = 'text';
+                    $responseMessage->content = $cogniResponse['answer'];
+                    $responseMessage->save();
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Chat created successfully',
+                'chat' => [
+                    'id' => $chat->id,
+                    'title' => $chat->title,
+                    'share_key' => $chat->share_key,
+                    'is_public' => $chat->is_public,
+                    'created_at' => $chat->created_at
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to create chat: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create chat: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Create a new chat from shared content (text, link, image, document)
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function createChatFromShared(Request $request)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated'
+            ], 401);
+        }
+        
+        $validator = Validator::make($request->all(), [
+            'content_type' => 'required|string|in:text,link,image,document,youtube',
+            'content' => 'required_if:content_type,text,link,youtube|string',
+            'file' => 'required_if:content_type,image,document|file|max:10240',
+            'metadata' => 'nullable|array',
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        try {
+            $contentType = $request->input('content_type');
+            $content = null;
+            $metadata = $request->input('metadata', []);
+            
+            // Process the content based on type
+            switch ($contentType) {
+                case 'text':
+                case 'link':
+                    $content = $request->input('content');
+                    break;
+                    
+                case 'youtube':
+                    $content = $request->input('content');
+                    $videoId = $this->youtubeService->extractVideoId($content);
+                    
+                    if (!$videoId) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Invalid YouTube URL'
+                        ], 422);
+                    }
+                    
+                    // Fetch video info and captions
+                    $videoInfo = $this->youtubeService->getVideoInfo($videoId);
+                    
+                    if (!$videoInfo['success']) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Could not retrieve YouTube video information: ' . 
+                                        ($videoInfo['message'] ?? 'Unknown error')
+                        ], $videoInfo['code'] ?? 500);
+                    }
+                    
+                    // Add video information to metadata
+                    $metadata['video_id'] = $videoId;
+                    $metadata['video_title'] = $videoInfo['video']['title'] ?? 'Unknown';
+                    $metadata['video_channel'] = $videoInfo['video']['channel'] ?? 'Unknown';
+                    $metadata['video_duration'] = $videoInfo['video']['duration'] ?? 'Unknown';
+                    $metadata['video_thumbnail'] = $videoInfo['video']['thumbnail'] ?? null;
+                    
+                    // Switch the content type to a special 'youtube' type
+                    $contentType = 'youtube';
+                    break;
+                    
+                case 'image':
+                case 'document':
+                    if ($request->hasFile('file')) {
+                        $file = $request->file('file');
+                        $fileName = time() . '_' . $file->getClientOriginalName();
+                        $path = $file->storeAs(
+                            'cogni_chat_' . $contentType . 's', 
+                            $fileName, 
+                            'public'
+                        );
+                        
+                        $content = Storage::url($path);
+                        $metadata['filename'] = $file->getClientOriginalName();
+                        $metadata['file_type'] = $file->getClientMimeType();
+                        $metadata['size'] = $file->getSize();
+                    } else {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'No file provided'
+                        ], 422);
+                    }
+                    break;
+            }
+            
+            if (empty($content)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Content is required'
+                ], 422);
+            }
+            
+            // Create the chat with the shared content
+            $chat = CogniChat::createFromSharedContent($user->id, $contentType, $content, $metadata);
+            
+            // Generate a Cogni response for the shared content
+            $cogniResponse = null;
+            
+            // If it's a YouTube link, get a summary of the video
+            if ($contentType === 'youtube' && isset($metadata['video_id'])) {
+                $videoSummary = $this->youtubeService->summarizeVideo($metadata['video_id'], $this->cogniService);
+                
+                if ($videoSummary['success']) {
+                    // Create a response message with the video summary
+                    $responseMessage = new CogniChatMessage();
+                    $responseMessage->chat_id = $chat->id;
+                    $responseMessage->sender_type = 'cogni';
+                    $responseMessage->content_type = 'text';
+                    $responseMessage->content = "📺 **Video Analysis: " . $metadata['video_title'] . "**\n\n" . 
+                                                $videoSummary['summary'] . "\n\n" . 
+                                                "What would you like to know about this video? I'm ready to answer your questions.";
+                    $responseMessage->save();
+                    
+                    // Add the captions or transcript to the chat metadata for later reference
+                    if (isset($videoSummary['captions_available']) && $videoSummary['captions_available']) {
+                        $captionsResult = $this->youtubeService->getCaptions($metadata['video_id']);
+                        
+                        if ($captionsResult['success']) {
+                            // Store captions as a system message that won't be displayed to the user
+                            // but can be referenced by Cogni for context
+                            $captionsMessage = new CogniChatMessage();
+                            $captionsMessage->chat_id = $chat->id;
+                            $captionsMessage->sender_type = 'system';
+                            $captionsMessage->content_type = 'text';
+                            $captionsMessage->content = "TRANSCRIPT:\n\n" . $captionsResult['captions']['content'];
+                            $captionsMessage->metadata = [
+                                'is_transcript' => true,
+                                'video_id' => $metadata['video_id']
+                            ];
+                            $captionsMessage->save();
+                        }
+                    }
+                } else {
+                    // Fall back to a generic prompt if video analysis fails
+                    $prompt = "I'd like to discuss this YouTube video: " . $content . 
+                             "\nTitle: " . ($metadata['video_title'] ?? 'Unknown') . 
+                             "\nChannel: " . ($metadata['video_channel'] ?? 'Unknown');
+                             
+                    $cogniResponse = $this->cogniService->askQuestion($prompt);
+                    
+                    if ($cogniResponse['success'] && isset($cogniResponse['answer'])) {
+                        $responseMessage = new CogniChatMessage();
+                        $responseMessage->chat_id = $chat->id;
+                        $responseMessage->sender_type = 'cogni';
+                        $responseMessage->content_type = 'text';
+                        $responseMessage->content = $cogniResponse['answer'];
+                        $responseMessage->save();
+                    }
+                }
+            } else {
+                // Handle other content types as before
+                $promptMap = [
+                    'text' => 'I want to discuss this text: ' . $content,
+                    'link' => 'I want to discuss this link: ' . $content,
+                    'image' => 'I\'ve shared an image with you. Can you help me analyze or discuss it?',
+                    'document' => 'I\'ve shared a document named "' . ($metadata['filename'] ?? 'document') . '". Can you help me understand or discuss it?'
+                ];
+                
+                $prompt = $promptMap[$contentType] ?? 'I want to discuss this content with you.';
+                
+                $cogniResponse = $this->cogniService->askQuestion($prompt);
+                
+                if ($cogniResponse['success'] && isset($cogniResponse['answer'])) {
+                    $responseMessage = new CogniChatMessage();
+                    $responseMessage->chat_id = $chat->id;
+                    $responseMessage->sender_type = 'cogni';
+                    $responseMessage->content_type = 'text';
+                    $responseMessage->content = $cogniResponse['answer'];
+                    $responseMessage->save();
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Chat created from shared content',
+                'chat' => [
+                    'id' => $chat->id,
+                    'title' => $chat->title,
+                    'share_key' => $chat->share_key,
+                    'is_public' => $chat->is_public,
+                    'created_at' => $chat->created_at
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to create chat from shared content: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create chat from shared content: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Add a new message to an existing chat
+     *
+     * @param Request $request
+     * @param string $shareKey
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function addMessage(Request $request, $shareKey)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated'
+            ], 401);
+        }
+        
+        $validator = Validator::make($request->all(), [
+            'content_type' => 'required|string|in:text,link,image,document',
+            'content' => 'required_if:content_type,text,link|string',
+            'file' => 'required_if:content_type,image,document|file|max:10240',
+            'metadata' => 'nullable|array',
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        try {
+            // Find the chat by share key
+            $chat = CogniChat::where('share_key', $shareKey)->first();
+            
+            if (!$chat) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Chat not found'
+                ], 404);
+            }
+            
+            // Check if user has permission to add messages
+            if ($chat->user_id !== $user->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have permission to add messages to this chat'
+                ], 403);
+            }
+            
+            $contentType = $request->input('content_type');
+            $content = null;
+            $metadata = $request->input('metadata', []);
+            
+            // Process the content based on type
+            switch ($contentType) {
+                case 'text':
+                case 'link':
+                    $content = $request->input('content');
+                    break;
+                    
+                case 'image':
+                case 'document':
+                    if ($request->hasFile('file')) {
+                        $file = $request->file('file');
+                        $fileName = time() . '_' . $file->getClientOriginalName();
+                        $path = $file->storeAs(
+                            'cogni_chat_' . $contentType . 's', 
+                            $fileName, 
+                            'public'
+                        );
+                        
+                        $content = Storage::url($path);
+                        $metadata['filename'] = $file->getClientOriginalName();
+                        $metadata['file_type'] = $file->getClientMimeType();
+                        $metadata['size'] = $file->getSize();
+                    } else {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'No file provided'
+                        ], 422);
+                    }
+                    break;
+            }
+            
+            if (empty($content)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Content is required'
+                ], 422);
+            }
+            
+            // Add the user message
+            $message = new CogniChatMessage();
+            $message->chat_id = $chat->id;
+            $message->sender_type = 'user';
+            $message->content_type = $contentType;
+            $message->content = $content;
+            $message->metadata = $metadata;
+            $message->save();
+            
+            // Update chat timestamp
+            $chat->touch();
+            
+            // Generate a Cogni response for the new message
+            $cogniResponse = null;
+            
+            if ($contentType === 'text' || $contentType === 'link') {
+                // Check if the message contains a YouTube link
+                if (preg_match('/(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/', $content, $matches)) {
+                    // Extract YouTube video ID
+                    $videoId = $matches[1];
+                    
+                    // Update the message metadata to indicate it contains a YouTube link
+                    $message->metadata = array_merge($message->metadata ?? [], [
+                        'contains_youtube' => true,
+                        'video_id' => $videoId
+                    ]);
+                    $message->save();
+                    
+                    // Get video info
+                    $videoInfo = $this->youtubeService->getVideoInfo($videoId);
+                    
+                    if ($videoInfo['success']) {
+                        // Get video summary with captions
+                        $videoSummary = $this->youtubeService->summarizeVideo($videoId, $this->cogniService);
+                        
+                        if ($videoSummary['success']) {
+                            // Store captions as a system message for context
+                            $captionsResult = $this->youtubeService->getCaptions($videoId);
+                            
+                            if ($captionsResult['success']) {
+                                $captionsMessage = new CogniChatMessage();
+                                $captionsMessage->chat_id = $chat->id;
+                                $captionsMessage->sender_type = 'system';
+                                $captionsMessage->content_type = 'text';
+                                $captionsMessage->content = "TRANSCRIPT:\n\n" . $captionsResult['captions']['content'];
+                                $captionsMessage->metadata = [
+                                    'is_transcript' => true,
+                                    'video_id' => $videoId
+                                ];
+                                $captionsMessage->save();
+                            }
+                            
+                            // Prepare response with video analysis
+                            $responseMessage = new CogniChatMessage();
+                            $responseMessage->chat_id = $chat->id;
+                            $responseMessage->sender_type = 'cogni';
+                            $responseMessage->content_type = 'text';
+                            $responseMessage->content = "📺 **Video Analysis: " . ($videoInfo['video']['title'] ?? 'YouTube Video') . "**\n\n" . 
+                                                      $videoSummary['summary'] . "\n\n" . 
+                                                      "What would you like to know about this video?";
+                            $responseMessage->save();
+                            
+                            // Return early since we've created the response
+                            $responseData = [
+                                'user_message' => $message->formattedContent(),
+                                'cogni_message' => $responseMessage->formattedContent(),
+                                'video_info' => $videoInfo['video']
+                            ];
+                            
+                            return response()->json([
+                                'success' => true,
+                                'message' => 'Message with YouTube video added successfully',
+                                'data' => $responseData
+                            ]);
+                        }
+                    }
+                    
+                    // If video analysis fails, continue with normal processing
+                }
+                
+                // If it's regular text or link, we can send the content directly to Cogni
+                $prompt = $content;
+                
+                // Get previous conversation context
+                $context = [];
+                $previousMessages = $chat->messages()
+                    ->where('id', '!=', $message->id)
+                    ->where('sender_type', '!=', 'system') // Exclude system messages
+                    ->orderBy('created_at', 'asc')
+                    ->take(10)
+                    ->get();
+                
+                foreach ($previousMessages as $prevMsg) {
+                    if ($prevMsg->content_type === 'text') {
+                        $context[] = [
+                            'role' => $prevMsg->sender_type === 'user' ? 'user' : 'assistant',
+                            'content' => $prevMsg->content
+                        ];
+                    }
+                }
+                
+                // If there's a system message with transcript for this chat, add that context
+                $transcript = $chat->messages()
+                    ->where('sender_type', 'system')
+                    ->whereJsonContains('metadata->is_transcript', true)
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+                
+                if ($transcript) {
+                    // Add the transcript as system message to provide context
+                    array_unshift($context, [
+                        'role' => 'system',
+                        'content' => "If the user asks about the YouTube video, you can reference this information: " . $transcript->content
+                    ]);
+                }
+                
+                $cogniResponse = $this->cogniService->askQuestion($prompt, $context);
+            } else if ($contentType === 'youtube') {
+                // Handle YouTube links explicitly shared as youtube content type
+                $videoId = $this->youtubeService->extractVideoId($content);
+                
+                if ($videoId) {
+                    // Get video summary and captions
+                    $videoSummary = $this->youtubeService->summarizeVideo($videoId, $this->cogniService);
+                    
+                    if ($videoSummary['success']) {
+                        // Create YouTube-specific response
+                        $responseMessage = new CogniChatMessage();
+                        $responseMessage->chat_id = $chat->id;
+                        $responseMessage->sender_type = 'cogni';
+                        $responseMessage->content_type = 'text';
+                        $responseMessage->content = "📺 **Video Analysis**\n\n" . 
+                                                  $videoSummary['summary'] . "\n\n" . 
+                                                  "What aspects of this video would you like me to elaborate on?";
+                        $responseMessage->save();
+                        
+                        // Also store captions for future reference
+                        $captionsResult = $this->youtubeService->getCaptions($videoId);
+                        
+                        if ($captionsResult['success']) {
+                            $captionsMessage = new CogniChatMessage();
+                            $captionsMessage->chat_id = $chat->id;
+                            $captionsMessage->sender_type = 'system';
+                            $captionsMessage->content_type = 'text';
+                            $captionsMessage->content = "TRANSCRIPT:\n\n" . $captionsResult['captions']['content'];
+                            $captionsMessage->metadata = [
+                                'is_transcript' => true,
+                                'video_id' => $videoId
+                            ];
+                            $captionsMessage->save();
+                        }
+                        
+                        $responseData = [
+                            'user_message' => $message->formattedContent(),
+                            'cogni_message' => $responseMessage->formattedContent()
+                        ];
+                        
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'YouTube video analysis added successfully',
+                            'data' => $responseData
+                        ]);
+                    }
+                }
+                
+                // If the video analysis failed, fall back to generic handling
+                $prompt = "I'd like to discuss this YouTube video: " . $content;
+                $cogniResponse = $this->cogniService->askQuestion($prompt);
+            } else {
+                // For images and documents, use a generic prompt
+                $promptMap = [
+                    'image' => 'I\'ve shared an image with you. Can you help me analyze or discuss it?',
+                    'document' => 'I\'ve shared a document named "' . ($metadata['filename'] ?? 'document') . '". Can you help me understand or discuss it?'
+                ];
+                
+                $prompt = $promptMap[$contentType] ?? 'I want to discuss this content with you.';
+                $cogniResponse = $this->cogniService->askQuestion($prompt);
+            }
+            
+            // Add Cogni's response if successful
+            $responseData = ['user_message' => $message->formattedContent()];
+            
+            if ($cogniResponse && isset($cogniResponse['success']) && $cogniResponse['success'] && isset($cogniResponse['answer'])) {
+                $responseMessage = new CogniChatMessage();
+                $responseMessage->chat_id = $chat->id;
+                $responseMessage->sender_type = 'cogni';
+                $responseMessage->content_type = 'text';
+                $responseMessage->content = $cogniResponse['answer'];
+                $responseMessage->save();
+                
+                $responseData['cogni_message'] = $responseMessage->formattedContent();
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Message added successfully',
+                'data' => $responseData
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to add message to chat: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to add message to chat: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Delete a chat
+     *
+     * @param string $shareKey
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function deleteChat($shareKey)
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated'
+            ], 401);
+        }
+        
+        try {
+            $chat = CogniChat::where('share_key', $shareKey)->first();
+            
+            if (!$chat) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Chat not found'
+                ], 404);
+            }
+            
+            // Check if user has permission to delete the chat
+            if ($chat->user_id !== $user->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have permission to delete this chat'
+                ], 403);
+            }
+            
+            // Delete chat and all its messages
+            $chat->delete();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Chat deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to delete chat: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete chat: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
