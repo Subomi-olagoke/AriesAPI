@@ -906,6 +906,9 @@ Route::middleware('auth:sanctum')->group(function () {
         });
     });
     
+    // Additional points route for compatibility
+    Route::get('/users/points', [\App\Http\Controllers\AlexPointsPaymentController::class, 'getPointsBalance']);
+    
     // Premium routes
     Route::prefix('premium')->group(function () {
         Route::get('/status', [\App\Http\Controllers\PremiumController::class, 'getPremiumStatus']);
