@@ -184,8 +184,8 @@ class AdminAuthController extends Controller
         // Add app store data
         $appStoreData = [
             'status' => 'pending', // Can be 'pending', 'approved', 'rejected'
-            'version' => '1.2.0',
-            'submitted_at' => now()->subDays(2)->format('M d, Y'),
+            'version' => '1.1.0',
+            'submitted_at' => 'May 25, 2025',
             'notes' => 'Waiting for App Store review'
         ];
         
