@@ -2,6 +2,7 @@
 
 @section('title', 'Simplified Dashboard')
 
+
 @section('content')
 <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-semibold text-neutral-900">Simplified Dashboard</h1>
@@ -115,6 +116,31 @@
                     </dl>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Apple App Store Status -->
+<div class="bg-white overflow-hidden shadow-sm rounded-lg transition-all duration-300 hover:shadow-md mb-6">
+    <div class="px-4 py-5 sm:p-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-blue-100 rounded-md p-3">
+                    <i class="fab fa-apple text-blue-700 text-xl"></i>
+                </div>
+                <div class="ml-5">
+                    <h3 class="text-lg font-medium text-neutral-900">Apple App Store</h3>
+                    <div class="mt-1 flex items-center">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mr-2">
+                            <i class="fas fa-clock mr-1"></i> Pending Approval
+                        </span>
+                        <span class="text-sm text-neutral-500">Version 1.2.0 submitted on May 24, 2025</span>
+                    </div>
+                </div>
+            </div>
+            <button id="releaseButton" class="btn btn-primary">
+                <i class="fas fa-rocket mr-2"></i> Release Update
+            </button>
         </div>
     </div>
 </div>
@@ -266,6 +292,47 @@
                 }
             }
         });
+
+        // Apple App Store Release Button
+        const releaseButton = document.getElementById('releaseButton');
+        if (releaseButton) {
+            releaseButton.addEventListener('click', function() {
+                // Store original button content
+                const originalContent = this.innerHTML;
+                
+                // Show spinner
+                this.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processing...';
+                this.disabled = true;
+                
+                // Simulate processing (remove in production and replace with actual API call)
+                setTimeout(() => {
+                    // Reset button after 3 seconds (for demo purposes)
+                    this.innerHTML = originalContent;
+                    this.disabled = false;
+                    
+                    // You would typically make an API call here
+                    // fetch('/api/admin/release-app-update', {
+                    //     method: 'POST',
+                    //     headers: {
+                    //         'Content-Type': 'application/json',
+                    //         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    //     }
+                    // })
+                    // .then(response => response.json())
+                    // .then(data => {
+                    //     // Handle response
+                    //     this.innerHTML = originalContent;
+                    //     this.disabled = false;
+                    // })
+                    // .catch(error => {
+                    //     console.error('Error:', error);
+                    //     this.innerHTML = originalContent;
+                    //     this.disabled = false;
+                    // });
+                    
+                }, 3000);
+            });
+        }
     });
 </script>
 @endsection
