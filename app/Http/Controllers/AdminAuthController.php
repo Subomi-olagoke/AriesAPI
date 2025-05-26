@@ -181,12 +181,25 @@ class AdminAuthController extends Controller
         // Merge default stats with actual stats to ensure all keys exist
         $mergedStats = array_replace_recursive($defaultStats, $stats);
         
+        // Add app store data
+        $appStoreData = [
+            'status' => 'pending', // Can be 'pending', 'approved', 'rejected'
+            'version' => '1.2.0',
+            'submitted_at' => now()->subDays(2)->format('M d, Y'),
+            'notes' => 'Waiting for App Store review'
+        ];
+        
+        // Generate API endpoint URL for charts
+        $statsApiUrl = route('admin.api.dashboard-stats');
+        
         // Use the original dashboard layout
         return view('admin.dashboard', [
             'stats' => $mergedStats,
             'recentUsers' => $recentUsers,
             'pendingLibraries' => $pendingLibraries ?? collect(),
-            'recentWaitlistEntries' => $recentWaitlistEntries ?? collect()
+            'recentWaitlistEntries' => $recentWaitlistEntries ?? collect(),
+            'appStore' => $appStoreData,
+            'statsApiUrl' => $statsApiUrl
         ]);
     }
 

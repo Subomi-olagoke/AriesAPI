@@ -118,6 +118,7 @@
             @apply bg-blue-100 text-blue-800;
         }
     </style>
+    @yield('styles')
     @yield('head')
 </head>
 <body class="bg-neutral-50 font-sans antialiased text-neutral-900">

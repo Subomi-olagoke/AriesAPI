@@ -1,5 +1,31 @@
 @extends('admin.dashboard-layout')
 
+@section('styles')
+<style>
+    .chart-loading {
+        position: relative;
+    }
+    
+    .chart-loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10;
+    }
+    
+    .chart-loading-overlay i {
+        font-size: 2rem;
+        color: #3f5ae3;
+    }
+</style>
+@endsection
+
 @section('content')
 <div class="bg-neutral-50 min-h-screen">
     <div class="max-w-7xl mx-auto">
@@ -21,7 +47,7 @@
                 </div>
             </div>
             <div class="mt-4 flex md:mt-0 md:ml-4 space-x-3">
-                <div class="relative" x-data="{ isOpen: false, selectedPeriod: 'last30' }">
+                <div class="relative" x-data="{ isOpen: false, selectedPeriod: 'last30' }" id="periodSelector">
                     <button @click="isOpen = !isOpen" class="inline-flex items-center px-4 py-2 border border-primary-300 rounded-md shadow-sm text-sm font-medium text-primary-700 bg-white hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
                         <i class="fas fa-calendar -ml-1 mr-2 h-5 w-5 text-primary-500"></i>
                         <span x-text="selectedPeriod === 'last30' ? 'Last 30 days' : 
@@ -32,10 +58,10 @@
                     </button>
                     <div x-show="isOpen" @click.away="isOpen = false" class="absolute right-0 mt-1 bg-white shadow-lg rounded-md border border-neutral-200 z-10">
                         <div class="py-1">
-                            <a href="#" @click.prevent="selectedPeriod = 'last30'; isOpen = false" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">Last 30 days</a>
-                            <a href="#" @click.prevent="selectedPeriod = 'last90'; isOpen = false" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">Last 90 days</a>
-                            <a href="#" @click.prevent="selectedPeriod = 'thisYear'; isOpen = false" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">This Year</a>
-                            <a href="#" @click.prevent="selectedPeriod = 'allTime'; isOpen = false" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">All Time</a>
+                            <a href="#" @click.prevent="selectedPeriod = 'last30'; isOpen = false; window.updateChartData('last30')" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">Last 30 days</a>
+                            <a href="#" @click.prevent="selectedPeriod = 'last90'; isOpen = false; window.updateChartData('last90')" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">Last 90 days</a>
+                            <a href="#" @click.prevent="selectedPeriod = 'thisYear'; isOpen = false; window.updateChartData('thisYear')" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">This Year</a>
+                            <a href="#" @click.prevent="selectedPeriod = 'allTime'; isOpen = false; window.updateChartData('allTime')" class="block px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50">All Time</a>
                         </div>
                     </div>
                 </div>
@@ -208,11 +234,24 @@
                         <div class="ml-5">
                             <h3 class="text-lg font-medium text-neutral-900">Apple App Store</h3>
                             <div class="mt-1 flex items-center">
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mr-2">
-                                    <i class="fas fa-clock mr-1"></i> Pending Approval
-                                </span>
-                                <span class="text-sm text-neutral-500">Latest version awaiting App Store review</span>
+                                @if($appStore['status'] === 'pending')
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mr-2">
+                                        <i class="fas fa-clock mr-1"></i> Pending Approval
+                                    </span>
+                                @elseif($appStore['status'] === 'approved')
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-2">
+                                        <i class="fas fa-check mr-1"></i> Approved
+                                    </span>
+                                @elseif($appStore['status'] === 'rejected')
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 mr-2">
+                                        <i class="fas fa-times mr-1"></i> Rejected
+                                    </span>
+                                @endif
+                                <span class="text-sm text-neutral-500">Version {{ $appStore['version'] }} submitted on {{ $appStore['submitted_at'] }}</span>
                             </div>
+                            @if($appStore['notes'])
+                                <div class="mt-1 text-sm text-neutral-500">{{ $appStore['notes'] }}</div>
+                            @endif
                         </div>
                     </div>
                     <button id="releaseButton" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-700 hover:bg-primary-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
@@ -512,7 +551,7 @@
             chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js';
             chartScript.onload = function() {
                 logDebug('Chart.js loaded successfully, initializing charts...');
-                setTimeout(initializeAllCharts, 300);
+                setTimeout(fetchChartDataAndInitialize, 300);
             };
             chartScript.onerror = function() {
                 logDebug('Failed to load Chart.js dynamically');
@@ -520,6 +559,8 @@
             document.head.appendChild(chartScript);
         } else {
             logDebug('Chart.js is loaded, version: ' + Chart.version);
+            // Fetch chart data
+            fetchChartDataAndInitialize();
         }
         
         // Parse dashboard stats safely
@@ -553,6 +594,66 @@
                 content: { totalPosts: 0, postsToday: 0, totalCourses: 0, totalLibraries: 0, pendingLibraries: 0 },
                 revenue: { total: 0, thisMonth: 0 }
             };
+        }
+        
+        // Function to fetch chart data from API
+        function fetchChartDataAndInitialize() {
+            const period = document.querySelector('[x-text]')?.getAttribute('x-text')?.match(/selectedPeriod === '([^']+)'/) 
+                ? document.querySelector('[x-text]').getAttribute('x-text').match(/selectedPeriod === '([^']+)'/)[1] 
+                : 'last30';
+                
+            logDebug(`Fetching chart data for period: ${period}`);
+            
+            fetch('{{ $statsApiUrl }}?period=' + period)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    logDebug('Successfully fetched chart data from API');
+                    initializeChartsWithData(data);
+                })
+                .catch(error => {
+                    logDebug('Error fetching chart data: ' + error.message);
+                    // Fall back to dummy data if API fails
+                    initializeAllCharts();
+                });
+        }
+        
+        // Initialize charts with API data
+        function initializeChartsWithData(data) {
+            logDebug('Initializing charts with API data...');
+            
+            // User Growth Chart
+            initializeChart(
+                'userGrowthChart', 
+                'line', 
+                data.userGrowthData.labels,
+                [{
+                    label: 'New Users',
+                    data: data.userGrowthData.data,
+                    borderColor: '#5a78ee',
+                    backgroundColor: 'rgba(90, 120, 238, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true
+                }]
+            );
+            
+            // Revenue Chart
+            initializeChart(
+                'revenueChart', 
+                'bar', 
+                data.revenueData.labels,
+                [{
+                    label: 'Revenue',
+                    data: data.revenueData.data,
+                    backgroundColor: '#5a78ee',
+                    borderRadius: 4
+                }]
+            );
         }
 
         // Function to handle CSV export
@@ -598,18 +699,33 @@
             logDebug('Export button not found on page');
         }
 
-        // Function to initialize all charts
+        // Function to initialize all charts with fallback data when API is unavailable
         function initializeAllCharts() {
-            logDebug('Initializing all charts...');
+            logDebug('Initializing all charts with fallback data...');
             
-            // Create and initialize charts
+            // Get last 12 months for labels
+            const months = [];
+            const currentDate = new Date();
+            for (let i = 11; i >= 0; i--) {
+                const date = new Date(currentDate);
+                date.setMonth(currentDate.getMonth() - i);
+                months.push(date.toLocaleString('default', { month: 'short' }));
+            }
+            
+            // Create and initialize charts with generated data based on actual stats
+            const userTotal = dashboardStats.users.total;
+            const userGrowthData = months.map((_, index) => {
+                // Generate a somewhat realistic growth curve based on total users
+                return Math.floor(userTotal * (0.3 + (index / 12) * 0.7) / 12);
+            });
+            
             initializeChart(
                 'userGrowthChart', 
                 'line', 
-                ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                months,
                 [{
                     label: 'New Users',
-                    data: [65, 78, 90, 105, 125, 138, 156, 170, 186, 199, 210, 225],
+                    data: userGrowthData,
                     borderColor: '#5a78ee',
                     backgroundColor: 'rgba(90, 120, 238, 0.1)',
                     borderWidth: 2,
@@ -618,13 +734,19 @@
                 }]
             );
             
+            const revenueTotal = dashboardStats.revenue.total;
+            const revenueData = months.map((_, index) => {
+                // Generate a somewhat realistic revenue curve based on total revenue
+                return Math.floor(revenueTotal * (0.4 + (index / 12) * 0.6) / 12);
+            });
+            
             initializeChart(
                 'revenueChart', 
                 'bar', 
-                ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                months,
                 [{
                     label: 'Revenue',
-                    data: [1500, 1700, 1900, 2100, 2300, 2500, 2700, 2900, 3100, 3300, 3500, 3700],
+                    data: revenueData,
                     backgroundColor: '#5a78ee',
                     borderRadius: 4
                 }]
@@ -841,6 +963,54 @@
                 }
             });
         }
+        
+        // Set up the global updateChartData function
+        window.updateChartData = function(period) {
+            logDebug(`Chart period changed to: ${period}`);
+            
+            // Show loading state on charts
+            const userChartContainer = document.getElementById('userGrowthChart').closest('.card');
+            const revenueChartContainer = document.getElementById('revenueChart').closest('.card');
+            
+            if (userChartContainer) {
+                userChartContainer.classList.add('chart-loading');
+                userChartContainer.insertAdjacentHTML('beforeend', '<div class="chart-loading-overlay"><i class="fas fa-spinner fa-spin"></i></div>');
+            }
+            
+            if (revenueChartContainer) {
+                revenueChartContainer.classList.add('chart-loading');
+                revenueChartContainer.insertAdjacentHTML('beforeend', '<div class="chart-loading-overlay"><i class="fas fa-spinner fa-spin"></i></div>');
+            }
+            
+            // Fetch new data
+            fetch('{{ $statsApiUrl }}?period=' + period)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    logDebug('Successfully fetched chart data from API');
+                    
+                    // Remove loading overlays
+                    document.querySelectorAll('.chart-loading-overlay').forEach(el => el.remove());
+                    document.querySelectorAll('.card').forEach(el => el.classList.remove('chart-loading'));
+                    
+                    // Update charts with new data
+                    initializeChartsWithData(data);
+                })
+                .catch(error => {
+                    logDebug('Error fetching chart data: ' + error.message);
+                    
+                    // Remove loading overlays
+                    document.querySelectorAll('.chart-loading-overlay').forEach(el => el.remove());
+                    document.querySelectorAll('.card').forEach(el => el.classList.remove('chart-loading'));
+                    
+                    // Fall back to dummy data if API fails
+                    initializeAllCharts();
+                });
+        };
         
         // Apple App Store Release Button
         const releaseButton = document.getElementById('releaseButton');
