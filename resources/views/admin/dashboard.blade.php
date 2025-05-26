@@ -96,9 +96,9 @@
                 <div class="bg-neutral-50 px-4 py-3 sm:px-6">
                     <div class="text-sm">
                         <span class="font-medium text-green-600 flex items-center">
-                            <i class="fas fa-arrow-up mr-1 text-xs"></i> 12%
+                            <i class="fas fa-arrow-up mr-1 text-xs"></i> {{ $stats['users']['new_this_week'] ?? 0 }}
                         </span>
-                        <span class="text-neutral-500">vs last month</span>
+                        <span class="text-neutral-500">new this week</span>
                     </div>
                 </div>
             </div>
@@ -127,9 +127,9 @@
                 <div class="bg-neutral-50 px-4 py-3 sm:px-6">
                     <div class="text-sm">
                         <span class="font-medium text-green-600 flex items-center">
-                            <i class="fas fa-arrow-up mr-1 text-xs"></i> 8.2%
+                            <i class="fas fa-arrow-up mr-1 text-xs"></i> ${{ number_format($stats['revenue']['this_month'] ?? 0) }}
                         </span>
-                        <span class="text-neutral-500">vs last month</span>
+                        <span class="text-neutral-500">this month</span>
                     </div>
                 </div>
             </div>
@@ -158,9 +158,9 @@
                 <div class="bg-neutral-50 px-4 py-3 sm:px-6">
                     <div class="text-sm">
                         <span class="font-medium text-green-600 flex items-center">
-                            <i class="fas fa-arrow-up mr-1 text-xs"></i> 5.4%
+                            <i class="fas fa-arrow-up mr-1 text-xs"></i> {{ $stats['content']['total_posts'] ?? 0 }}
                         </span>
-                        <span class="text-neutral-500">vs last month</span>
+                        <span class="text-neutral-500">total posts</span>
                     </div>
                 </div>
             </div>
@@ -188,11 +188,36 @@
                 </div>
                 <div class="bg-neutral-50 px-4 py-3 sm:px-6">
                     <div class="text-sm">
-                        <span class="font-medium text-red-600 flex items-center">
-                            <i class="fas fa-arrow-up mr-1 text-xs"></i> 12.5%
+                        <span class="font-medium text-yellow-600 flex items-center">
+                            <i class="fas fa-clock mr-1 text-xs"></i> {{ $stats['content']['pending_libraries'] ?? 0 }}
                         </span>
-                        <span class="text-neutral-500">vs last month</span>
+                        <span class="text-neutral-500">awaiting review</span>
                     </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Apple App Store Status -->
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg transition-all duration-300 hover:shadow-md mb-8">
+            <div class="px-4 py-5 sm:p-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 bg-blue-100 rounded-md p-3">
+                            <i class="fab fa-apple text-blue-700 text-xl"></i>
+                        </div>
+                        <div class="ml-5">
+                            <h3 class="text-lg font-medium text-neutral-900">Apple App Store</h3>
+                            <div class="mt-1 flex items-center">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mr-2">
+                                    <i class="fas fa-clock mr-1"></i> Pending Approval
+                                </span>
+                                <span class="text-sm text-neutral-500">Latest version awaiting App Store review</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="releaseButton" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-700 hover:bg-primary-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                        <i class="fas fa-rocket mr-2"></i> Release Update
+                    </button>
                 </div>
             </div>
         </div>
@@ -258,45 +283,35 @@
                 </div>
             </div>
             <div class="divide-y divide-neutral-200">
-                <div class="p-5 flex items-center">
-                    <div class="flex-shrink-0">
-                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary-100">
-                            <i class="fas fa-user-plus text-primary-700"></i>
-                        </span>
+                @if(count($recentUsers) > 0)
+                    @foreach($recentUsers->take(3) as $user)
+                    <div class="p-5 flex items-center">
+                        <div class="flex-shrink-0">
+                            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary-100">
+                                <span class="text-xs font-medium leading-none text-primary-700">
+                                    {{ strtoupper(substr($user->first_name ?? 'U', 0, 1)) }}{{ strtoupper(substr($user->last_name ?? 'U', 0, 1)) }}
+                                </span>
+                            </span>
+                        </div>
+                        <div class="ml-4 flex-1">
+                            <div class="text-sm font-medium text-neutral-900">New user registered</div>
+                            <div class="text-sm text-neutral-500">{{ $user->first_name ?? '' }} {{ $user->last_name ?? '' }} ({{ $user->email ?? 'No email' }})</div>
+                        </div>
+                        <div class="text-sm text-neutral-500">{{ $user->created_at ? $user->created_at->diffForHumans() : 'Recently' }}</div>
                     </div>
-                    <div class="ml-4 flex-1">
-                        <div class="text-sm font-medium text-neutral-900">New user registered</div>
-                        <div class="text-sm text-neutral-500">John Smith created an account</div>
+                    @endforeach
+                @else
+                    <div class="py-8 text-center">
+                        <i class="fas fa-history text-neutral-400 text-4xl mb-3"></i>
+                        <h3 class="mt-2 text-sm font-medium text-neutral-900">No recent activity</h3>
+                        <p class="mt-1 text-sm text-neutral-500">
+                            New activities will appear here as they happen.
+                        </p>
                     </div>
-                    <div class="text-sm text-neutral-500">2 hours ago</div>
-                </div>
-                <div class="p-5 flex items-center">
-                    <div class="flex-shrink-0">
-                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
-                            <i class="fas fa-dollar-sign text-green-700"></i>
-                        </span>
-                    </div>
-                    <div class="ml-4 flex-1">
-                        <div class="text-sm font-medium text-neutral-900">New payment received</div>
-                        <div class="text-sm text-neutral-500">Sarah Johnson purchased "Advanced JavaScript Course"</div>
-                    </div>
-                    <div class="text-sm text-neutral-500">4 hours ago</div>
-                </div>
-                <div class="p-5 flex items-center">
-                    <div class="flex-shrink-0">
-                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-yellow-100">
-                            <i class="fas fa-file-circle-plus text-yellow-700"></i>
-                        </span>
-                    </div>
-                    <div class="ml-4 flex-1">
-                        <div class="text-sm font-medium text-neutral-900">New course added</div>
-                        <div class="text-sm text-neutral-500">Alex Williams added "Python for Data Science"</div>
-                    </div>
-                    <div class="text-sm text-neutral-500">6 hours ago</div>
-                </div>
+                @endif
             </div>
             <div class="bg-neutral-50 px-4 py-3 text-right border-t border-neutral-200">
-                <a href="#" class="text-sm text-primary-600 hover:text-primary-900">
+                <a href="{{ route('admin.users.index') }}" class="text-sm text-primary-600 hover:text-primary-900">
                     View all activity
                 </a>
             </div>
@@ -424,66 +439,39 @@
                     </div>
                 </div>
                 <div class="divide-y divide-neutral-200">
-                    <!-- Sample user rows - would be dynamically populated -->
-                    <div class="p-4 flex items-center">
-                        <div class="flex-shrink-0">
-                            <span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary-100">
-                                <span class="font-medium text-primary-700">JS</span>
-                            </span>
-                        </div>
-                        <div class="ml-3 flex-1">
-                            <div class="flex items-center">
-                                <div class="text-sm font-medium text-neutral-900">John Smith</div>
-                                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-neutral-100 text-neutral-800">
-                                    User
+                    @if(count($recentUsers) > 0)
+                        @foreach($recentUsers as $user)
+                        <div class="p-4 flex items-center">
+                            <div class="flex-shrink-0">
+                                <span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary-100">
+                                    <span class="font-medium text-primary-700">
+                                        {{ strtoupper(substr($user->first_name ?? 'U', 0, 1)) }}{{ strtoupper(substr($user->last_name ?? 'U', 0, 1)) }}
+                                    </span>
                                 </span>
                             </div>
-                            <div class="text-xs text-neutral-500">john.smith@example.com</div>
-                        </div>
-                        <div class="text-xs text-neutral-500">
-                            <div>2 hours ago</div>
-                        </div>
-                    </div>
-                    
-                    <div class="p-4 flex items-center">
-                        <div class="flex-shrink-0">
-                            <span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary-100">
-                                <span class="font-medium text-primary-700">SJ</span>
-                            </span>
-                        </div>
-                        <div class="ml-3 flex-1">
-                            <div class="flex items-center">
-                                <div class="text-sm font-medium text-neutral-900">Sarah Johnson</div>
-                                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                    Educator
-                                </span>
+                            <div class="ml-3 flex-1">
+                                <div class="flex items-center">
+                                    <div class="text-sm font-medium text-neutral-900">{{ $user->first_name ?? '' }} {{ $user->last_name ?? '' }}</div>
+                                    <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $user->isAdmin ? 'bg-red-100 text-red-800' : 'bg-neutral-100 text-neutral-800' }}">
+                                        {{ $user->isAdmin ? 'Admin' : 'User' }}
+                                    </span>
+                                </div>
+                                <div class="text-xs text-neutral-500">{{ $user->email ?? 'No email' }}</div>
                             </div>
-                            <div class="text-xs text-neutral-500">sarah.johnson@example.com</div>
-                        </div>
-                        <div class="text-xs text-neutral-500">
-                            <div>5 hours ago</div>
-                        </div>
-                    </div>
-                    
-                    <div class="p-4 flex items-center">
-                        <div class="flex-shrink-0">
-                            <span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary-100">
-                                <span class="font-medium text-primary-700">AW</span>
-                            </span>
-                        </div>
-                        <div class="ml-3 flex-1">
-                            <div class="flex items-center">
-                                <div class="text-sm font-medium text-neutral-900">Alex Williams</div>
-                                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-neutral-100 text-neutral-800">
-                                    User
-                                </span>
+                            <div class="text-xs text-neutral-500">
+                                <div>{{ $user->created_at ? $user->created_at->diffForHumans() : 'Recently' }}</div>
                             </div>
-                            <div class="text-xs text-neutral-500">alex.williams@example.com</div>
                         </div>
-                        <div class="text-xs text-neutral-500">
-                            <div>8 hours ago</div>
+                        @endforeach
+                    @else
+                        <div class="py-8 text-center">
+                            <i class="fas fa-users text-neutral-400 text-4xl mb-3"></i>
+                            <h3 class="mt-2 text-sm font-medium text-neutral-900">No users found</h3>
+                            <p class="mt-1 text-sm text-neutral-500">
+                                New users will appear here when they register.
+                            </p>
                         </div>
-                    </div>
+                    @endif
                 </div>
                 <div class="bg-neutral-50 px-4 py-3 text-right border-t border-neutral-200">
                     <a href="{{ route('admin.users.index') }}" class="text-sm text-primary-600 hover:text-primary-900">
@@ -851,6 +839,47 @@
                         ? 'Show Debug Details' 
                         : 'Hide Debug Details';
                 }
+            });
+        }
+        
+        // Apple App Store Release Button
+        const releaseButton = document.getElementById('releaseButton');
+        if (releaseButton) {
+            releaseButton.addEventListener('click', function() {
+                // Store original button content
+                const originalContent = this.innerHTML;
+                
+                // Show spinner
+                this.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processing...';
+                this.disabled = true;
+                
+                // Simulate processing (remove in production and replace with actual API call)
+                setTimeout(() => {
+                    // Reset button after 3 seconds (for demo purposes)
+                    this.innerHTML = originalContent;
+                    this.disabled = false;
+                    
+                    // You would typically make an API call here
+                    // fetch('/api/admin/release-app-update', {
+                    //     method: 'POST',
+                    //     headers: {
+                    //         'Content-Type': 'application/json',
+                    //         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    //     }
+                    // })
+                    // .then(response => response.json())
+                    // .then(data => {
+                    //     // Handle response
+                    //     this.innerHTML = originalContent;
+                    //     this.disabled = false;
+                    // })
+                    // .catch(error => {
+                    //     console.error('Error:', error);
+                    //     this.innerHTML = originalContent;
+                    //     this.disabled = false;
+                    // });
+                    
+                }, 3000);
             });
         }
     });
