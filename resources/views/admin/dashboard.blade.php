@@ -72,29 +72,6 @@
             </div>
         </div>
 
-        <!-- Debug Banner (will only show if there are chart errors) -->
-        <div id="chart-debug-banner" class="mb-6 bg-orange-50 border border-orange-200 rounded-lg p-4 hidden">
-            <div class="flex items-start">
-                <div class="flex-shrink-0 mt-0.5">
-                    <i class="fas fa-triangle-exclamation text-orange-500"></i>
-                </div>
-                <div class="ml-3">
-                    <h3 class="text-sm font-medium text-orange-800">Chart Debug Information</h3>
-                    <div class="mt-2 text-sm text-orange-700">
-                        <p>There were issues loading the charts. Check the developer console for more details.</p>
-                        <div id="chart-debug-details" class="mt-2 bg-white p-3 rounded text-xs font-mono overflow-auto max-h-40"></div>
-                        <div class="mt-3 flex space-x-3">
-                            <button id="retry-charts-btn" class="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded">
-                                Retry Loading Charts
-                            </button>
-                            <button id="toggle-debug-btn" class="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded">
-                                Toggle Debug Details
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
         
         <!-- Stats Cards -->
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
@@ -276,10 +253,6 @@
                     </div>
                 </div>
                 <div class="p-5">
-                    <!-- Chart debug message will appear here if there's an issue -->
-                    <div id="userGrowthChartError" class="hidden p-3 bg-red-50 text-red-700 text-sm rounded mb-3">
-                        Chart failed to load. Please check console for details.
-                    </div>
                     <canvas id="userGrowthChart" height="260"></canvas>
                 </div>
             </div>
@@ -297,10 +270,6 @@
                     </div>
                 </div>
                 <div class="p-5">
-                    <!-- Chart debug message will appear here if there's an issue -->
-                    <div id="revenueChartError" class="hidden p-3 bg-red-50 text-red-700 text-sm rounded mb-3">
-                        Chart failed to load. Please check console for details.
-                    </div>
                     <canvas id="revenueChart" height="260"></canvas>
                 </div>
             </div>
@@ -528,19 +497,9 @@
     console.log('Script execution started');
     
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('DOM loaded - Charts initialization should start now');
-
-        // Initialize debug UI
-        const debugBanner = document.getElementById('chart-debug-banner');
-        const debugDetails = document.getElementById('chart-debug-details');
-        
+        // Initialize charts when DOM is loaded
         function logDebug(message) {
             console.log(message);
-            if (debugDetails) {
-                debugBanner.classList.remove('hidden');
-                const timestamp = new Date().toLocaleTimeString();
-                debugDetails.innerHTML += `<div>[${timestamp}] ${message}</div>`;
-            }
         }
         
         // Check if Chart.js is loaded
@@ -759,8 +718,6 @@
                 const chartElement = document.getElementById(elementId);
                 if (!chartElement) {
                     logDebug(`Chart element '${elementId}' not found in DOM`);
-                    // Show error message
-                    showChartError(elementId);
                     return;
                 }
                 
@@ -832,7 +789,6 @@
                 const ctx = chartElement.getContext('2d');
                 if (!ctx) {
                     logDebug(`Could not get 2D context for ${elementId}`);
-                    showChartError(elementId);
                     return;
                 }
                 
@@ -853,8 +809,6 @@
                         options: options
                     });
                     
-                    // Hide any error message if chart created successfully
-                    hideChartError(elementId);
                     logDebug(`Successfully created ${type} chart for ${elementId}`);
                 } catch (err) {
                     logDebug(`Error during Chart constructor for ${elementId}: ${err.message}`);
@@ -907,62 +861,24 @@
                             apexChart.render();
                             chartElement.apexChart = apexChart;
                             
-                            hideChartError(elementId);
                             logDebug(`Successfully created fallback ApexChart for ${elementId}`);
                         } else {
                             throw new Error('ApexCharts not available');
                         }
                     } catch (apexErr) {
                         logDebug(`Fallback to ApexCharts also failed: ${apexErr.message}`);
-                        showChartError(elementId);
                     }
                 }
             } catch (e) {
                 logDebug(`Error creating chart ${elementId}: ${e.message}`);
                 console.error('Chart initialization error:', e);
-                showChartError(elementId);
             }
         }
         
-        // Helper functions to show/hide chart errors
-        function showChartError(chartId) {
-            const errorEl = document.getElementById(chartId + 'Error');
-            if (errorEl) {
-                errorEl.classList.remove('hidden');
-            }
-        }
-        
-        function hideChartError(chartId) {
-            const errorEl = document.getElementById(chartId + 'Error');
-            if (errorEl) {
-                errorEl.classList.add('hidden');
-            }
-        }
         
         // Initialize charts after a short delay to ensure DOM is fully loaded
         setTimeout(initializeAllCharts, 300);
         
-        // Set up debug UI functionality
-        const retryButton = document.getElementById('retry-charts-btn');
-        if (retryButton) {
-            retryButton.addEventListener('click', function() {
-                logDebug('Manual chart rendering requested...');
-                initializeAllCharts();
-            });
-        }
-        
-        const toggleDebugButton = document.getElementById('toggle-debug-btn');
-        if (toggleDebugButton) {
-            toggleDebugButton.addEventListener('click', function() {
-                const details = document.getElementById('chart-debug-details');
-                if (details) {
-                    details.classList.toggle('hidden');
-                    this.textContent = details.classList.contains('hidden') 
-                        ? 'Show Debug Details' 
-                        : 'Hide Debug Details';
-                }
-            });
-        }
         
         // Set up the global updateChartData function
         window.updateChartData = function(period) {
