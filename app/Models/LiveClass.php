@@ -130,12 +130,33 @@ class LiveClass extends Model
     }
     
     /**
+     * Check if this live class is overdue (past its scheduled time and not started).
+     */
+    public function isOverdue()
+    {
+        return $this->scheduled_at && 
+               $this->scheduled_at->isPast() && 
+               $this->status !== 'live' && 
+               $this->status !== 'ended';
+    }
+    
+    /**
      * Scope a query to only include expired live classes.
      */
     public function scopeExpired($query)
     {
         return $query->whereNotNull('ended_at')
                     ->where('ended_at', '<', now());
+    }
+    
+    /**
+     * Scope a query to only include overdue live classes.
+     */
+    public function scopeOverdue($query)
+    {
+        return $query->whereNotNull('scheduled_at')
+                    ->where('scheduled_at', '<', now())
+                    ->whereNotIn('status', ['live', 'ended']);
     }
     
     /**
@@ -183,5 +204,73 @@ class LiveClass extends Model
         }
         
         return $cleanedCount;
+    }
+    
+    /**
+     * Clean up overdue live classes (classes that passed their scheduled time but never started).
+     * 
+     * @param int $hoursOverdue Number of hours past scheduled time to wait before cleanup (default: 1)
+     * @return int Number of classes cleaned up
+     */
+    public static function cleanupOverdue($hoursOverdue = 1)
+    {
+        $cutoffTime = now()->subHours($hoursOverdue);
+        
+        $overdueClasses = self::whereNotNull('scheduled_at')
+            ->where('scheduled_at', '<', $cutoffTime)
+            ->whereNotIn('status', ['live', 'ended'])
+            ->get();
+            
+        $cleanedCount = 0;
+        
+        foreach ($overdueClasses as $class) {
+            try {
+                DB::transaction(function () use ($class) {
+                    // Delete related chat messages
+                    $class->chatMessages()->delete();
+                    
+                    // Delete participants
+                    $class->participants()->delete();
+                    
+                    // Delete the live class itself
+                    $class->delete();
+                });
+                
+                $cleanedCount++;
+                Log::info('Cleaned up overdue live class', [
+                    'class_id' => $class->id,
+                    'title' => $class->title,
+                    'scheduled_at' => $class->scheduled_at,
+                    'status' => $class->status
+                ]);
+                
+            } catch (\Exception $e) {
+                Log::error('Failed to cleanup overdue live class', [
+                    'class_id' => $class->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+        
+        return $cleanedCount;
+    }
+    
+    /**
+     * Clean up both expired and overdue live classes.
+     * 
+     * @param int $daysOld Number of days after end date to wait before cleanup (default: 1)
+     * @param int $hoursOverdue Number of hours past scheduled time to wait before cleanup (default: 1)
+     * @return array Cleanup results
+     */
+    public static function cleanupAll($daysOld = 1, $hoursOverdue = 1)
+    {
+        $expiredCleaned = self::cleanupExpired($daysOld);
+        $overdueCleaned = self::cleanupOverdue($hoursOverdue);
+        
+        return [
+            'expired_cleaned' => $expiredCleaned,
+            'overdue_cleaned' => $overdueCleaned,
+            'total_cleaned' => $expiredCleaned + $overdueCleaned
+        ];
     }
 }

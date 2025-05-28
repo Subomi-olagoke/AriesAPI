@@ -20,7 +20,10 @@ class Kernel extends ConsoleKernel {
 		$schedule->command('libraries:generate-from-posts --days=7 --min-posts=10')->weekly()->tuesdays()->at('02:00');
 		
 		// Clean up expired live classes daily at 3am
-		$schedule->command('live-classes:cleanup --days=1')->daily()->at('03:00');
+		$schedule->command('live-classes:cleanup --days=1 --hours=1')->daily()->at('03:00');
+		
+		// Clean up overdue live classes every hour (more frequent for better user experience)
+		$schedule->command('live-classes:cleanup --days=999 --hours=1')->hourly();
 	}
 
 	protected $commands = [

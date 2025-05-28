@@ -940,7 +940,7 @@ class LiveClassController extends Controller
     }
     
     /**
-     * Manual cleanup of expired live classes (Admin only).
+     * Manual cleanup of expired and overdue live classes (Admin only).
      * 
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
@@ -955,15 +955,23 @@ class LiveClassController extends Controller
         }
         
         $days = $request->get('days', 1);
+        $hours = $request->get('hours', 1);
         
         try {
-            $cleanedCount = LiveClass::cleanupExpired($days);
+            $results = LiveClass::cleanupAll($days, $hours);
             
             return response()->json([
                 'success' => true,
-                'message' => "Successfully cleaned up {$cleanedCount} expired live class(es).",
-                'cleaned_count' => $cleanedCount,
-                'days_threshold' => $days
+                'message' => "Successfully cleaned up {$results['total_cleaned']} live class(es).",
+                'results' => [
+                    'expired_cleaned' => $results['expired_cleaned'],
+                    'overdue_cleaned' => $results['overdue_cleaned'],
+                    'total_cleaned' => $results['total_cleaned']
+                ],
+                'thresholds' => [
+                    'days_after_end' => $days,
+                    'hours_past_scheduled' => $hours
+                ]
             ]);
             
         } catch (\Exception $e) {
@@ -974,7 +982,7 @@ class LiveClassController extends Controller
             
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to cleanup expired live classes.',
+                'message' => 'Failed to cleanup live classes.',
                 'error' => $e->getMessage()
             ], 500);
         }
