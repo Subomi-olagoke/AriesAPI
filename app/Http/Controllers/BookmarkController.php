@@ -83,4 +83,36 @@ class BookmarkController extends Controller
 
         return response()->json(['message' => 'Bookmark removed successfully']);
     }
+    
+    /**
+     * Get the number of bookmarks for a specific post
+     */
+    public function getPostBookmarkCount($postId)
+    {
+        $post = Post::findOrFail($postId);
+        
+        // Count bookmarks for this post
+        $bookmarkCount = \App\Models\Bookmark::where('post_id', $post->id)->count();
+        
+        return response()->json([
+            'post_id' => $post->id,
+            'bookmark_count' => $bookmarkCount
+        ]);
+    }
+    
+    /**
+     * Get the number of bookmarks for a specific course
+     */
+    public function getCourseBookmarkCount($courseId)
+    {
+        $course = Course::findOrFail($courseId);
+        
+        // Count bookmarks for this course
+        $bookmarkCount = \App\Models\Bookmark::where('course_id', $course->id)->count();
+        
+        return response()->json([
+            'course_id' => $course->id,
+            'bookmark_count' => $bookmarkCount
+        ]);
+    }
 }

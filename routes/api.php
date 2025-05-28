@@ -371,6 +371,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/bookmark/post/{lessonId}', [BookmarkController::class, 'bookmarkPost']);
     Route::delete('/bookmark/course/{courseId}', [BookmarkController::class, 'removeBookmarkCourse']);
     Route::delete('/bookmark/post/{lessonId}', [BookmarkController::class, 'removeBookmarkPost']);
+    
+    // Bookmark count routes
+    Route::get('/bookmark/post/{postId}/count', [BookmarkController::class, 'getPostBookmarkCount']);
+    Route::get('/bookmark/course/{courseId}/count', [BookmarkController::class, 'getCourseBookmarkCount']);
 
     // Notification routes
     Route::get('/notifications', [NotificationController::class, 'getNotifications']);
