@@ -938,4 +938,45 @@ class LiveClassController extends Controller
             ]);
         }
     }
+    
+    /**
+     * Manual cleanup of expired live classes (Admin only).
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function cleanupExpired(Request $request)
+    {
+        // Check if user is admin
+        if (!auth()->user()->is_admin) {
+            return response()->json([
+                'message' => 'Unauthorized. Admin access required.'
+            ], 403);
+        }
+        
+        $days = $request->get('days', 1);
+        
+        try {
+            $cleanedCount = LiveClass::cleanupExpired($days);
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully cleaned up {$cleanedCount} expired live class(es).",
+                'cleaned_count' => $cleanedCount,
+                'days_threshold' => $days
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Manual live class cleanup failed', [
+                'error' => $e->getMessage(),
+                'admin_user' => auth()->id()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to cleanup expired live classes.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

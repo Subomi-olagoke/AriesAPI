@@ -59,6 +59,7 @@ class ProfileController extends Controller
         if ($request->hasFile('avatar')) {
             $avatarUrl = $this->fileUploadService->uploadImage($request->file('avatar'), 'avatars');
             $profile->avatar = $avatarUrl;
+            $user->avatar = $avatarUrl; // Also update user avatar
         }
 
         if ($profile->save()) {
@@ -130,6 +131,7 @@ class ProfileController extends Controller
         if ($request->hasFile('avatar')) {
             $avatarUrl = $this->fileUploadService->uploadImage($request->file('avatar'), 'avatars');
             $profile->avatar = $avatarUrl;
+            $user->avatar = $avatarUrl; // Also update user avatar
         }
 
         if ($profile->save()) {
@@ -220,7 +222,7 @@ class ProfileController extends Controller
             'full_name' => $user->first_name . ' ' . $user->last_name,
             'first_name' => $user->first_name,
             'last_name' => $user->last_name,
-            'avatar' => $user->avatar ?? ($user->profile ? $user->profile->avatar : null),
+            'avatar' => ($user->profile && $user->profile->avatar) ? $user->profile->avatar : $user->avatar,
             'bio' => $user->profile ? $user->profile->bio : null,
             'followers' => $followersCount,
             'following' => $followingCount,
@@ -251,9 +253,12 @@ class ProfileController extends Controller
         
         if ($request->hasFile('avatar')) {
             $avatarUrl = $this->fileUploadService->uploadImage($request->file('avatar'), 'avatars');
-            $profile->avatar = $avatarUrl;
             
-            if ($profile->save()) {
+            // Update both profile and user avatar fields
+            $profile->avatar = $avatarUrl;
+            $user->avatar = $avatarUrl;
+            
+            if ($profile->save() && $user->save()) {
                 return response()->json([
                     'message' => 'Avatar uploaded successfully',
                     'avatar_url' => $avatarUrl
@@ -402,7 +407,7 @@ class ProfileController extends Controller
             'full_name' => $user->first_name . ' ' . $user->last_name,
             'first_name' => $user->first_name,
             'last_name' => $user->last_name,
-            'avatar' => $user->avatar ?? ($profile ? $profile->avatar : null),
+            'avatar' => ($profile && $profile->avatar) ? $profile->avatar : $user->avatar,
             'bio' => $profile ? $profile->bio : null,
             'followers' => $followers,
             'following' => $following,
@@ -502,7 +507,7 @@ class ProfileController extends Controller
             'full_name' => $user->first_name . ' ' . $user->last_name,
             'first_name' => $user->first_name,
             'last_name' => $user->last_name,
-            'avatar' => $user->avatar ?? ($profile ? $profile->avatar : null),
+            'avatar' => ($profile && $profile->avatar) ? $profile->avatar : $user->avatar,
             'bio' => $profile ? $profile->bio : null,
             'followers' => $followers,
             'following' => $following,
@@ -600,7 +605,7 @@ class ProfileController extends Controller
             'full_name' => $user->first_name . ' ' . $user->last_name,
             'first_name' => $user->first_name,
             'last_name' => $user->last_name,
-            'avatar' => $user->avatar ?? $profile->avatar,
+            'avatar' => ($profile && $profile->avatar) ? $profile->avatar : $user->avatar,
             'bio' => $profile->bio,
             'followers' => $followers,
             'following' => $following,

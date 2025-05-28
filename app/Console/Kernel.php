@@ -18,6 +18,9 @@ class Kernel extends ConsoleKernel {
 		
 		// Generate libraries from popular posts once a week (every Tuesday at 2am)
 		$schedule->command('libraries:generate-from-posts --days=7 --min-posts=10')->weekly()->tuesdays()->at('02:00');
+		
+		// Clean up expired live classes daily at 3am
+		$schedule->command('live-classes:cleanup --days=1')->daily()->at('03:00');
 	}
 
 	protected $commands = [
@@ -28,6 +31,7 @@ class Kernel extends ConsoleKernel {
 		\App\Console\Commands\UpdateCognitionReadlists::class,
 		\App\Console\Commands\GenerateLibrariesFromPosts::class,
 		\App\Console\Commands\GenerateOpenLibraries::class,
+		\App\Console\Commands\CleanupExpiredLiveClasses::class,
 	];
 
 	/**

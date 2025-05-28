@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class LiveClass extends Model
 {
@@ -117,5 +119,69 @@ class LiveClass extends Model
     public function hasEnded()
     {
         return $this->status === 'ended';
+    }
+    
+    /**
+     * Check if this live class is expired (past its end date).
+     */
+    public function isExpired()
+    {
+        return $this->ended_at && $this->ended_at->isPast();
+    }
+    
+    /**
+     * Scope a query to only include expired live classes.
+     */
+    public function scopeExpired($query)
+    {
+        return $query->whereNotNull('ended_at')
+                    ->where('ended_at', '<', now());
+    }
+    
+    /**
+     * Clean up expired live classes and their related data.
+     * 
+     * @param int $daysOld Number of days after end date to wait before cleanup (default: 1)
+     * @return int Number of classes cleaned up
+     */
+    public static function cleanupExpired($daysOld = 1)
+    {
+        $cutoffDate = now()->subDays($daysOld);
+        
+        $expiredClasses = self::whereNotNull('ended_at')
+            ->where('ended_at', '<', $cutoffDate)
+            ->get();
+            
+        $cleanedCount = 0;
+        
+        foreach ($expiredClasses as $class) {
+            try {
+                DB::transaction(function () use ($class) {
+                    // Delete related chat messages
+                    $class->chatMessages()->delete();
+                    
+                    // Delete participants
+                    $class->participants()->delete();
+                    
+                    // Delete the live class itself
+                    $class->delete();
+                });
+                
+                $cleanedCount++;
+                Log::info('Cleaned up expired live class', [
+                    'class_id' => $class->id,
+                    'title' => $class->title,
+                    'ended_at' => $class->ended_at
+                ]);
+                
+            } catch (\Exception $e) {
+                Log::error('Failed to cleanup live class', [
+                    'class_id' => $class->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+        
+        return $cleanedCount;
     }
 }

@@ -67,7 +67,7 @@ Route::middleware(['auth:sanctum', 'file.upload'])->group(function () {
     Route::post('/files/upload', [FileController::class, 'upload']);
     
     // Profile picture uploads
-    Route::post('/profile/avatar', [ProfileController::class, 'updateAvatar']);
+    Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar']);
     
     // Course media uploads
     Route::post('/courses/{course}/media', [CoursesController::class, 'uploadMedia']);
@@ -279,6 +279,9 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // Course-related Classes
         Route::get('/course/{courseId}', [LiveClassController::class, 'getClassesForCourse']);
+        
+        // Admin-only cleanup route
+        Route::post('/cleanup-expired', [LiveClassController::class, 'cleanupExpired'])->middleware('admin');
     });
     
     // Live Class Chat

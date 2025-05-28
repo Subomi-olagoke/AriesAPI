@@ -674,4 +674,17 @@ class User extends Authenticatable {
             ->orderBy('level', 'asc')
             ->first();
     }
+    
+    /**
+     * Get the user's avatar with proper fallback logic
+     */
+    public function getAvatarUrl()
+    {
+        // Prioritize profile avatar, then user avatar
+        if ($this->profile && $this->profile->avatar) {
+            return $this->profile->avatar;
+        }
+        
+        return $this->avatar;
+    }
 }
