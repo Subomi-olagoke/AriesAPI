@@ -552,6 +552,14 @@ class PostController extends Controller
     }
 
     /**
+     * Delete a post (alias for destroy method)
+     */
+    public function deletePost($id)
+    {
+        return $this->destroy($id);
+    }
+
+    /**
      * Display a post by its share key (public link)
      */
     public function viewSharedPost($shareKey)
