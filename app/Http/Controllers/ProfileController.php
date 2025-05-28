@@ -159,7 +159,7 @@ class ProfileController extends Controller
         
         // Get user's posts (public or appropriate visibility level)
         $posts = $user->posts()
-            ->with(['user', 'likes', 'comments'])
+            ->with(['user', 'likes', 'comments', 'media'])
             ->orderBy('created_at', 'desc')
             ->limit(20)
             ->get();
@@ -340,7 +340,7 @@ class ProfileController extends Controller
         
         // Get user's posts (public or appropriate visibility level)
         $posts = $user->posts()
-            ->with(['user', 'likes', 'comments'])
+            ->with(['user', 'likes', 'comments', 'media'])
             ->orderBy('created_at', 'desc')
             ->limit(10)  // Limit to recent posts
             ->get();
@@ -440,7 +440,7 @@ class ProfileController extends Controller
         
         // Get user's posts (public or appropriate visibility level)
         $posts = $user->posts()
-            ->with(['user', 'likes', 'comments'])
+            ->with(['user', 'likes', 'comments', 'media'])
             ->orderBy('created_at', 'desc')
             ->limit(10)  // Limit to recent posts to avoid large responses
             ->get();
@@ -539,7 +539,7 @@ class ProfileController extends Controller
 
         // Get user's posts (public or appropriate visibility level)
         $posts = $user->posts()
-            ->with(['user', 'likes', 'comments'])
+            ->with(['user', 'likes', 'comments', 'media'])
             ->orderBy('created_at', 'desc')
             ->limit(10)
             ->get();

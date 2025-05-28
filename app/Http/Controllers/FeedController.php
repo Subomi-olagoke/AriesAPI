@@ -23,7 +23,7 @@ class FeedController extends Controller
         $followingIds = $user->following()->pluck('followeduser');
         
         // Get all public posts ordered by created_at descending (newest first)
-        $posts = Post::with(['user', 'comments.user', 'mentions.mentionedUser'])
+        $posts = Post::with(['user', 'comments.user', 'mentions.mentionedUser', 'media'])
             ->where('visibility', 'public')
             ->orderBy('created_at', 'desc')
             ->take(50)

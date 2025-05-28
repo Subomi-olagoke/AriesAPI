@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('posts', function (Blueprint $table) {
-            $table->boolean('has_multiple_media')->default(false)->after('mime_type');
+            $table->boolean('has_multiple_media')->default(false);
         });
     }
 
