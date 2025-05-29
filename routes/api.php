@@ -131,6 +131,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/posts/{postId}/stats', [PostController::class, 'getPostStats']);
     Route::get('/post/{postId}/selections', [PostController::class, 'getSelectionCount']); // Additional singular route
     Route::get('/posts/{postId}/selections', [PostController::class, 'getSelectionCount']);
+    Route::get('/post/{postId}/readlist-count', [PostController::class, 'getSelectionCount']); // New route for readlist count
+    Route::get('/posts/{postId}/readlist-count', [PostController::class, 'getSelectionCount']); // New plural route for readlist count
 
     // Comment routes
     Route::post('/add-comment/{post_id}', [CommentController::class, 'postComment']);
