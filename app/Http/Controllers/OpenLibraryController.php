@@ -10,6 +10,7 @@ use App\Services\OpenLibraryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class OpenLibraryController extends Controller
 {
@@ -28,15 +29,34 @@ class OpenLibraryController extends Controller
      */
     public function index()
     {
-        // Only show approved libraries to regular users
-        $libraries = OpenLibrary::where('is_approved', true)
-                              ->where('approval_status', 'approved')
-                              ->orderBy('created_at', 'desc')
-                              ->get();
-        
-        return response()->json([
-            'libraries' => $libraries
-        ]);
+        try {
+            // Check if the is_approved column exists in the schema
+            $hasIsApprovedColumn = Schema::hasColumn('open_libraries', 'is_approved');
+            $hasApprovalStatusColumn = Schema::hasColumn('open_libraries', 'approval_status');
+            
+            // Build query based on available columns
+            $query = OpenLibrary::query();
+            
+            if ($hasIsApprovedColumn) {
+                $query->where('is_approved', true);
+            }
+            
+            if ($hasApprovalStatusColumn) {
+                $query->where('approval_status', 'approved');
+            }
+            
+            // Get results ordered by creation date
+            $libraries = $query->orderBy('created_at', 'desc')->get();
+            
+            return response()->json([
+                'libraries' => $libraries
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error retrieving libraries: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Error retrieving libraries: ' . $e->getMessage()
+            ], 500);
+        }
     }
     
     /**
