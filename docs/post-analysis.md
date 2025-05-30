@@ -31,7 +31,7 @@ Provides a general analysis of the post content including main points, key topic
 ```json
 {
   "success": true,
-  "analysis": "This post discusses modern web development frameworks, focusing on React, Vue, and Angular. The tone is informative and educational, providing an overview of each framework's strengths and use cases. The post highlights the component-based architecture common to all three frameworks and mentions performance considerations."
+  "analysis": "This post compares React, Vue, and Angular frameworks with their key strengths. Includes 2 code snippets and a performance chart image."
 }
 ```
 

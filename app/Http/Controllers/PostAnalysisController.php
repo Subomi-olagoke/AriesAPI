@@ -49,13 +49,10 @@ class PostAnalysisController extends Controller
             }
             
             // Request analysis from Cogni
-            $prompt = "Analyze this post and provide a clear breakdown in a conversational style. Include: " .
-                      "1) A brief summary of the main points, " .
-                      "2) Key topics discussed, " . 
-                      "3) The general tone and perspective of the post, " .
-                      "4) Any notable information, facts, or insights shared. " .
-                      "If the post mentions it includes images or documents, acknowledge those in your analysis. " .
-                      "Write in a natural, helpful tone as if explaining to someone what this post is about.";
+            $prompt = "Provide a brief, concise summary of this post in 2-3 sentences. " .
+                      "Mention any media attachments that are part of the post. " .
+                      "Make it conversational and easy to understand. " .
+                      "Keep your response very short and to the point.";
             
             $result = $this->cogniService->askQuestion($prompt . "\n\nHere's the content:\n" . $content);
             
