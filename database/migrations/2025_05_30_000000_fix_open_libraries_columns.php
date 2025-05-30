@@ -30,7 +30,7 @@ return new class extends Migration
             }
             
             if (!Schema::hasColumn('open_libraries', 'course_id')) {
-                $table->foreignId('course_id')->nullable()->constrained('courses')->nullOnDelete();
+                $table->unsignedBigInteger('course_id')->nullable();
             }
             
             if (!Schema::hasColumn('open_libraries', 'criteria')) {
@@ -51,7 +51,7 @@ return new class extends Migration
             }
             
             if (!Schema::hasColumn('open_libraries', 'approved_by')) {
-                $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
+                $table->unsignedBigInteger('approved_by')->nullable();
             }
             
             if (!Schema::hasColumn('open_libraries', 'has_ai_cover')) {

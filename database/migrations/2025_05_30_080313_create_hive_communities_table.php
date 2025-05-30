@@ -11,18 +11,20 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('hive_communities', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->text('description')->nullable();
-            $table->string('avatar')->nullable();
-            $table->string('privacy')->default('public'); // public, private, invite-only
-            $table->foreignId('creator_id')->constrained('users')->onDelete('cascade');
-            $table->integer('member_count')->default(0);
-            $table->string('status')->default('active'); // active, archived
-            $table->string('join_code')->nullable()->unique(); // For invitation links
-            $table->timestamps();
-        });
+        if (!Schema::hasTable('hive_communities')) {
+            Schema::create('hive_communities', function (Blueprint $table) {
+                $table->id();
+                $table->string('name');
+                $table->text('description')->nullable();
+                $table->string('avatar')->nullable();
+                $table->string('privacy')->default('public'); // public, private, invite-only
+                $table->unsignedBigInteger('creator_id');
+                $table->integer('member_count')->default(0);
+                $table->string('status')->default('active'); // active, archived
+                $table->string('join_code')->nullable()->unique(); // For invitation links
+                $table->timestamps();
+            });
+        }
     }
 
     /**

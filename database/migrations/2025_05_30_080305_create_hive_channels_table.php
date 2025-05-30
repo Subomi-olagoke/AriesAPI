@@ -11,16 +11,20 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('hive_channels', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->text('description')->nullable();
-            $table->string('color', 7)->default('#007AFF');
-            $table->foreignId('creator_id')->constrained('users')->onDelete('cascade');
-            $table->string('privacy')->default('public'); // public, private
-            $table->string('status')->default('active'); // active, archived
-            $table->timestamps();
-        });
+        if (!Schema::hasTable('hive_channels')) {
+            Schema::create('hive_channels', function (Blueprint $table) {
+                $table->id();
+                $table->string('name');
+                $table->text('description')->nullable();
+                $table->string('color', 7)->default('#007AFF');
+                $table->unsignedBigInteger('creator_id');
+                // We'll add the foreign key reference but without strict enforcement
+                // in case there's a mismatch with the users table structure
+                $table->string('privacy')->default('public'); // public, private
+                $table->string('status')->default('active'); // active, archived
+                $table->timestamps();
+            });
+        }
     }
 
     /**

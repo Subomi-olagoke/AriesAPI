@@ -29,13 +29,13 @@ class BookmarkController extends Controller
         return response()->json(['message' => 'Course bookmarked successfully', 'bookmark' => $bookmark], 201);
     }
 
-    public function bookmarkPost(Request $request, $lessonId)
+    public function bookmarkPost(Request $request, $postId)
     {
-        $lesson = Post::findOrFail($lessonId);
+        $post = Post::findOrFail($postId);
 
-        // Check if the user has already bookmarked the lesson
+        // Check if the user has already bookmarked the post
         $existingBookmark = $request->user()->bookmarks()
-            ->where('lesson_id', $lesson->id)
+            ->where('post_id', $post->id)
             ->first();
 
         if ($existingBookmark) {
@@ -44,10 +44,10 @@ class BookmarkController extends Controller
 
         // Create a new bookmark
         $bookmark = $request->user()->bookmarks()->create([
-            'lesson_id' => $lesson->id,
+            'post_id' => $post->id,
         ]);
 
-        return response()->json(['message' => 'Lesson bookmarked successfully', 'bookmark' => $bookmark], 201);
+        return response()->json(['message' => 'Post bookmarked successfully', 'bookmark' => $bookmark], 201);
     }
     public function removeBookmarkCourse(Request $request, $courseId)
     {
@@ -66,13 +66,13 @@ class BookmarkController extends Controller
         return response()->json(['message' => 'Bookmark removed successfully']);
     }
 
-    // Remove a bookmark for a lesson
-    public function removeBookmarkPost(Request $request, $lessonId)
+    // Remove a bookmark for a post
+    public function removeBookmarkPost(Request $request, $postId)
     {
-        $lesson = Post::findOrFail($lessonId);
+        $post = Post::findOrFail($postId);
 
         $bookmark = $request->user()->bookmarks()
-            ->where('lesson_id', $lesson->id)
+            ->where('post_id', $post->id)
             ->first();
 
         if (!$bookmark) {

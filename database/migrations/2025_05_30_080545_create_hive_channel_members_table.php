@@ -11,19 +11,21 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('hive_channel_members', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('channel_id')->constrained('hive_channels')->onDelete('cascade');
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
-            $table->string('role')->default('member'); // member, moderator, admin
-            $table->boolean('notifications_enabled')->default(true);
-            $table->timestamp('joined_at')->useCurrent();
-            $table->timestamp('last_read_at')->nullable();
-            $table->timestamps();
-            
-            // Make sure a user can only be a member of a channel once
-            $table->unique(['channel_id', 'user_id']);
-        });
+        if (!Schema::hasTable('hive_channel_members')) {
+            Schema::create('hive_channel_members', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('channel_id');
+                $table->unsignedBigInteger('user_id');
+                $table->string('role')->default('member'); // member, moderator, admin
+                $table->boolean('notifications_enabled')->default(true);
+                $table->timestamp('joined_at')->useCurrent();
+                $table->timestamp('last_read_at')->nullable();
+                $table->timestamps();
+                
+                // Make sure a user can only be a member of a channel once
+                $table->unique(['channel_id', 'user_id']);
+            });
+        }
     }
 
     /**
