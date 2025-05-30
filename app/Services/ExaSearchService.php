@@ -29,9 +29,11 @@ class ExaSearchService
      * @param string $query The search query
      * @param int $numResults Number of results to return (max 20)
      * @param boolean $includeDomains Whether to include domains in the response
+     * @param boolean $safeSearch Whether to enable safe search filtering
+     * @param array $excludeDomains Domains to exclude from results
      * @return array Search results or error information
      */
-    public function search(string $query, int $numResults = 5, bool $includeDomains = true)
+    public function search(string $query, int $numResults = 5, bool $includeDomains = true, bool $safeSearch = true, array $excludeDomains = [])
     {
         if (empty($this->apiKey)) {
             Log::error('Exa API key not configured');
@@ -42,15 +44,28 @@ class ExaSearchService
             ];
         }
 
+        // Append safety filters for educational content
+        if ($safeSearch) {
+            $query .= " educational content";
+        }
+
         try {
             $numResults = min($numResults, 20); // Maximum 20 results per Exa API
             
+            $payload = [
+                'query' => $query,
+                'numResults' => $numResults,
+                'includeDomains' => $includeDomains,
+                'safeSearch' => $safeSearch
+            ];
+            
+            // Add excluded domains if provided
+            if (!empty($excludeDomains)) {
+                $payload['excludeDomains'] = $excludeDomains;
+            }
+            
             $response = Http::withHeaders($this->defaultHeaders)
-                ->post("{$this->baseUrl}/search", [
-                    'query' => $query,
-                    'numResults' => $numResults,
-                    'includeDomains' => $includeDomains,
-                ]);
+                ->post("{$this->baseUrl}/search", $payload);
 
             if ($response->successful()) {
                 $results = $response->json('results');
@@ -65,6 +80,9 @@ class ExaSearchService
                         'published_date' => $result['publishedDate'] ?? null,
                     ];
                 }, $results);
+                
+                // Apply additional content moderation
+                $formattedResults = $this->moderateResults($formattedResults);
                 
                 return [
                     'success' => true,
@@ -88,6 +106,60 @@ class ExaSearchService
             ];
         }
     }
+    
+    /**
+     * Apply additional content moderation to search results
+     * 
+     * @param array $results The search results to moderate
+     * @return array Filtered search results
+     */
+    private function moderateResults(array $results)
+    {
+        // Get content moderation service
+        $contentModerationService = app(\App\Services\ContentModerationService::class);
+        
+        // Filter out results that don't pass content moderation
+        return array_filter($results, function($result) use ($contentModerationService) {
+            // Check title and text for inappropriate content
+            $titleCheck = $contentModerationService->analyzeText($result['title'] ?? '');
+            if (!$titleCheck['isAllowed']) {
+                return false;
+            }
+            
+            $textCheck = $contentModerationService->analyzeText($result['text'] ?? '');
+            if (!$textCheck['isAllowed']) {
+                return false;
+            }
+            
+            // Check URL for allowed domains
+            $url = $result['url'] ?? '';
+            try {
+                if (!empty($url)) {
+                    $parsedUrl = parse_url($url);
+                    if (isset($parsedUrl['host'])) {
+                        $domain = $parsedUrl['host'];
+                        $allowedDomains = config('content_moderation.allowed_domains', []);
+                        
+                        // Special case: For external search, we don't want to strictly enforce the domain whitelist
+                        // Instead, we'll check if the domain contains any inappropriate words
+                        $domainCheck = $contentModerationService->analyzeText($domain);
+                        if (!$domainCheck['isAllowed']) {
+                            return false;
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error('Error parsing URL during content moderation', [
+                    'url' => $url,
+                    'error' => $e->getMessage()
+                ]);
+                // If we can't parse the URL, exclude the result to be safe
+                return false;
+            }
+            
+            return true;
+        });
+    }
 
     /**
      * Find learning resources related to a specific topic
@@ -98,8 +170,20 @@ class ExaSearchService
      */
     public function findLearningResources(string $topic, int $numResults = 5)
     {
-        $query = "learn about {$topic} educational resources guides tutorials";
-        return $this->search($query, $numResults);
+        // Use specific educational keywords to ensure quality results
+        $query = "learn about {$topic} educational resources guides tutorials academic course";
+        
+        // Common spam or inappropriate domains to exclude
+        $excludeDomains = [
+            'pinterest.com', // Often contains low-quality content
+            'quora.com',     // Can contain unverified information
+            'reddit.com',    // May contain inappropriate content
+            'twitter.com',   // May contain unverified information
+            'facebook.com',  // May contain unverified information
+            'instagram.com', // May contain inappropriate content
+        ];
+        
+        return $this->search($query, $numResults, true, true, $excludeDomains);
     }
 
     /**
@@ -114,8 +198,20 @@ class ExaSearchService
         // Extract main topics from the post content
         $truncatedContent = substr($postContent, 0, 500); // Limit to 500 chars to keep query focused
         
-        $query = "Find educational resources related to: {$truncatedContent}";
-        return $this->search($query, $numResults);
+        // Add educational focus to query
+        $query = "Find academic educational resources related to: {$truncatedContent}";
+        
+        // Common spam or inappropriate domains to exclude
+        $excludeDomains = [
+            'pinterest.com', // Often contains low-quality content
+            'quora.com',     // Can contain unverified information
+            'reddit.com',    // May contain inappropriate content
+            'twitter.com',   // May contain unverified information
+            'facebook.com',  // May contain unverified information
+            'instagram.com', // May contain inappropriate content
+        ];
+        
+        return $this->search($query, $numResults, true, true, $excludeDomains);
     }
 
     /**
@@ -129,19 +225,29 @@ class ExaSearchService
     {
         if (empty($categories)) {
             $categories = [
-                'Beginner Guides' => 'beginner guide introduction tutorial',
-                'Advanced Resources' => 'advanced in-depth comprehensive expert',
-                'Latest Developments' => 'latest current new development recent update',
-                'Best Practices' => 'best practices examples standards tips'
+                'Beginner Guides' => 'beginner guide introduction tutorial academic course',
+                'Advanced Resources' => 'advanced in-depth comprehensive expert scholarly research',
+                'Latest Developments' => 'latest current new development recent update research paper',
+                'Best Practices' => 'best practices examples standards tips official documentation'
             ];
         }
 
         $categorizedResults = [];
+        
+        // Common spam or inappropriate domains to exclude
+        $excludeDomains = [
+            'pinterest.com', // Often contains low-quality content
+            'quora.com',     // Can contain unverified information
+            'reddit.com',    // May contain inappropriate content
+            'twitter.com',   // May contain unverified information
+            'facebook.com',  // May contain unverified information
+            'instagram.com', // May contain inappropriate content
+        ];
 
         // Search for each category
         foreach ($categories as $categoryName => $searchTerms) {
             $query = "{$topic} {$searchTerms}";
-            $results = $this->search($query, 3);
+            $results = $this->search($query, 3, true, true, $excludeDomains);
             
             if ($results['success'] && !empty($results['results'])) {
                 $categorizedResults[$categoryName] = $results['results'];

@@ -250,6 +250,274 @@ class CogniService
     }
     
     /**
+     * Generate a readlist from a user's description, using both internal and external content
+     *
+     * @param string $description User's description of the readlist they want
+     * @param array $internalContent Array of content from the database
+     * @param int $itemCount Maximum number of items to include (default: 5)
+     * @param int $externalItemCount Maximum number of external items to include (default: 3)
+     * @return array Response with success/error status and readlist data
+     */
+    public function generateReadlistFromDescription(string $description, array $internalContent, int $itemCount = 5, int $externalItemCount = 3): array
+    {
+        $exaService = app(\App\Services\ExaSearchService::class);
+        $contentModerationService = app(\App\Services\ContentModerationService::class);
+        
+        // First, check that the description itself doesn't contain inappropriate content
+        $moderationResult = $contentModerationService->analyzeText($description);
+        if (!$moderationResult['isAllowed']) {
+            return [
+                'success' => false,
+                'message' => 'Description contains inappropriate content. Please modify your request.',
+                'code' => 400
+            ];
+        }
+        
+        // Extract key topics from the description
+        $prompt = "Extract 3-5 key academic or educational topics or search terms from the following description of a readlist. ";
+        $prompt .= "Exclude any inappropriate or adult-oriented topics. ";
+        $prompt .= "Return these as a JSON array of strings.\n\n";
+        $prompt .= "Description: {$description}\n\n";
+        $prompt .= "Format your response as a JSON array: [\"topic1\", \"topic2\", \"topic3\"]\n";
+        
+        $topicsResult = $this->askQuestion($prompt);
+        $searchTopics = [];
+        
+        if ($topicsResult['success'] && isset($topicsResult['answer'])) {
+            try {
+                // Extract JSON array from the response
+                $jsonStart = strpos($topicsResult['answer'], '[');
+                $jsonEnd = strrpos($topicsResult['answer'], ']') + 1;
+                if ($jsonStart !== false && $jsonEnd !== false) {
+                    $jsonStr = substr($topicsResult['answer'], $jsonStart, $jsonEnd - $jsonStart);
+                    $searchTopics = json_decode($jsonStr, true);
+                }
+                
+                if (!is_array($searchTopics) || empty($searchTopics)) {
+                    // Fallback: use the description as a single search term
+                    $searchTopics = [trim($description)];
+                }
+            } catch (\Exception $e) {
+                // Fallback: use the description as a single search term
+                $searchTopics = [trim($description)];
+            }
+        } else {
+            // Fallback: use the description as a single search term
+            $searchTopics = [trim($description)];
+        }
+        
+        // Check each extracted topic for inappropriate content
+        foreach ($searchTopics as $key => $topic) {
+            $topicCheck = $contentModerationService->analyzeText($topic);
+            if (!$topicCheck['isAllowed']) {
+                // Remove inappropriate topics
+                unset($searchTopics[$key]);
+                \Log::warning('Removed inappropriate search topic during readlist generation', ['topic' => $topic]);
+            }
+        }
+        
+        // If no valid topics remain, return an error
+        if (empty($searchTopics)) {
+            return [
+                'success' => false,
+                'message' => 'Unable to extract appropriate search topics from the description.',
+                'code' => 400
+            ];
+        }
+        
+        // Fetch external content using Exa
+        $externalContent = [];
+        $searchTerm = implode(' educational resources ', $searchTopics);
+        
+        if ($exaService->isConfigured()) {
+            // First try to get categorized resources for a more structured approach
+            $externalResult = $exaService->getCategorizedResources($searchTerm);
+            
+            if ($externalResult['success']) {
+                // Format external content from categorized results
+                foreach ($externalResult['categories'] as $category => $results) {
+                    foreach ($results as $result) {
+                        // Verify that result content passes moderation
+                        $titleCheck = $contentModerationService->analyzeText($result['title'] ?? '');
+                        $textCheck = $contentModerationService->analyzeText($result['text'] ?? '');
+                        
+                        if ($titleCheck['isAllowed'] && $textCheck['isAllowed']) {
+                            $externalContent[] = [
+                                'title' => $result['title'] ?? 'Untitled',
+                                'description' => $result['text'] ?? '',
+                                'url' => $result['url'] ?? '',
+                                'type' => 'external',
+                                'category' => $category,
+                                'domain' => $result['domain'] ?? ''
+                            ];
+                        }
+                    }
+                }
+            }
+            
+            // If we didn't get enough content, or it failed, try a direct search
+            if (count($externalContent) < $externalItemCount) {
+                $searchResult = $exaService->findLearningResources($searchTerm, $externalItemCount * 3); // Request more to account for filtering
+                
+                if ($searchResult['success'] && !empty($searchResult['results'])) {
+                    foreach ($searchResult['results'] as $result) {
+                        // Verify that result content passes moderation
+                        $titleCheck = $contentModerationService->analyzeText($result['title'] ?? '');
+                        $textCheck = $contentModerationService->analyzeText($result['text'] ?? '');
+                        $urlCheck = true;
+                        
+                        // Check if the URL is from a trustworthy domain
+                        if (!empty($result['url'])) {
+                            try {
+                                $parsedUrl = parse_url($result['url']);
+                                if (isset($parsedUrl['host'])) {
+                                    $domain = $parsedUrl['host'];
+                                    
+                                    // Check domain against our inappropriate words list
+                                    $domainCheck = $contentModerationService->analyzeText($domain);
+                                    if (!$domainCheck['isAllowed']) {
+                                        $urlCheck = false;
+                                    }
+                                }
+                            } catch (\Exception $e) {
+                                // If we can't parse the URL, exclude it to be safe
+                                $urlCheck = false;
+                                \Log::error('Error parsing URL in readlist generation', [
+                                    'url' => $result['url'],
+                                    'error' => $e->getMessage()
+                                ]);
+                            }
+                        }
+                        
+                        if ($titleCheck['isAllowed'] && $textCheck['isAllowed'] && $urlCheck) {
+                            $externalContent[] = [
+                                'title' => $result['title'] ?? 'Untitled',
+                                'description' => $result['text'] ?? '',
+                                'url' => $result['url'] ?? '',
+                                'type' => 'external',
+                                'domain' => $result['domain'] ?? ''
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Log warning if no external content found, but continue with internal content
+        if (empty($externalContent) && $externalItemCount > 0) {
+            \Log::info('No external content found for readlist generation', [
+                'description' => $description,
+                'topics' => $searchTopics
+            ]);
+        }
+        
+        // Prepare prompt for generating readlist with combined content
+        $prompt = "Generate a curated readlist based on this description: '{$description}'. ";
+        
+        // Add available internal content
+        if (!empty($internalContent)) {
+            $prompt .= "Here is the available internal content you can choose from:\n\n";
+            
+            foreach ($internalContent as $index => $item) {
+                $type = isset($item['type']) ? $item['type'] : 'unknown';
+                $title = isset($item['title']) ? $item['title'] : (isset($item['name']) ? $item['name'] : 'Untitled');
+                $desc = isset($item['description']) ? $item['description'] : '';
+                $id = isset($item['id']) ? $item['id'] : $index;
+                
+                $prompt .= "ID: {$id} | Type: internal_{$type} | Title: {$title} | Description: {$desc}\n\n";
+            }
+        }
+        
+        // Add available external content
+        if (!empty($externalContent)) {
+            if (empty($internalContent)) {
+                $prompt .= "Here is the available content you can choose from (all external resources):\n\n";
+            } else {
+                $prompt .= "Here is additional external content you can choose from:\n\n";
+            }
+            
+            foreach ($externalContent as $index => $item) {
+                $title = $item['title'] ?? 'Untitled';
+                $desc = $item['description'] ?? '';
+                $url = $item['url'] ?? '';
+                $id = "ext_" . ($index + 1); // Prefix with "ext_" to distinguish from internal content
+                
+                $prompt .= "ID: {$id} | Type: external | Title: {$title} | URL: {$url} | Description: {$desc}\n\n";
+            }
+        }
+        
+        // Instructions for the AI
+        $totalItems = min($itemCount, count($internalContent) + count($externalContent));
+        $prompt .= "Select up to {$totalItems} most relevant items for someone learning about '{$description}'. ";
+        $prompt .= "Organize them in a logical learning sequence. ";
+        $prompt .= "Aim to include both internal content and external resources if available, with a preference for high-quality, diverse sources. ";
+        $prompt .= "For each item, explain why it's included and how it relates to the user's learning journey. ";
+        $prompt .= "Return your response in JSON format with the following structure:\n";
+        $prompt .= "{\n";
+        $prompt .= "  \"title\": \"An appropriate title for the readlist\",\n";
+        $prompt .= "  \"description\": \"A helpful description of this readlist\",\n";
+        $prompt .= "  \"items\": [\n";
+        $prompt .= "    {\n";
+        $prompt .= "      \"id\": \"The ID of the item\",\n";
+        $prompt .= "      \"notes\": \"Brief notes explaining why this item is included\",\n";
+        $prompt .= "      \"type\": \"internal_post, internal_course, or external\"\n";
+        $prompt .= "    }\n";
+        $prompt .= "  ]\n";
+        $prompt .= "}";
+        
+        $result = $this->askQuestion($prompt);
+        
+        if (!$result['success']) {
+            return $result;
+        }
+        
+        try {
+            // Extract JSON from the answer
+            $jsonStart = strpos($result['answer'], '{');
+            $jsonEnd = strrpos($result['answer'], '}') + 1;
+            $jsonStr = substr($result['answer'], $jsonStart, $jsonEnd - $jsonStart);
+            
+            $readlistData = json_decode($jsonStr, true);
+            
+            if (json_last_error() === JSON_ERROR_NONE && isset($readlistData['title'], $readlistData['description'], $readlistData['items'])) {
+                // Process the external items to include their full details
+                foreach ($readlistData['items'] as &$item) {
+                    if (isset($item['id']) && strpos($item['id'], 'ext_') === 0) {
+                        // This is an external item, find its details
+                        $externalIndex = (int)substr($item['id'], 4) - 1;
+                        if (isset($externalContent[$externalIndex])) {
+                            $item['url'] = $externalContent[$externalIndex]['url'] ?? '';
+                            $item['title'] = $externalContent[$externalIndex]['title'] ?? '';
+                            $item['description'] = $externalContent[$externalIndex]['description'] ?? '';
+                            $item['domain'] = $externalContent[$externalIndex]['domain'] ?? '';
+                        }
+                    }
+                }
+                
+                return [
+                    'success' => true,
+                    'readlist' => $readlistData,
+                    'code' => 200
+                ];
+            }
+            
+            // Fallback if JSON parsing fails
+            return [
+                'success' => true,
+                'answer' => $result['answer'],
+                'code' => 200
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Readlist generation error: ' . $e->getMessage());
+            return [
+                'success' => true,
+                'answer' => $result['answer'],
+                'code' => 200
+            ];
+        }
+    }
+
+    /**
      * Analyze a user's interests based on their data
      * 
      * @param array $userData User activity and preference data

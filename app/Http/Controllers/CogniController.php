@@ -576,6 +576,263 @@ class CogniController extends Controller
     }
     
     /**
+     * Generate a readlist from a description
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function generateDescriptionReadlist(Request $request)
+    {
+        $request->validate([
+            'description' => 'required|string|max:1000',
+            'item_count' => 'nullable|integer|min:1|max:20',
+            'include_external' => 'nullable|boolean',
+            'external_count' => 'nullable|integer|min:0|max:10'
+        ]);
+
+        $user = Auth::user();
+        $description = $request->input('description');
+        $itemCount = $request->input('item_count', 8);
+        $includeExternal = $request->input('include_external', true);
+        $externalCount = $request->input('external_count', 3);
+        
+        if (!$includeExternal) {
+            $externalCount = 0;
+        }
+        
+        // Check for inappropriate content in the description
+        $contentModerationService = app(\App\Services\ContentModerationService::class);
+        $moderationResult = $contentModerationService->analyzeText($description);
+        
+        if (!$moderationResult['isAllowed']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your request contains inappropriate content. Please modify and try again.',
+                'details' => $moderationResult['reason']
+            ], 400);
+        }
+        
+        // First, search for relevant internal content
+        $internalContent = [];
+        
+        // Search for relevant courses
+        $courseKeywords = explode(' ', $description);
+        $courseQuery = \App\Models\Course::query();
+        
+        foreach ($courseKeywords as $keyword) {
+            if (strlen($keyword) > 3) {
+                $courseQuery->orWhere('name', 'like', "%{$keyword}%")
+                    ->orWhere('description', 'like', "%{$keyword}%");
+            }
+        }
+        
+        $courses = $courseQuery->limit(30)->get(['id', 'name', 'description', 'user_id', 'created_at']);
+        
+        foreach ($courses as $course) {
+            $internalContent[] = [
+                'id' => $course->id,
+                'type' => 'course',
+                'title' => $course->name,
+                'description' => $course->description,
+                'user_id' => $course->user_id,
+                'created_at' => $course->created_at
+            ];
+        }
+        
+        // Search for relevant posts
+        $postKeywords = explode(' ', $description);
+        $postQuery = \App\Models\Post::query();
+        
+        foreach ($postKeywords as $keyword) {
+            if (strlen($keyword) > 3) {
+                $postQuery->orWhere('title', 'like', "%{$keyword}%")
+                    ->orWhere('body', 'like', "%{$keyword}%");
+            }
+        }
+        
+        $posts = $postQuery->limit(30)->get(['id', 'title', 'body', 'user_id', 'created_at']);
+        
+        foreach ($posts as $post) {
+            $internalContent[] = [
+                'id' => $post->id,
+                'type' => 'post',
+                'title' => $post->title ?? 'Untitled Post',
+                'description' => substr(strip_tags($post->body), 0, 200),
+                'user_id' => $post->user_id,
+                'created_at' => $post->created_at
+            ];
+        }
+        
+        // Generate readlist using enhanced CogniService method
+        $result = $this->cogniService->generateReadlistFromDescription(
+            $description, 
+            $internalContent, 
+            $itemCount, 
+            $externalCount
+        );
+        
+        if ($result['success'] && isset($result['readlist'])) {
+            // Final check of readlist content for appropriateness
+            $contentModerationService = app(\App\Services\ContentModerationService::class);
+            $titleCheck = $contentModerationService->analyzeText($result['readlist']['title'] ?? '');
+            $descriptionCheck = $contentModerationService->analyzeText($result['readlist']['description'] ?? '');
+            
+            if (!$titleCheck['isAllowed'] || !$descriptionCheck['isAllowed']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The generated readlist contains inappropriate content. Please try with different wording.',
+                    'code' => 400
+                ], 400);
+            }
+            
+            // Create the readlist in the database
+            try {
+                \DB::beginTransaction();
+                
+                $readlist = new \App\Models\Readlist([
+                    'user_id' => $user->id,
+                    'title' => $result['readlist']['title'],
+                    'description' => $result['readlist']['description'],
+                    'is_public' => true,
+                ]);
+                
+                $readlist->save();
+                
+                // Add items to the readlist
+                $order = 1;
+                foreach ($result['readlist']['items'] as $item) {
+                    if (isset($item['type']) && $item['type'] === 'external') {
+                        // Final check for external item content
+                        $extTitleCheck = $contentModerationService->analyzeText($item['title'] ?? '');
+                        $extDescCheck = $contentModerationService->analyzeText($item['description'] ?? '');
+                        
+                        // Validate URL
+                        $urlIsValid = true;
+                        if (!empty($item['url'])) {
+                            try {
+                                $parsedUrl = parse_url($item['url']);
+                                if (isset($parsedUrl['host'])) {
+                                    $domain = $parsedUrl['host'];
+                                    $domainCheck = $contentModerationService->analyzeText($domain);
+                                    if (!$domainCheck['isAllowed']) {
+                                        $urlIsValid = false;
+                                    }
+                                }
+                            } catch (\Exception $e) {
+                                $urlIsValid = false;
+                                \Log::error('Error parsing URL in readlist item', [
+                                    'url' => $item['url'],
+                                    'error' => $e->getMessage()
+                                ]);
+                            }
+                        }
+                        
+                        if ($extTitleCheck['isAllowed'] && $extDescCheck['isAllowed'] && $urlIsValid) {
+                            // Handle external item
+                            $readlistItem = new \App\Models\ReadlistItem([
+                                'readlist_id' => $readlist->id,
+                                'title' => $item['title'] ?? 'Educational Resource',
+                                'description' => $item['description'] ?? '',
+                                'url' => $item['url'] ?? '',
+                                'type' => 'external',
+                                'order' => $order++,
+                                'notes' => $item['notes'] ?? null
+                            ]);
+                            
+                            $readlistItem->save();
+                        } else {
+                            \Log::warning('Skipped external resource in readlist due to content moderation', [
+                                'title' => $item['title'] ?? '',
+                                'url' => $item['url'] ?? ''
+                            ]);
+                        }
+                    } else {
+                        // Handle internal item (course or post)
+                        $itemId = $item['id'];
+                        $notes = $item['notes'] ?? null;
+                        $itemType = null;
+                        $itemModel = null;
+                        
+                        // Check if internal item exists
+                        if (strpos($item['type'] ?? '', 'internal_course') !== false) {
+                            $course = \App\Models\Course::find($itemId);
+                            if ($course) {
+                                $itemType = \App\Models\Course::class;
+                                $itemModel = $course;
+                            }
+                        } elseif (strpos($item['type'] ?? '', 'internal_post') !== false) {
+                            $post = \App\Models\Post::find($itemId);
+                            if ($post) {
+                                $itemType = \App\Models\Post::class;
+                                $itemModel = $post;
+                            }
+                        } else {
+                            // Try to determine type automatically
+                            $course = \App\Models\Course::find($itemId);
+                            if ($course) {
+                                $itemType = \App\Models\Course::class;
+                                $itemModel = $course;
+                            } else {
+                                $post = \App\Models\Post::find($itemId);
+                                if ($post) {
+                                    $itemType = \App\Models\Post::class;
+                                    $itemModel = $post;
+                                }
+                            }
+                        }
+                        
+                        // If we found a valid internal item, add it to the readlist
+                        if ($itemModel) {
+                            $readlistItem = new \App\Models\ReadlistItem([
+                                'readlist_id' => $readlist->id,
+                                'item_id' => $itemId,
+                                'item_type' => $itemType,
+                                'order' => $order++,
+                                'notes' => $notes
+                            ]);
+                            
+                            $readlistItem->save();
+                        }
+                    }
+                }
+                
+                \DB::commit();
+                
+                // Return the created readlist with its items
+                $readlistWithItems = \App\Models\Readlist::with('items.item')->find($readlist->id);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Readlist generated successfully from your description',
+                    'readlist' => $readlistWithItems
+                ]);
+                
+            } catch (\Exception $e) {
+                \DB::rollBack();
+                \Log::error('Error creating description-based readlist: ' . $e->getMessage());
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error creating readlist: ' . $e->getMessage()
+                ], 500);
+            }
+        } elseif ($result['success'] && isset($result['answer'])) {
+            // Return the raw answer if JSON parsing failed
+            return response()->json([
+                'success' => true,
+                'message' => 'Readlist generated from your description, but couldn\'t be automatically created',
+                'cogni_response' => $result['answer']
+            ]);
+        }
+        
+        // Return error if generation failed
+        return response()->json([
+            'success' => false,
+            'message' => $result['message'] ?? 'Failed to generate a readlist from your description'
+        ], $result['code'] ?? 500);
+    }
+    
+    /**
      * Get all chats for the authenticated user
      *
      * @return \Illuminate\Http\JsonResponse

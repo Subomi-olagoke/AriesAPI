@@ -466,6 +466,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/cogni/explain', [CogniController::class, 'explain']);
     Route::post('/cogni/generate-quiz', [CogniController::class, 'generateQuiz']);
     Route::post('/cogni/generate-readlist', [CogniController::class, 'generateTopicReadlist']);
+    Route::post('/cogni/generate-readlist-from-description', [CogniController::class, 'generateDescriptionReadlist']);
     Route::post('/cogni/generate-cognition', [CogniController::class, 'generateCognitionReadlist']);
     Route::post('/cogni/conversations/clear', [CogniController::class, 'clearConversation']);
     Route::post('/cogni/conversation/clear', [CogniController::class, 'clearConversation']); // Additional route
@@ -913,6 +914,22 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::put('/levels/{id}', [\App\Http\Controllers\AlexPointsController::class, 'updateLevel']);
             Route::post('/adjust', [\App\Http\Controllers\AlexPointsController::class, 'adjustPoints']);
         });
+    });
+    
+    // Hive routes
+    Route::prefix('hive')->middleware('auth:sanctum')->group(function () {
+        // Channels endpoints
+        Route::get('/channels', [\App\Http\Controllers\Hive\HiveController::class, 'getChannels']);
+        Route::post('/channels/{id}/join', [\App\Http\Controllers\Hive\HiveController::class, 'joinChannel']);
+        Route::delete('/channels/{id}/leave', [\App\Http\Controllers\Hive\HiveController::class, 'leaveChannel']);
+        
+        // Communities endpoints
+        Route::get('/communities', [\App\Http\Controllers\Hive\HiveController::class, 'getCommunities']);
+        Route::post('/communities/{id}/join', [\App\Http\Controllers\Hive\HiveController::class, 'joinCommunity']);
+        Route::delete('/communities/{id}/leave', [\App\Http\Controllers\Hive\HiveController::class, 'leaveCommunity']);
+        
+        // Activity feed endpoint
+        Route::get('/activity', [\App\Http\Controllers\Hive\HiveController::class, 'getActivity']);
     });
     
     // Additional points route for compatibility
