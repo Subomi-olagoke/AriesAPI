@@ -206,7 +206,7 @@ class EducatorsController extends Controller {
             $user->is_current_user = ($user->id === $currentUserId);
             
             // Can be hired?
-            $user->can_be_hired = $user->is_verified && 
+            $user->can_be_hired = $user->isVerified() && 
                                  ($user->profile && !empty($user->profile->hire_rate));
             
             // Remove unnecessary relationship data

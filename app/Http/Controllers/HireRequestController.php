@@ -50,7 +50,7 @@ class HireRequestController extends Controller
             }
             
             // Check if educator is verified
-            if (!$tutor->is_verified) {
+            if (!$tutor->isVerified()) {
                 return response()->json([
                     'message' => 'This educator is not verified yet and cannot be hired',
                     'verification_status' => $tutor->verification_status

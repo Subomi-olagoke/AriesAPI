@@ -26,7 +26,7 @@ class AdminController extends Controller
      */
     private function isAdmin()
     {
-        return Auth::user()->isAdmin == true;
+        return Auth::user()->isAdmin === true;
     }
 
     /**

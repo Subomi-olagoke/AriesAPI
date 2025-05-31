@@ -59,9 +59,11 @@ class User extends Authenticatable {
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
-        'isAdmin' => 'integer',
+        'isAdmin' => 'boolean',
         'is_banned' => 'boolean',
+        'is_verified' => 'boolean',
         'banned_at' => 'datetime',
+        'verified_at' => 'datetime',
         'alex_points' => 'integer',
         'point_level' => 'integer',
         'points_to_next_level' => 'integer',
@@ -465,18 +467,22 @@ class User extends Authenticatable {
     
     /**
      * Check if user is verified
+     * 
+     * @return bool
      */
-    public function isVerified()
+    public function isVerified(): bool
     {
-        return $this->is_verified;
+        return (bool) $this->is_verified;
     }
     
     /**
      * Check if user can be hired (educator must be verified)
+     * 
+     * @return bool
      */
-    public function canBeHired()
+    public function canBeHired(): bool
     {
-        return $this->role === self::ROLE_EDUCATOR && $this->is_verified;
+        return $this->role === self::ROLE_EDUCATOR && $this->isVerified();
     }
     
     /**
