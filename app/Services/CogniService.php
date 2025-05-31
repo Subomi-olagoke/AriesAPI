@@ -666,4 +666,105 @@ class CogniService
             ];
         }
     }
+    
+    /**
+     * Analyze an image with accompanying text
+     *
+     * @param string $imageUrl URL of the image to analyze
+     * @param string $prompt Text prompt describing what to analyze about the image
+     * @param string $context Additional context about the image
+     * @return array Response with success/error status and analysis
+     */
+    public function analyzeImage(string $imageUrl, string $prompt, string $context = ''): array
+    {
+        if (empty($this->apiKey)) {
+            Log::error('OpenAI API key is not configured');
+            return [
+                'success' => false,
+                'message' => 'Cogni service is not properly configured',
+                'code' => 500
+            ];
+        }
+        
+        // Use vision model if configured
+        $visionModel = config('services.openai.vision_model', 'gpt-4-vision-preview');
+        
+        try {
+            // Create the messages array with a system message
+            $messages = [
+                [
+                    'role' => 'system',
+                    'content' => 'You are Cogni, a helpful assistant with image analysis capabilities. Analyze the image provided and respond to the user\'s query about it. Focus on educational aspects of the image content.'
+                ]
+            ];
+            
+            // Add context if provided
+            if (!empty($context)) {
+                $messages[] = [
+                    'role' => 'user',
+                    'content' => "Context about the image: {$context}"
+                ];
+            }
+            
+            // Add the user's prompt and image URL
+            $messages[] = [
+                'role' => 'user',
+                'content' => [
+                    [
+                        'type' => 'text',
+                        'text' => $prompt
+                    ],
+                    [
+                        'type' => 'image_url',
+                        'image_url' => [
+                            'url' => $imageUrl
+                        ]
+                    ]
+                ]
+            ];
+            
+            // Make the API request
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'Content-Type' => 'application/json',
+            ])->post($this->baseUrl . '/chat/completions', [
+                'model' => $visionModel,
+                'messages' => $messages,
+                'temperature' => 0.7,
+                'max_tokens' => 1000,
+            ]);
+            
+            if ($response->successful()) {
+                $data = $response->json();
+                $answer = $data['choices'][0]['message']['content'] ?? null;
+                
+                if ($answer) {
+                    return [
+                        'success' => true,
+                        'answer' => $answer,
+                        'code' => 200
+                    ];
+                }
+            }
+            
+            Log::error('OpenAI Vision API request failed', [
+                'status' => $response->status(),
+                'response' => $response->json()
+            ]);
+            
+            return [
+                'success' => false,
+                'message' => 'Failed to analyze the image',
+                'code' => 500
+            ];
+        } catch (\Exception $e) {
+            Log::error('OpenAI Vision request error: ' . $e->getMessage());
+            
+            return [
+                'success' => false,
+                'message' => 'An error occurred while analyzing the image',
+                'code' => 500
+            ];
+        }
+    }
 }

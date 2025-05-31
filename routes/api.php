@@ -945,6 +945,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/posts/{postId}/analyze', [\App\Http\Controllers\PostAnalysisController::class, 'analyzePost']);
         Route::get('/posts/{postId}/recommendations', [\App\Http\Controllers\PostAnalysisController::class, 'getPostRecommendations']);
         Route::get('/posts/{postId}/learning-resources', [\App\Http\Controllers\PostAnalysisController::class, 'getLearningResources']);
+        Route::get('/posts/{postId}/media/{mediaId}/analyze', [\App\Http\Controllers\PostAnalysisController::class, 'analyzePostMedia']);
     });
     
     // Cognition routes

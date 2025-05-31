@@ -41,6 +41,7 @@ return [
         'api_key' => env('OPENAI_API_KEY'),
         'endpoint' => env('OPENAI_ENDPOINT', 'https://api.openai.com/v1'),
         'model' => env('OPENAI_MODEL', 'gpt-3.5-turbo'),
+        'vision_model' => env('OPENAI_VISION_MODEL', 'gpt-4-vision-preview'),
     ],
 
     'paystack' => [
