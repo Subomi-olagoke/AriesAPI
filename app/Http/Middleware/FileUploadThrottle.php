@@ -40,7 +40,7 @@ class FileUploadThrottle extends ThrottleRequests
         $key = 'file_uploads:' . $request->ip();
         
         // Use dynamic rate limiting based on available server resources
-        $maxAttempts = config('throttle.file_uploads.max_attempts', 20);
+        $maxAttempts = config('throttle.file_uploads.max_attempts', 1000);
         $decayMinutes = config('throttle.file_uploads.decay_minutes', 1);
         
         return parent::handle($request, $next, $maxAttempts, $decayMinutes, $key);

@@ -325,4 +325,38 @@ class MessageController extends Controller
 
         return response()->json(['unread_count' => $unreadCount]);
     }
+    
+    /**
+     * Get a specific message by ID
+     * 
+     * @param int $messageId The ID of the message to retrieve
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getMessage($messageId)
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+
+        $message = Message::with('sender')->findOrFail($messageId);
+        
+        // Check if the user is a participant in the conversation
+        $conversation = Conversation::findOrFail($message->conversation_id);
+        
+        if ($conversation->user_one_id !== $user->id && $conversation->user_two_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        
+        // If this is an unread message for the current user, mark it as read
+        if ($message->sender_id !== $user->id && !$message->is_read) {
+            $message->is_read = true;
+            $message->save();
+        }
+        
+        return response()->json([
+            'message' => $message
+        ]);
+    }
 }

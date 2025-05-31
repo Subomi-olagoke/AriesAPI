@@ -20,7 +20,7 @@ return [
     |
     */
     'api' => [
-        'max_attempts' => env('API_THROTTLE_MAX_ATTEMPTS', 60),
+        'max_attempts' => env('API_THROTTLE_MAX_ATTEMPTS', 1000),
         'decay_minutes' => env('API_THROTTLE_DECAY_MINUTES', 1),
     ],
 
@@ -35,7 +35,7 @@ return [
     |
     */
     'file_uploads' => [
-        'max_attempts' => env('FILE_UPLOAD_THROTTLE_MAX_ATTEMPTS', 120),
+        'max_attempts' => env('FILE_UPLOAD_THROTTLE_MAX_ATTEMPTS', 1000),
         'decay_minutes' => env('FILE_UPLOAD_THROTTLE_DECAY_MINUTES', 1),
     ],
 
@@ -49,7 +49,7 @@ return [
     |
     */
     'authenticated' => [
-        'max_attempts' => env('AUTH_THROTTLE_MAX_ATTEMPTS', 120),
+        'max_attempts' => env('AUTH_THROTTLE_MAX_ATTEMPTS', 1000),
         'decay_minutes' => env('AUTH_THROTTLE_DECAY_MINUTES', 1),
     ],
 
@@ -63,7 +63,7 @@ return [
     |
     */
     'unauthenticated' => [
-        'max_attempts' => env('UNAUTH_THROTTLE_MAX_ATTEMPTS', 40),
+        'max_attempts' => env('UNAUTH_THROTTLE_MAX_ATTEMPTS', 1000),
         'decay_minutes' => env('UNAUTH_THROTTLE_DECAY_MINUTES', 1),
     ],
 ];
