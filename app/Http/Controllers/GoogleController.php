@@ -59,10 +59,8 @@ class GoogleController extends Controller
                 $user->save();
             }
             
-            // Revoke all existing tokens
-            $user->tokens()->delete();
-            
-            // Create new token
+            // Create new token without revoking existing ones
+            // This allows users to be logged in from multiple devices simultaneously
             $token = $user->createToken('google-auth-mobile')->plainTextToken;
             
             return response()->json([

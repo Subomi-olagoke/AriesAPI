@@ -94,10 +94,8 @@ use Illuminate\Validation\Rules\Password;
 
         $user = Auth::user();
 
-        // Revoke all existing tokens for the user
-        $user->tokens()->delete();
-
-        // Create a new token
+        // Create a new token without revoking existing ones
+        // This allows users to be logged in from multiple devices simultaneously
         $token = $user->createToken('authToken')->plainTextToken;
 
         if (!$token) {
