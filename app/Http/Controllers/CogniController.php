@@ -664,7 +664,6 @@ class CogniController extends Controller
                         'conversation_id' => $conversationId
                     ]);
                 }
-                }
             }
             
             // If all else fails, return a helpful error message with diagnostics
