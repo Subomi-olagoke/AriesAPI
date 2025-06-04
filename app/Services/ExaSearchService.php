@@ -65,8 +65,23 @@ class ExaSearchService
                 $payload['excludeDomains'] = $excludeDomains;
             }
             
+            // Log the attempt to call Exa API
+            Log::info('Calling Exa API with payload', [
+                'query' => $query,
+                'numResults' => $numResults,
+                'baseUrl' => $this->baseUrl
+            ]);
+            
             $response = Http::withHeaders($this->defaultHeaders)
+                ->timeout(10) // Add a timeout to prevent long-running requests
                 ->post("{$this->baseUrl}/search", $payload);
+                
+            // Log the response
+            Log::info('Exa API response', [
+                'status' => $response->status(),
+                'success' => $response->successful(),
+                'body_excerpt' => substr($response->body(), 0, 500)
+            ]);
 
             if ($response->successful()) {
                 $results = $response->json('results');
@@ -99,7 +114,13 @@ class ExaSearchService
                 ];
             }
         } catch (\Exception $e) {
-            Log::error('Exa API search exception: ' . $e->getMessage());
+            Log::error('Exa API search exception', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'api_key_length' => $this->apiKey ? strlen($this->apiKey) : 0
+            ]);
             return [
                 'success' => false,
                 'message' => 'Search failed: ' . $e->getMessage(),
