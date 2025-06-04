@@ -139,7 +139,8 @@
                     <!-- AI Cover Option -->
                     <div>
                         <div class="flex items-center">
-                            <input id="generate_cover" name="generate_cover" type="checkbox" class="form-checkbox h-4 w-4 text-primary-600">
+                            <input type="hidden" name="generate_cover" value="0">
+                            <input id="generate_cover" name="generate_cover" type="checkbox" value="1" class="form-checkbox h-4 w-4 text-primary-600">
                             <label for="generate_cover" class="ml-2 block text-sm text-neutral-700">
                                 Generate AI cover image for this library
                             </label>
