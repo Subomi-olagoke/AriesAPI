@@ -558,8 +558,8 @@
         }
         
         // If all validations pass, move to step 2
-        const step = Alpine.store('step');
-        Alpine.store('step', 2);
+        // Use Alpine.js directly
+        Alpine.$data(document.querySelector('[x-data]')).step = 2;
     }
     
     // Initialize Alpine.js data
