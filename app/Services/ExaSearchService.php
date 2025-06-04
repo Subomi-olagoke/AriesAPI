@@ -29,12 +29,12 @@ class ExaSearchService
      *
      * @param string $query The search query
      * @param int $numResults Number of results to return (max 20)
-     * @param boolean $includeDomains Whether to include domains in the response
+     * @param mixed $includeDomains Array of domains to include, or boolean (true = all domains)
      * @param boolean $safeSearch Whether to enable safe search filtering
      * @param array $excludeDomains Domains to exclude from results
      * @return array Search results or error information
      */
-    public function search(string $query, int $numResults = 5, bool $includeDomains = true, bool $safeSearch = true, array $excludeDomains = [])
+    public function search(string $query, int $numResults = 5, $includeDomains = [], bool $safeSearch = true, array $excludeDomains = [])
     {
         if (empty($this->apiKey)) {
             Log::error('Exa API key not configured', [
@@ -58,30 +58,37 @@ class ExaSearchService
         try {
             $numResults = min($numResults, 20); // Maximum 20 results per Exa API
             
-            // Ensure we're following the exact API schema for Exa v2
+            // Base payload with required parameters
             $payload = [
                 'query' => $query,
-                'num_results' => $numResults // Use num_results as that's what the API expects
+                'numResults' => $numResults,
+                'safeSearch' => $safeSearch
             ];
             
-            // Add optional parameters only if they're needed by this version of the API
-            if ($includeDomains !== null) {
-                $payload['include_domains'] = $includeDomains;
-            }
-            
-            if ($safeSearch !== null) {
-                $payload['safe_search'] = $safeSearch;
+            // Handle includeDomains parameter correctly
+            // API expects includeDomains to be an array, never a boolean
+            if (is_array($includeDomains)) {
+                $payload['includeDomains'] = $includeDomains;
+            } else if ($includeDomains === true) {
+                // If true was passed, use an empty array (include all domains)
+                $payload['includeDomains'] = [];
+            } else if ($includeDomains === false) {
+                // If false was passed, simply don't include the parameter
+                // as there's no way to specify "include no domains"
             }
             
             // Add excluded domains if provided
             if (!empty($excludeDomains)) {
-                $payload['exclude_domains'] = $excludeDomains;
+                $payload['excludeDomains'] = $excludeDomains;
             }
             
-            // Log the attempt to call Exa API
+            // Log the attempt to call Exa API with detailed information
             Log::info('Calling Exa API with payload', [
                 'query' => $query,
                 'numResults' => $numResults,
+                'includeDomains_type' => gettype($includeDomains),
+                'includeDomains_value' => is_array($includeDomains) ? $includeDomains : 'not an array',
+                'payload' => $payload,
                 'baseUrl' => $this->baseUrl
             ]);
             
@@ -89,14 +96,14 @@ class ExaSearchService
                 ->timeout(10) // Add a timeout to prevent long-running requests
                 ->post("{$this->baseUrl}/search", $payload);
                 
-            // Log the response
+            // Log the complete response for debugging
             Log::info('Exa API response', [
                 'status' => $response->status(),
                 'success' => $response->successful(),
                 'body_excerpt' => substr($response->body(), 0, 500),
                 'full_response_body' => $response->body(),
                 'request_payload' => $payload,
-                'headers' => $this->defaultHeaders
+                'headers' => array_keys($this->defaultHeaders) // Only log header keys, not values for security
             ]);
 
             if ($response->successful()) {
@@ -221,7 +228,7 @@ class ExaSearchService
             'instagram.com', // May contain inappropriate content
         ];
         
-        return $this->search($query, $numResults, true, true, $excludeDomains);
+        return $this->search($query, $numResults, [], true, $excludeDomains);
     }
 
     /**
@@ -249,7 +256,7 @@ class ExaSearchService
             'instagram.com', // May contain inappropriate content
         ];
         
-        return $this->search($query, $numResults, true, true, $excludeDomains);
+        return $this->search($query, $numResults, [], true, $excludeDomains);
     }
 
     /**
@@ -285,7 +292,7 @@ class ExaSearchService
         // Search for each category
         foreach ($categories as $categoryName => $searchTerms) {
             $query = "{$topic} {$searchTerms}";
-            $results = $this->search($query, 3, true, true, $excludeDomains);
+            $results = $this->search($query, 3, [], true, $excludeDomains);
             
             if ($results['success'] && !empty($results['results'])) {
                 $categorizedResults[$categoryName] = $results['results'];

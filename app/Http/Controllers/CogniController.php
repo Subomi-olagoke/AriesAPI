@@ -293,7 +293,7 @@ class CogniController extends Controller
                     'query' => $description . " educational resources",
                     'exa_configured' => $exaService->isConfigured()
                 ]);
-                $webSearchResults = $exaService->search($description . " educational resources", 10, true, true);
+                $webSearchResults = $exaService->search($description . " educational resources", 10, [], true);
                 
                 // Log search results for debugging
                 \Log::info("Web search results", [
@@ -381,7 +381,7 @@ class CogniController extends Controller
                     'query' => $description . " educational resources",
                     'exa_configured' => $exaService->isConfigured()
                 ]);
-                $webSearchResults = $exaService->search($description . " educational resources", 10, true, true);
+                $webSearchResults = $exaService->search($description . " educational resources", 10, [], true);
                 
                 // Log search results for debugging
                 \Log::info("Web search fallback results", [
@@ -451,7 +451,7 @@ class CogniController extends Controller
                 $errorMsg .= "It looks like our web search capability isn't working properly at the moment. The administrator needs to set up the Exa API key. ";
             } else {
                 // Since Exa is configured but not working, let's test the API with a simple query
-                $testSearchResult = $exaService->search("test query", 1);
+                $testSearchResult = $exaService->search("test query", 1, []);
                 $diagnostics['test_search'] = [
                     'success' => $testSearchResult['success'] ?? false,
                     'message' => $testSearchResult['message'] ?? 'No message',
@@ -461,7 +461,7 @@ class CogniController extends Controller
                 ];
                 
                 // Try a different query format to see if that works
-                $testSearchResult2 = $exaService->search("educational resources", 1, false, false);
+                $testSearchResult2 = $exaService->search("educational resources", 1, [], false);
                 $diagnostics['alternate_test_search'] = [
                     'success' => $testSearchResult2['success'] ?? false,
                     'message' => $testSearchResult2['message'] ?? 'No message',
@@ -708,7 +708,7 @@ class CogniController extends Controller
             $searchQuery = $question;
             
             // Perform web search
-            $searchResults = $exaService->search($searchQuery, 5, true, true);
+            $searchResults = $exaService->search($searchQuery, 5, [], true);
             
             if (!$searchResults['success'] || empty($searchResults['results'])) {
                 $noResultsMsg = "I searched the web for information about your query, but couldn't find relevant results. Could you try rephrasing your question?";
