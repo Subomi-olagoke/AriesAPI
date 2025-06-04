@@ -47,20 +47,71 @@ class GPTSearchService
         string $category = '',
         array $dateRange = []
     ) {
+        // Track timing for performance analysis
+        $startTime = microtime(true);
+        
+        // Track request ID for correlating logs
+        $requestId = uniqid('gpt_search_');
+        
+        // Log API configuration status
+        $configStatus = [
+            'api_key_configured' => !empty($this->apiKey),
+            'api_key_length' => !empty($this->apiKey) ? strlen($this->apiKey) : 0,
+            'base_url_configured' => !empty($this->baseUrl),
+            'model' => $this->model ?? 'not_set',
+            'request_id' => $requestId
+        ];
+        
+        \Log::info('GPT search service configuration check', $configStatus);
+        
         if (empty($this->apiKey)) {
-            Log::error('OpenAI API key not configured');
+            \Log::error('OpenAI API key not configured', [
+                'request_id' => $requestId,
+                'api_key_empty' => empty($this->apiKey),
+                'config_key_empty' => empty(config('services.openai.api_key')),
+                'config_key_length' => !empty(config('services.openai.api_key')) ? strlen(config('services.openai.api_key')) : 0,
+                'model' => $this->model ?? 'not_set',
+                'base_url' => $this->baseUrl ?? 'not_set'
+            ]);
+            
             return [
                 'success' => false,
                 'message' => 'OpenAI API key not configured',
                 'results' => [],
-                'diagnostic' => 'API key is missing in configuration'
+                'diagnostic' => 'API key is missing in configuration',
+                'request_id' => $requestId
             ];
         }
 
         try {
+            // Normalize and sanitize query for logging
+            $sanitizedQuery = trim($query);
+            if (empty($sanitizedQuery)) {
+                \Log::warning('Empty search query provided', [
+                    'request_id' => $requestId,
+                    'raw_query' => $query
+                ]);
+                $sanitizedQuery = 'general information';
+            }
+            
+            // Log full search request details
+            \Log::info('GPT search request details', [
+                'request_id' => $requestId,
+                'query' => $sanitizedQuery,
+                'query_length' => strlen($sanitizedQuery),
+                'numResults' => $numResults,
+                'includeDomains' => $includeDomains,
+                'excludeDomains' => $excludeDomains,
+                'type' => $type,
+                'category' => $category,
+                'dateRange' => $dateRange,
+                'safeSearch' => $safeSearch,
+                'timestamp' => date('Y-m-d H:i:s')
+            ]);
+            
             // Construct the prompt for GPT to simulate web search
             $searchPrompt = $this->constructSearchPrompt(
-                $query, 
+                $sanitizedQuery, 
                 $numResults, 
                 $includeDomains, 
                 $safeSearch, 
@@ -69,15 +120,15 @@ class GPTSearchService
                 $dateRange
             );
             
-            // Log the request
-            Log::info('GPT search request', [
-                'query' => $query,
-                'numResults' => $numResults,
-                'category' => $category,
-                'model' => $this->model
+            \Log::debug('Constructed GPT search prompt', [
+                'request_id' => $requestId,
+                'prompt_length' => strlen($searchPrompt),
+                'prompt_sample' => substr($searchPrompt, 0, 200) . '...' // Log beginning of prompt
             ]);
             
             // Make the API request to OpenAI
+            $requestStartTime = microtime(true);
+            
             $response = Http::withHeaders($this->defaultHeaders)
                 ->timeout(30)
                 ->post("{$this->baseUrl}/chat/completions", [
@@ -96,17 +147,47 @@ class GPTSearchService
                     'max_tokens' => $this->maxTokens,
                     'response_format' => ['type' => 'json_object']
                 ]);
+            
+            $requestEndTime = microtime(true);
+            $requestDuration = round(($requestEndTime - $requestStartTime) * 1000, 2); // in ms
+            
+            \Log::info('GPT API request completed', [
+                'request_id' => $requestId,
+                'status_code' => $response->status(),
+                'successful' => $response->successful(),
+                'duration_ms' => $requestDuration,
+                'model' => $this->model,
+                'query' => $sanitizedQuery
+            ]);
                 
             if ($response->successful()) {
                 $responseData = $response->json();
                 $content = $responseData['choices'][0]['message']['content'] ?? null;
                 
+                // Check if content is present and log
                 if (!empty($content)) {
+                    \Log::debug('GPT response received', [
+                        'request_id' => $requestId,
+                        'content_length' => strlen($content),
+                        'model' => $responseData['model'] ?? $this->model,
+                        'finish_reason' => $responseData['choices'][0]['finish_reason'] ?? 'unknown',
+                        'content_sample' => substr($content, 0, 100) . '...' // Log beginning of content
+                    ]);
+                    
                     try {
                         // Parse the JSON response
                         $jsonResponse = json_decode($content, true);
+                        $jsonError = json_last_error();
                         
-                        if (json_last_error() === JSON_ERROR_NONE && isset($jsonResponse['results'])) {
+                        \Log::debug('JSON parsing result', [
+                            'request_id' => $requestId,
+                            'json_error_code' => $jsonError,
+                            'json_error_message' => json_last_error_msg(),
+                            'has_results_field' => isset($jsonResponse['results']),
+                            'results_count' => isset($jsonResponse['results']) ? count($jsonResponse['results']) : 0
+                        ]);
+                        
+                        if ($jsonError === JSON_ERROR_NONE && isset($jsonResponse['results'])) {
                             // Format results to match the expected structure
                             $formattedResults = array_map(function($result) {
                                 return [
@@ -119,65 +200,153 @@ class GPTSearchService
                                 ];
                             }, $jsonResponse['results']);
                             
+                            // Log success with result details
+                            $totalDuration = round((microtime(true) - $startTime) * 1000, 2); // in ms
+                            
+                            \Log::info('GPT search successful', [
+                                'request_id' => $requestId,
+                                'total_duration_ms' => $totalDuration,
+                                'results_count' => count($formattedResults),
+                                'query' => $sanitizedQuery,
+                                'first_result_title' => $formattedResults[0]['title'] ?? 'No title',
+                                'domains' => array_column($formattedResults, 'domain')
+                            ]);
+                            
                             return [
                                 'success' => true,
                                 'results' => $formattedResults,
                                 'search_type' => 'gpt',
-                                'total_results' => count($formattedResults)
+                                'total_results' => count($formattedResults),
+                                'duration_ms' => $totalDuration,
+                                'request_id' => $requestId,
+                                'query' => $sanitizedQuery
                             ];
                         } else {
-                            Log::error('GPT search: Invalid JSON response', [
+                            // Detailed logging for JSON errors
+                            \Log::error('GPT search: Invalid JSON response', [
+                                'request_id' => $requestId,
                                 'error' => json_last_error_msg(),
-                                'content_excerpt' => substr($content, 0, 200)
+                                'error_code' => $jsonError,
+                                'content_excerpt' => substr($content, 0, 200),
+                                'has_results_field' => isset($jsonResponse['results']),
+                                'json_keys' => $jsonResponse ? array_keys($jsonResponse) : 'null_response',
+                                'query' => $sanitizedQuery
                             ]);
                             
                             return [
                                 'success' => false,
-                                'message' => 'Invalid JSON response from GPT',
-                                'results' => []
+                                'message' => 'Invalid JSON response from GPT: ' . json_last_error_msg(),
+                                'results' => [],
+                                'request_id' => $requestId,
+                                'query' => $sanitizedQuery,
+                                'debug_info' => [
+                                    'has_content' => !empty($content),
+                                    'content_length' => strlen($content ?? ''),
+                                    'content_sample' => substr($content ?? '', 0, 100),
+                                    'json_error' => json_last_error_msg(),
+                                    'response_keys' => $jsonResponse ? array_keys($jsonResponse) : []
+                                ]
                             ];
                         }
                     } catch (\Exception $e) {
-                        Log::error('GPT search: JSON parsing error', [
+                        // Detailed logging for parsing errors
+                        \Log::error('GPT search: JSON parsing exception', [
+                            'request_id' => $requestId,
                             'message' => $e->getMessage(),
-                            'content_excerpt' => substr($content, 0, 200)
+                            'file' => $e->getFile(),
+                            'line' => $e->getLine(),
+                            'content_excerpt' => substr($content, 0, 200),
+                            'query' => $sanitizedQuery
                         ]);
                         
                         return [
                             'success' => false,
                             'message' => 'Error parsing GPT response: ' . $e->getMessage(),
-                            'results' => []
+                            'results' => [],
+                            'request_id' => $requestId,
+                            'query' => $sanitizedQuery,
+                            'debug_info' => [
+                                'exception_type' => get_class($e),
+                                'file' => $e->getFile(),
+                                'line' => $e->getLine(),
+                                'content_sample' => substr($content ?? '', 0, 100)
+                            ]
                         ];
                     }
                 } else {
-                    Log::error('GPT search: Empty response content');
+                    // Log empty content error
+                    \Log::error('GPT search: Empty response content', [
+                        'request_id' => $requestId,
+                        'response_data' => $responseData,
+                        'model' => $responseData['model'] ?? $this->model,
+                        'query' => $sanitizedQuery
+                    ]);
                     
                     return [
                         'success' => false,
                         'message' => 'Empty response from GPT',
-                        'results' => []
+                        'results' => [],
+                        'request_id' => $requestId,
+                        'query' => $sanitizedQuery,
+                        'debug_info' => [
+                            'response_keys' => array_keys($responseData),
+                            'has_choices' => isset($responseData['choices']),
+                            'choices_count' => isset($responseData['choices']) ? count($responseData['choices']) : 0
+                        ]
                     ];
                 }
             } else {
-                Log::error('GPT API error: ' . $response->body());
+                // Log API error with details
+                \Log::error('GPT API error response', [
+                    'request_id' => $requestId,
+                    'status_code' => $response->status(),
+                    'error_body' => $response->body(),
+                    'error_json' => $response->json(),
+                    'query' => $sanitizedQuery,
+                    'request_duration_ms' => $requestDuration
+                ]);
                 
                 return [
                     'success' => false,
                     'message' => 'API error: ' . $response->status(),
                     'details' => $response->json(),
-                    'results' => []
+                    'results' => [],
+                    'request_id' => $requestId,
+                    'query' => $sanitizedQuery,
+                    'debug_info' => [
+                        'status_code' => $response->status(),
+                        'error_type' => $response->json('error.type') ?? 'unknown',
+                        'error_message' => $response->json('error.message') ?? 'No error message'
+                    ]
                 ];
             }
         } catch (\Exception $e) {
-            Log::error('GPT search exception', [
+            // Comprehensive exception logging
+            $totalDuration = round((microtime(true) - $startTime) * 1000, 2); // in ms
+            
+            \Log::error('GPT search exception', [
+                'request_id' => $requestId,
                 'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'query' => $query,
+                'duration_ms' => $totalDuration,
+                'exception_type' => get_class($e)
             ]);
             
             return [
                 'success' => false,
                 'message' => 'Search failed: ' . $e->getMessage(),
-                'results' => []
+                'results' => [],
+                'request_id' => $requestId,
+                'query' => $query,
+                'debug_info' => [
+                    'exception_type' => get_class($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'duration_ms' => $totalDuration
+                ]
             ];
         }
     }

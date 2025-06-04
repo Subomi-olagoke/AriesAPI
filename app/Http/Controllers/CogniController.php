@@ -240,11 +240,24 @@ class CogniController extends Controller
      */
     private function handleReadlistCreationRequest($user, $question, $conversationId)
     {
+        // Create an array to collect debug information throughout the process
+        $debugLogs = [
+            'process_steps' => [],
+            'internal_content' => [],
+            'search_results' => [],
+            'validation' => [],
+            'error_details' => []
+        ];
+        
         try {
+            $debugLogs['process_steps'][] = 'Starting readlist creation process';
+            
             // Extract the topic from the question
             // Remove common phrases like "create a readlist about" to get just the topic
             $description = preg_replace('/^(cogni,?\s*)?(please\s*)?(create|make|build)(\s+a|\s+me\s+a)?\s+(readlist|reading list)(\s+for\s+me)?(\s+about|\s+on)?\s*/i', '', $question);
             $description = trim($description);
+            
+            $debugLogs['process_steps'][] = 'Extracted description: "' . $description . '"';
             
             if (empty($description)) {
                 $description = $question; // Use the full question if extraction failed
@@ -276,12 +289,13 @@ class CogniController extends Controller
             }
             
             // Search for relevant internal content
-            $internalContent = $this->findRelevantContent($description);
+            $internalContent = $this->findRelevantContent($description, $debugLogs);
             
             // Check if we have enough internal content before proceeding
             $minRequiredContent = 3; // Minimum number of internal items needed
             if (count($internalContent) < $minRequiredContent) {
                 // Not enough internal content, try to get some from the web
+                $debugLogs['process_steps'][] = "Not enough internal content (found " . count($internalContent) . ", need " . $minRequiredContent . "), searching web";
                 \Log::info("Not enough internal content for readlist on '{$description}', searching web", [
                     'found_content_count' => count($internalContent)
                 ]);
@@ -437,13 +451,90 @@ class CogniController extends Controller
                 if (empty($result['readlist']['items'])) {
                     $noItemsMsg = "I tried to create a readlist about \"{$description}\" but couldn't find any relevant content. Would you like me to try a different topic?";
                     
+                    $debugLogs['process_steps'][] = "Empty items array in readlist data";
+                    $debugLogs['validation']['result_readlist_items_empty'] = true;
+                    $debugLogs['validation']['readlist_data'] = isset($result['readlist']) ? [
+                        'title' => $result['readlist']['title'] ?? 'No title',
+                        'description' => $result['readlist']['description'] ?? 'No description',
+                        'items_count' => 0
+                    ] : 'No readlist data';
+                    
+                    // Add search results if available
+                    if (isset($webSearchResults)) {
+                        $debugLogs['search_results'] = [
+                            'success' => $webSearchResults['success'] ?? false,
+                            'count' => count($webSearchResults['results'] ?? []),
+                            'search_type' => $webSearchResults['search_type'] ?? 'unknown',
+                            'items' => array_map(function($item) {
+                                return [
+                                    'title' => $item['title'] ?? 'Untitled',
+                                    'url' => $item['url'] ?? 'No URL',
+                                    'domain' => $item['domain'] ?? 'Unknown'
+                                ];
+                            }, $webSearchResults['results'] ?? [])
+                        ];
+                    }
+                    
+                    // Add specific diagnosis for "the Davinci" and similar queries
+                    if (stripos($description, 'davinci') !== false) {
+                        $debugLogs['special_analysis'] = [
+                            'is_davinci_query' => true,
+                            'exact_match' => strcasecmp($description, 'the davinci') === 0,
+                            'contains_davinci' => true,
+                            'keywords_before_filter' => array_values(preg_split('/[\s,]+/', $description)),
+                            'keywords_matching' => array_filter(preg_split('/[\s,]+/', $description), function($word) {
+                                return stripos($word, 'davinci') !== false;
+                            })
+                        ];
+                        
+                        // Try special case check for Davinci in database
+                        $specialSearch = \App\Models\Course::where('title', 'like', '%davinci%')
+                            ->orWhere('description', 'like', '%davinci%')
+                            ->get(['id', 'title', 'description']);
+                            
+                        $specialSearchPosts = \App\Models\Post::where('title', 'like', '%davinci%')
+                            ->orWhere('body', 'like', '%davinci%')
+                            ->get(['id', 'title', 'body']);
+                            
+                        $debugLogs['special_analysis']['direct_davinci_search'] = [
+                            'course_results' => $specialSearch->count(),
+                            'post_results' => $specialSearchPosts->count(),
+                            'course_titles' => $specialSearch->pluck('title')->toArray(),
+                            'post_titles' => $specialSearchPosts->pluck('title')->toArray(),
+                        ];
+                    }
+                    
+                    // Check for specific web search issues with this query
+                    if (!empty($webSearchResults)) {
+                        $debugLogs['search_analysis'] = [
+                            'search_results_count' => count($webSearchResults['results'] ?? []),
+                            'search_query' => $description . " " . ($queryType['additional_terms'] ?? ''),
+                            'search_type' => $queryType['search_type'] ?? 'unknown',
+                            'success' => $webSearchResults['success'] ?? false,
+                            'error_message' => $webSearchResults['message'] ?? 'No error message',
+                            'included_domains' => $includeDomains,
+                            'excluded_domains' => $excludeDomains
+                        ];
+                    }
+                    
+                    // Log detailed debug information with process timestamp
+                    $debugLogs['timestamp'] = date('Y-m-d H:i:s');
+                    $debugLogs['query_info'] = [
+                        'raw_query' => $question,
+                        'extracted_description' => $description,
+                        'search_terms' => array_values(preg_split('/[\s,]+/', $description))
+                    ];
+                    
+                    \Log::warning("Empty readlist items array - Detailed diagnostics", $debugLogs);
+                    
                     // Store in conversation history
                     $this->storeConversationInDatabase($user, $conversationId, $question, $noItemsMsg);
                     
                     return response()->json([
                         'success' => false,
                         'answer' => $noItemsMsg,
-                        'conversation_id' => $conversationId
+                        'conversation_id' => $conversationId,
+                        'debug_info' => $debugLogs
                     ]);
                 }
                 
@@ -736,17 +827,42 @@ class CogniController extends Controller
             ]);
             
         } catch (\Exception $e) {
-            \Log::error('Error in handleReadlistCreationRequest: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
-            ]);
+            // Enhanced error logging with more context
+            $errorId = uniqid('readlist_error_');
+            $errorContext = [
+                'error_id' => $errorId,
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'message' => $e->getMessage(),
+                'description' => $description ?? 'No description extracted',
+                'query' => $question,
+                'user_id' => $user ? $user->id : 'not_authenticated',
+                'exception_type' => get_class($e)
+            ];
+            
+            // Log with all available diagnostic information
+            if (isset($debugLogs)) {
+                $errorContext['debug_logs'] = $debugLogs;
+            }
+            
+            \Log::error('Error in handleReadlistCreationRequest: ' . $e->getMessage(), $errorContext);
             
             $errorMsg = "I'm sorry, I encountered an error while trying to create your readlist. Please try again later.";
             $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
             
+            // Return more detailed information for debugging
             return response()->json([
-                'success' => true,
+                'success' => false,
                 'answer' => $errorMsg,
-                'conversation_id' => $conversationId
+                'conversation_id' => $conversationId,
+                'error_details' => [
+                    'error_id' => $errorId,
+                    'error_type' => get_class($e),
+                    'error_message' => $e->getMessage(),
+                    'error_location' => $e->getFile() . ':' . $e->getLine(),
+                    'description' => $description ?? 'No description extracted'
+                ]
             ]);
         }
     }
@@ -755,31 +871,109 @@ class CogniController extends Controller
      * Find relevant content for readlist creation
      * 
      * @param string $description
+     * @param array &$debugLogs Reference to debug logs array
      * @return array
      */
-    private function findRelevantContent($description)
+    private function findRelevantContent($description, &$debugLogs = null)
     {
         $internalContent = [];
         
-        // Extract keywords
+        // Log the search description for debugging
+        \Log::info("Searching for relevant content for readlist", [
+            'description' => $description,
+            'length' => strlen($description)
+        ]);
+        
+        // Track timing for performance analysis
+        $startTime = microtime(true);
+        
+        // Extract keywords with more detailed logging
         $keywords = preg_split('/[\s,]+/', $description);
+        $originalKeywordCount = count($keywords);
+        
+        // Filter keywords with more detailed logging
         $keywords = array_filter($keywords, function($word) {
             return strlen($word) > 3; // Only use words longer than 3 characters
         });
+        $filteredKeywordCount = count($keywords);
+        
+        if ($debugLogs !== null) {
+            $debugLogs['process_steps'][] = 'Searching for internal content with keywords: ' . implode(', ', $keywords);
+            $debugLogs['internal_content']['keyword_analysis'] = [
+                'original_count' => $originalKeywordCount,
+                'filtered_count' => $filteredKeywordCount,
+                'original_keywords' => array_values(preg_split('/[\s,]+/', $description)),
+                'filtered_keywords' => array_values($keywords)
+            ];
+        }
         
         // If no good keywords, use the whole description
         if (empty($keywords)) {
             $keywords = [$description];
+            if ($debugLogs !== null) {
+                $debugLogs['process_steps'][] = 'No good keywords found, using full description as keyword';
+                $debugLogs['internal_content']['keyword_fallback'] = true;
+            }
+            
+            \Log::warning("No suitable keywords found for content search, using full description", [
+                'description' => $description
+            ]);
         }
         
-        // Search for relevant courses
+        // Track exact query used (case sensitive)
+        if ($debugLogs !== null) {
+            $debugLogs['internal_content']['exact_search_terms'] = [
+                'description' => $description,
+                'keywords_case_sensitive' => array_values($keywords)
+            ];
+        }
+        
+        // Search for relevant courses with enhanced logging
         $courseQuery = \App\Models\Course::query();
         foreach ($keywords as $keyword) {
             $courseQuery->orWhere('title', 'like', "%{$keyword}%")
                 ->orWhere('description', 'like', "%{$keyword}%");
         }
         
+        // Record exact SQL for debugging
+        $courseQuerySql = $courseQuery->toSql();
+        $courseQueryBindings = $courseQuery->getBindings();
+        
+        \Log::debug("Course search query", [
+            'sql' => $courseQuerySql,
+            'bindings' => $courseQueryBindings
+        ]);
+        
         $courses = $courseQuery->limit(30)->get(['id', 'title', 'description', 'user_id', 'created_at']);
+        
+        if ($debugLogs !== null) {
+            $debugLogs['internal_content']['courses_found'] = count($courses);
+            $debugLogs['internal_content']['course_query'] = [
+                'keywords' => $keywords,
+                'sql' => $courseQuerySql,
+                'bindings' => $courseQueryBindings
+            ];
+            $debugLogs['internal_content']['course_titles'] = $courses->pluck('title')->toArray();
+            
+            // Add detailed match analysis for each course
+            $courseMatches = [];
+            foreach ($courses as $course) {
+                $matchedKeywords = [];
+                foreach ($keywords as $keyword) {
+                    if (stripos($course->title, $keyword) !== false || stripos($course->description, $keyword) !== false) {
+                        $matchedKeywords[] = $keyword;
+                    }
+                }
+                
+                $courseMatches[] = [
+                    'id' => $course->id,
+                    'title' => $course->title,
+                    'matched_keywords' => $matchedKeywords,
+                    'match_count' => count($matchedKeywords)
+                ];
+            }
+            $debugLogs['internal_content']['course_match_details'] = $courseMatches;
+        }
         
         foreach ($courses as $course) {
             $internalContent[] = [
@@ -792,14 +986,52 @@ class CogniController extends Controller
             ];
         }
         
-        // Search for relevant posts
+        // Search for relevant posts with enhanced logging
         $postQuery = \App\Models\Post::query();
         foreach ($keywords as $keyword) {
             $postQuery->orWhere('title', 'like', "%{$keyword}%")
                 ->orWhere('body', 'like', "%{$keyword}%");
         }
         
+        // Record exact SQL for debugging
+        $postQuerySql = $postQuery->toSql();
+        $postQueryBindings = $postQuery->getBindings();
+        
+        \Log::debug("Post search query", [
+            'sql' => $postQuerySql,
+            'bindings' => $postQueryBindings
+        ]);
+        
         $posts = $postQuery->limit(30)->get(['id', 'title', 'body', 'user_id', 'created_at']);
+        
+        if ($debugLogs !== null) {
+            $debugLogs['internal_content']['posts_found'] = count($posts);
+            $debugLogs['internal_content']['post_query'] = [
+                'keywords' => $keywords,
+                'sql' => $postQuerySql,
+                'bindings' => $postQueryBindings
+            ];
+            $debugLogs['internal_content']['post_titles'] = $posts->pluck('title')->toArray();
+            
+            // Add detailed match analysis for each post
+            $postMatches = [];
+            foreach ($posts as $post) {
+                $matchedKeywords = [];
+                foreach ($keywords as $keyword) {
+                    if (stripos($post->title, $keyword) !== false || stripos($post->body, $keyword) !== false) {
+                        $matchedKeywords[] = $keyword;
+                    }
+                }
+                
+                $postMatches[] = [
+                    'id' => $post->id,
+                    'title' => $post->title ?? 'Untitled Post',
+                    'matched_keywords' => $matchedKeywords,
+                    'match_count' => count($matchedKeywords)
+                ];
+            }
+            $debugLogs['internal_content']['post_match_details'] = $postMatches;
+        }
         
         foreach ($posts as $post) {
             $internalContent[] = [
@@ -810,6 +1042,36 @@ class CogniController extends Controller
                 'user_id' => $post->user_id,
                 'created_at' => $post->created_at
             ];
+        }
+        
+        // Calculate search time
+        $endTime = microtime(true);
+        $searchTime = round(($endTime - $startTime) * 1000, 2); // in milliseconds
+        
+        if ($debugLogs !== null) {
+            $debugLogs['internal_content']['total_found'] = count($internalContent);
+            $debugLogs['internal_content']['search_time_ms'] = $searchTime;
+            $debugLogs['process_steps'][] = 'Found ' . count($internalContent) . ' internal content items in ' . $searchTime . 'ms';
+            
+            // Add information about content distribution
+            $types = [];
+            foreach ($internalContent as $item) {
+                $type = $item['type'] ?? 'unknown';
+                if (!isset($types[$type])) {
+                    $types[$type] = 0;
+                }
+                $types[$type]++;
+            }
+            $debugLogs['internal_content']['type_distribution'] = $types;
+        }
+        
+        // Log empty results for debugging
+        if (count($internalContent) == 0) {
+            \Log::warning("No internal content found for readlist query", [
+                'description' => $description,
+                'keywords' => $keywords,
+                'search_time_ms' => $searchTime
+            ]);
         }
         
         return $internalContent;
@@ -825,13 +1087,21 @@ class CogniController extends Controller
     private function createReadlistInDatabase($user, $readlistData)
     {
         try {
+            // Track timing for performance analysis
+            $startTime = microtime(true);
+            
+            // Log the initial readlist data for debugging
+            $logContext = [
+                'title' => $readlistData['title'] ?? 'Unknown title',
+                'description' => substr($readlistData['description'] ?? 'No description', 0, 100),
+                'user_id' => $user->id,
+                'total_items_provided' => count($readlistData['items'] ?? [])
+            ];
+            \Log::info('Starting readlist creation', $logContext);
+            
             // Check if there are any items to add to the readlist
             if (empty($readlistData['items'])) {
-                \Log::warning('Attempted to create empty readlist', [
-                    'title' => $readlistData['title'] ?? 'Unknown title',
-                    'description' => $readlistData['description'] ?? 'No description',
-                    'user_id' => $user->id
-                ]);
+                \Log::warning('Attempted to create empty readlist - no items array provided', $logContext);
                 return null; // Return null for empty readlists
             }
             
@@ -839,46 +1109,114 @@ class CogniController extends Controller
             $validItemCount = 0;
             $externalItems = [];
             $internalItems = [];
+            $invalidItems = [];
             
             // Pre-check items to verify we have at least one valid item
-            foreach ($readlistData['items'] as $item) {
+            foreach ($readlistData['items'] as $index => $item) {
+                $itemValidity = [
+                    'index' => $index,
+                    'is_valid' => false,
+                    'reason' => 'Unknown validation failure'
+                ];
+                
                 if (isset($item['type']) && $item['type'] === 'external') {
                     // Check that external item has valid URL
                     if (!empty($item['url'])) {
-                        $validItemCount++;
-                        $externalItems[] = $item;
+                        // Validate URL format
+                        if (filter_var($item['url'], FILTER_VALIDATE_URL)) {
+                            $validItemCount++;
+                            $externalItems[] = $item;
+                            $itemValidity['is_valid'] = true;
+                            $itemValidity['reason'] = 'Valid external item with URL';
+                        } else {
+                            $itemValidity['reason'] = 'Invalid URL format: ' . ($item['url'] ?? 'empty');
+                            $invalidItems[] = [
+                                'item' => $item,
+                                'reason' => 'Invalid URL format'
+                            ];
+                        }
+                    } else {
+                        $itemValidity['reason'] = 'External item missing URL';
+                        $invalidItems[] = [
+                            'item' => $item,
+                            'reason' => 'Missing URL'
+                        ];
                     }
                 } else {
                     // Check if internal item exists
                     $itemId = $item['id'] ?? null;
                     $itemExists = false;
+                    $checkResults = [];
                     
                     if ($itemId) {
-                        if (strpos($item['type'] ?? '', 'course') !== false) {
-                            $itemExists = \App\Models\Course::where('id', $itemId)->exists();
-                        } elseif (strpos($item['type'] ?? '', 'post') !== false) {
-                            $itemExists = \App\Models\Post::where('id', $itemId)->exists();
+                        $itemType = $item['type'] ?? 'unknown';
+                        
+                        if (strpos($itemType, 'course') !== false) {
+                            $exists = \App\Models\Course::where('id', $itemId)->exists();
+                            $checkResults['course_check'] = $exists;
+                            $itemExists = $exists;
+                        } elseif (strpos($itemType, 'post') !== false) {
+                            $exists = \App\Models\Post::where('id', $itemId)->exists();
+                            $checkResults['post_check'] = $exists;
+                            $itemExists = $exists;
                         } else {
                             // Try both types
-                            $itemExists = \App\Models\Course::where('id', $itemId)->exists() || 
-                                         \App\Models\Post::where('id', $itemId)->exists();
+                            $courseExists = \App\Models\Course::where('id', $itemId)->exists();
+                            $postExists = \App\Models\Post::where('id', $itemId)->exists();
+                            $checkResults['course_check'] = $courseExists;
+                            $checkResults['post_check'] = $postExists;
+                            $itemExists = $courseExists || $postExists;
                         }
                         
                         if ($itemExists) {
                             $validItemCount++;
                             $internalItems[] = $item;
+                            $itemValidity['is_valid'] = true;
+                            $itemValidity['reason'] = 'Valid internal item';
+                            $itemValidity['checks'] = $checkResults;
+                        } else {
+                            $itemValidity['reason'] = 'Internal item not found in database';
+                            $itemValidity['checks'] = $checkResults;
+                            $invalidItems[] = [
+                                'item' => $item,
+                                'reason' => 'Item not found',
+                                'checks' => $checkResults
+                            ];
                         }
+                    } else {
+                        $itemValidity['reason'] = 'Internal item missing ID';
+                        $invalidItems[] = [
+                            'item' => $item,
+                            'reason' => 'Missing ID'
+                        ];
                     }
+                }
+                
+                // Log item validation for debugging specific items
+                if (!$itemValidity['is_valid']) {
+                    \Log::debug('Readlist item validation failed', $itemValidity);
                 }
             }
             
+            // Log validation summary
+            \Log::info('Readlist items validation summary', [
+                'title' => $readlistData['title'] ?? 'Unknown title',
+                'total_items' => count($readlistData['items'] ?? []),
+                'valid_items' => $validItemCount,
+                'external_items' => count($externalItems),
+                'internal_items' => count($internalItems),
+                'invalid_items' => count($invalidItems)
+            ]);
+            
             // If no valid items were found, return null
             if ($validItemCount === 0) {
-                \Log::warning('No valid items for readlist creation', [
+                \Log::warning('No valid items for readlist creation - all items failed validation', [
                     'title' => $readlistData['title'] ?? 'Unknown title',
-                    'description' => $readlistData['description'] ?? 'No description',
+                    'description' => substr($readlistData['description'] ?? 'No description', 0, 100),
                     'item_count' => count($readlistData['items']),
-                    'user_id' => $user->id
+                    'user_id' => $user->id,
+                    'invalid_items_sample' => array_slice($invalidItems, 0, 5), // Log up to 5 invalid items
+                    'validation_failure_count' => count($invalidItems)
                 ]);
                 return null;
             }
@@ -898,100 +1236,165 @@ class CogniController extends Controller
             // Add items to the readlist
             $order = 1;
             $addedItems = 0;
+            $failedItems = [];
             
             // Add all external items
             foreach ($externalItems as $item) {
-                $readlistItem = new \App\Models\ReadlistItem([
-                    'readlist_id' => $readlist->id,
-                    'title' => $item['title'] ?? 'Educational Resource',
-                    'description' => $item['description'] ?? '',
-                    'url' => $item['url'] ?? '',
-                    'type' => 'external',
-                    'order' => $order++,
-                    'notes' => $item['notes'] ?? null
-                ]);
-                
-                $readlistItem->save();
-                $addedItems++;
-            }
-            
-            // Add all internal items
-            foreach ($internalItems as $item) {
-                $itemId = $item['id'];
-                $notes = $item['notes'] ?? null;
-                $itemType = null;
-                $itemModel = null;
-                
-                // Check if this is a course
-                if (strpos($item['type'] ?? '', 'course') !== false) {
-                    $course = \App\Models\Course::find($itemId);
-                    if ($course) {
-                        $itemType = \App\Models\Course::class;
-                        $itemModel = $course;
-                    }
-                } elseif (strpos($item['type'] ?? '', 'post') !== false) {
-                    $post = \App\Models\Post::find($itemId);
-                    if ($post) {
-                        $itemType = \App\Models\Post::class;
-                        $itemModel = $post;
-                    }
-                } else {
-                    // Try to determine type automatically
-                    $course = \App\Models\Course::find($itemId);
-                    if ($course) {
-                        $itemType = \App\Models\Course::class;
-                        $itemModel = $course;
-                    } else {
-                        $post = \App\Models\Post::find($itemId);
-                        if ($post) {
-                            $itemType = \App\Models\Post::class;
-                            $itemModel = $post;
-                        }
-                    }
-                }
-                
-                // If we found a valid internal item, add it to the readlist
-                if ($itemModel) {
+                try {
                     $readlistItem = new \App\Models\ReadlistItem([
                         'readlist_id' => $readlist->id,
-                        'item_id' => $itemId,
-                        'item_type' => $itemType,
+                        'title' => $item['title'] ?? 'Educational Resource',
+                        'description' => $item['description'] ?? '',
+                        'url' => $item['url'] ?? '',
+                        'type' => 'external',
                         'order' => $order++,
-                        'notes' => $notes
+                        'notes' => $item['notes'] ?? null
                     ]);
                     
                     $readlistItem->save();
                     $addedItems++;
+                } catch (\Exception $e) {
+                    \Log::error('Failed to add external item to readlist', [
+                        'readlist_id' => $readlist->id,
+                        'item' => $item,
+                        'error' => $e->getMessage()
+                    ]);
+                    $failedItems[] = [
+                        'item' => $item,
+                        'error' => $e->getMessage(),
+                        'type' => 'external'
+                    ];
+                }
+            }
+            
+            // Add all internal items
+            foreach ($internalItems as $item) {
+                try {
+                    $itemId = $item['id'];
+                    $notes = $item['notes'] ?? null;
+                    $itemType = null;
+                    $itemModel = null;
+                    $lookupResults = [];
+                    
+                    // Check if this is a course
+                    if (strpos($item['type'] ?? '', 'course') !== false) {
+                        $course = \App\Models\Course::find($itemId);
+                        if ($course) {
+                            $itemType = \App\Models\Course::class;
+                            $itemModel = $course;
+                            $lookupResults['course_found'] = true;
+                        } else {
+                            $lookupResults['course_found'] = false;
+                        }
+                    } elseif (strpos($item['type'] ?? '', 'post') !== false) {
+                        $post = \App\Models\Post::find($itemId);
+                        if ($post) {
+                            $itemType = \App\Models\Post::class;
+                            $itemModel = $post;
+                            $lookupResults['post_found'] = true;
+                        } else {
+                            $lookupResults['post_found'] = false;
+                        }
+                    } else {
+                        // Try to determine type automatically
+                        $course = \App\Models\Course::find($itemId);
+                        if ($course) {
+                            $itemType = \App\Models\Course::class;
+                            $itemModel = $course;
+                            $lookupResults['course_found'] = true;
+                            $lookupResults['post_checked'] = false;
+                        } else {
+                            $lookupResults['course_found'] = false;
+                            $post = \App\Models\Post::find($itemId);
+                            if ($post) {
+                                $itemType = \App\Models\Post::class;
+                                $itemModel = $post;
+                                $lookupResults['post_found'] = true;
+                            } else {
+                                $lookupResults['post_found'] = false;
+                            }
+                        }
+                    }
+                    
+                    // If we found a valid internal item, add it to the readlist
+                    if ($itemModel) {
+                        $readlistItem = new \App\Models\ReadlistItem([
+                            'readlist_id' => $readlist->id,
+                            'item_id' => $itemId,
+                            'item_type' => $itemType,
+                            'order' => $order++,
+                            'notes' => $notes
+                        ]);
+                        
+                        $readlistItem->save();
+                        $addedItems++;
+                    } else {
+                        \Log::warning('Internal item not found during readlist creation', [
+                            'item' => $item,
+                            'lookup_results' => $lookupResults
+                        ]);
+                        $failedItems[] = [
+                            'item' => $item,
+                            'error' => 'Item not found during save',
+                            'lookup_results' => $lookupResults,
+                            'type' => 'internal'
+                        ];
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('Failed to add internal item to readlist', [
+                        'readlist_id' => $readlist->id,
+                        'item' => $item,
+                        'error' => $e->getMessage()
+                    ]);
+                    $failedItems[] = [
+                        'item' => $item,
+                        'error' => $e->getMessage(),
+                        'type' => 'internal'
+                    ];
                 }
             }
             
             // If no items were added (all failed validation), roll back
             if ($addedItems === 0) {
                 \DB::rollBack();
-                \Log::warning('Created readlist but no items could be added', [
+                \Log::warning('Created readlist but no items could be added - all items failed during save', [
                     'title' => $readlistData['title'],
-                    'description' => $readlistData['description']
+                    'description' => substr($readlistData['description'] ?? 'No description', 0, 100),
+                    'failed_items' => $failedItems
                 ]);
                 return null;
             }
             
             \DB::commit();
             
-            // Log success
+            // Calculate time spent
+            $endTime = microtime(true);
+            $createTime = round(($endTime - $startTime) * 1000, 2); // in milliseconds
+            
+            // Log success with detailed metrics
             \Log::info('Successfully created readlist', [
                 'id' => $readlist->id,
                 'title' => $readlist->title,
-                'item_count' => $addedItems
+                'item_count' => $addedItems,
+                'external_items' => count($externalItems),
+                'internal_items' => count($internalItems),
+                'failed_items' => count($failedItems),
+                'time_ms' => $createTime
             ]);
             
             return $readlist;
             
         } catch (\Exception $e) {
-            \DB::rollBack();
+            if (isset($readlist) && \DB::transactionLevel() > 0) {
+                \DB::rollBack();
+            }
+            
             \Log::error('Error creating readlist in database: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
                 'title' => $readlistData['title'] ?? 'Unknown',
-                'item_count' => count($readlistData['items'] ?? [])
+                'item_count' => count($readlistData['items'] ?? []),
+                'error_line' => $e->getLine(),
+                'error_file' => $e->getFile()
             ]);
             return null;
         }
