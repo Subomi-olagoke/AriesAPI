@@ -377,7 +377,6 @@ class CogniController extends Controller
                         ]);
                     }
                 }
-                }
             }
             
             // Generate readlist with available content (internal + potentially external)
