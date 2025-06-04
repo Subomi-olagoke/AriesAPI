@@ -37,11 +37,16 @@ class ExaSearchService
     public function search(string $query, int $numResults = 5, bool $includeDomains = true, bool $safeSearch = true, array $excludeDomains = [])
     {
         if (empty($this->apiKey)) {
-            Log::error('Exa API key not configured');
+            Log::error('Exa API key not configured', [
+                'api_key_empty' => empty($this->apiKey),
+                'config_key_empty' => empty(config('services.exa.api_key')),
+                'config_key_length' => !empty(config('services.exa.api_key')) ? strlen(config('services.exa.api_key')) : 0
+            ]);
             return [
                 'success' => false,
                 'message' => 'Exa API key not configured',
-                'results' => []
+                'results' => [],
+                'diagnostic' => 'API key is missing in configuration'
             ];
         }
 

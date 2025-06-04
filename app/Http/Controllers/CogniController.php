@@ -427,27 +427,50 @@ class CogniController extends Controller
                 }
             }
             
-            // If all else fails, return a helpful error message
+            // If all else fails, return a helpful error message with diagnostics
             $errorMsg = "I tried to create a readlist about " . $description . " but couldn't find enough relevant content. ";
             
-            // Check if Exa is properly configured
+            // Check if Exa is properly configured and test it
             $exaService = app(\App\Services\ExaSearchService::class);
-            if (!$exaService->isConfigured()) {
-                \Log::warning("Exa search service is not properly configured", [
-                    'description' => $description,
-                    'api_key_set' => !empty(config('services.exa.api_key'))
-                ]);
-                $errorMsg .= "It looks like our web search capability isn't working properly at the moment. ";
+            $exaIsConfigured = $exaService->isConfigured();
+            
+            // Create diagnostic info about Exa configuration
+            $diagnostics = [
+                'exa_configured' => $exaIsConfigured,
+                'api_key_set' => !empty(config('services.exa.api_key')),
+                'api_key_length' => !empty(config('services.exa.api_key')) ? strlen(config('services.exa.api_key')) : 0,
+                'api_endpoint' => config('services.exa.endpoint', 'https://api.exa.ai'),
+                'internal_content_count' => count($internalContent)
+            ];
+            
+            // Log diagnostics
+            \Log::warning("Readlist creation failed - Exa diagnostics", $diagnostics);
+            
+            // Direct error message based on actual issue
+            if (!$exaIsConfigured) {
+                $errorMsg .= "It looks like our web search capability isn't working properly at the moment. The administrator needs to set up the Exa API key. ";
+            } else {
+                // Since Exa is configured but not working, let's test the API with a simple query
+                $testSearchResult = $exaService->search("test query", 1);
+                $diagnostics['test_search'] = [
+                    'success' => $testSearchResult['success'] ?? false,
+                    'message' => $testSearchResult['message'] ?? 'No message',
+                    'result_count' => count($testSearchResult['results'] ?? [])
+                ];
+                
+                $errorMsg .= "I tried to search the web for content but encountered an error. This might be due to temporary API limits or connectivity issues. ";
             }
             
             $errorMsg .= "Would you like me to try a different topic?";
             
             $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
             
+            // Include diagnostics in the response
             return response()->json([
                 'success' => true,
                 'answer' => $errorMsg,
-                'conversation_id' => $conversationId
+                'conversation_id' => $conversationId,
+                'debug_info' => $diagnostics
             ]);
             
         } catch (\Exception $e) {
