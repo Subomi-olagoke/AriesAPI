@@ -22,6 +22,16 @@ class ExaSearchService
             'Authorization' => 'Bearer ' . $this->apiKey,
         ];
     }
+    
+    /**
+     * Check if the Exa service is properly configured
+     * 
+     * @return boolean
+     */
+    public function isConfigured()
+    {
+        return !empty($this->apiKey);
+    }
 
     /**
      * Search the web for relevant information related to a topic

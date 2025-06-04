@@ -288,7 +288,19 @@ class CogniController extends Controller
                 
                 // Get web content using Exa
                 $exaService = app(\App\Services\ExaSearchService::class);
+                // Log that we're attempting a web search
+                \Log::info("Attempting web search for readlist content", [
+                    'query' => $description . " educational resources",
+                    'exa_configured' => $exaService->isConfigured()
+                ]);
                 $webSearchResults = $exaService->search($description . " educational resources", 10, true, true);
+                
+                // Log search results for debugging
+                \Log::info("Web search results", [
+                    'success' => $webSearchResults['success'] ?? false,
+                    'result_count' => count($webSearchResults['results'] ?? []),
+                    'error' => $webSearchResults['message'] ?? 'No error message'
+                ]);
                 
                 if ($webSearchResults['success'] && !empty($webSearchResults['results'])) {
                     // Add web content to readlist as external items
@@ -364,7 +376,19 @@ class CogniController extends Controller
             if (count($internalContent) >= $minRequiredContent) {
                 // We had enough internal content but still failed, try with web search
                 $exaService = app(\App\Services\ExaSearchService::class);
+                // Log that we're attempting a web search as fallback
+                \Log::info("Attempting web search as fallback for readlist generation", [
+                    'query' => $description . " educational resources",
+                    'exa_configured' => $exaService->isConfigured()
+                ]);
                 $webSearchResults = $exaService->search($description . " educational resources", 10, true, true);
+                
+                // Log search results for debugging
+                \Log::info("Web search fallback results", [
+                    'success' => $webSearchResults['success'] ?? false,
+                    'result_count' => count($webSearchResults['results'] ?? []),
+                    'error' => $webSearchResults['message'] ?? 'No error message'
+                ]);
                 
                 if ($webSearchResults['success'] && !empty($webSearchResults['results'])) {
                     // Create a readlist with web content
@@ -404,9 +428,20 @@ class CogniController extends Controller
             }
             
             // If all else fails, return a helpful error message
-            $errorMsg = "I tried to create a readlist about " . $description . " but couldn't find enough relevant content. " .
-                        "Would you like me to try a different topic?";
-                        
+            $errorMsg = "I tried to create a readlist about " . $description . " but couldn't find enough relevant content. ";
+            
+            // Check if Exa is properly configured
+            $exaService = app(\App\Services\ExaSearchService::class);
+            if (!$exaService->isConfigured()) {
+                \Log::warning("Exa search service is not properly configured", [
+                    'description' => $description,
+                    'api_key_set' => !empty(config('services.exa.api_key'))
+                ]);
+                $errorMsg .= "It looks like our web search capability isn't working properly at the moment. ";
+            }
+            
+            $errorMsg .= "Would you like me to try a different topic?";
+            
             $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
             
             return response()->json([
