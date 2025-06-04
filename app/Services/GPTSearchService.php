@@ -283,29 +283,29 @@ class GPTSearchService
                             ]);
                             
                             $fallbackResults = $this->generateFallbackResults($sanitizedQuery);
-                                $formattedResults = array_map(function($result) {
-                                    return [
-                                        'title' => $result['title'] ?? 'Untitled',
-                                        'url' => $result['url'] ?? 'https://example.com/resource',
-                                        'text' => $result['content'] ?? $result['text'] ?? $result['description'] ?? '',
-                                        'domain' => $result['domain'] ?? parse_url($result['url'] ?? '', PHP_URL_HOST) ?? 'unknown',
-                                        'published_date' => $result['published_date'] ?? $result['date'] ?? null,
-                                        'summary' => $result['summary'] ?? null,
-                                    ];
-                                }, $fallbackResults);
-                                
-                                $totalDuration = round((microtime(true) - $startTime) * 1000, 2);
-                                
+                            $formattedResults = array_map(function($result) {
                                 return [
-                                    'success' => true,
-                                    'results' => $formattedResults,
-                                    'search_type' => 'fallback',
-                                    'total_results' => count($formattedResults),
-                                    'duration_ms' => $totalDuration,
-                                    'request_id' => $requestId,
-                                    'query' => $sanitizedQuery,
-                                    'used_fallback' => true
+                                    'title' => $result['title'] ?? 'Untitled',
+                                    'url' => $result['url'] ?? 'https://example.com/resource',
+                                    'text' => $result['content'] ?? $result['text'] ?? $result['description'] ?? '',
+                                    'domain' => $result['domain'] ?? parse_url($result['url'] ?? '', PHP_URL_HOST) ?? 'unknown',
+                                    'published_date' => $result['published_date'] ?? $result['date'] ?? null,
+                                    'summary' => $result['summary'] ?? null,
                                 ];
+                            }, $fallbackResults);
+                            
+                            $totalDuration = round((microtime(true) - $startTime) * 1000, 2);
+                            
+                            return [
+                                'success' => true,
+                                'results' => $formattedResults,
+                                'search_type' => 'fallback',
+                                'total_results' => count($formattedResults),
+                                'duration_ms' => $totalDuration,
+                                'request_id' => $requestId,
+                                'query' => $sanitizedQuery,
+                                'used_fallback' => true
+                            ];
                             }
                             
                             return [
