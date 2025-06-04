@@ -293,7 +293,8 @@ class CogniController extends Controller
                     'query' => $description . " educational resources",
                     'exa_configured' => $exaService->isConfigured()
                 ]);
-                $webSearchResults = $exaService->search($description . " educational resources", 10, [], true);
+                // Use a more direct query without adding "educational resources"
+                $webSearchResults = $exaService->search($description, 10, [], false);
                 
                 // Log search results for debugging
                 \Log::info("Web search results", [
@@ -418,7 +419,8 @@ class CogniController extends Controller
                     'query' => $description . " educational resources",
                     'exa_configured' => $exaService->isConfigured()
                 ]);
-                $webSearchResults = $exaService->search($description . " educational resources", 10, [], true);
+                // Use a more direct query without adding "educational resources"
+                $webSearchResults = $exaService->search($description, 10, [], false);
                 
                 // Log search results for debugging
                 \Log::info("Web search fallback results", [
@@ -737,7 +739,7 @@ class CogniController extends Controller
     }
     
     /**
-     * Handle web search requests using Exa.ai
+     * Handle web search requests using the enhanced Exa.ai integration
      *
      * @param \App\Models\User $user
      * @param string $question
@@ -778,48 +780,122 @@ class CogniController extends Controller
                 ], 400);
             }
             
-            // Extract search query
-            $searchQuery = $question;
+            // Analyze the query to determine search parameters
+            $searchParams = $this->analyzeSearchQuery($question);
             
-            // Perform web search
-            $searchResults = $exaService->search($searchQuery, 5, [], true);
+            // Common spam or inappropriate domains to exclude
+            $excludeDomains = [
+                'pinterest.com', // Often contains low-quality content
+                'quora.com',     // Can contain unverified information
+                'reddit.com',    // May contain inappropriate content
+                'twitter.com',   // May contain unverified information
+                'facebook.com',  // May contain unverified information
+                'instagram.com', // May contain inappropriate content
+            ];
             
-            if (!$searchResults['success'] || empty($searchResults['results'])) {
-                $noResultsMsg = "I searched the web for information about your query, but couldn't find relevant results. Could you try rephrasing your question?";
-                
-                // Store in conversation
-                $this->storeConversationInDatabase($user, $conversationId, $question, $noResultsMsg);
-                
-                // Add to context
-                $context[] = [
-                    'role' => 'assistant',
-                    'content' => $noResultsMsg
+            // Define content options for better results
+            $contentsOptions = [
+                'highlights' => true, // Get relevant snippets
+                'text' => true,       // Get full text
+                'summary' => true     // Get AI-generated summaries when available
+            ];
+            
+            // Determine if this is a recent events query
+            $dateRange = [];
+            if ($searchParams['recent_events']) {
+                $dateRange = [
+                    'start' => date('Y-m-d', strtotime('-3 months'))
                 ];
-                
-                // Store updated context
-                $conversationKey = 'cogni_conversation_' . $conversationId;
-                Session::put($conversationKey, $context);
-                
-                return response()->json([
-                    'success' => true,
-                    'answer' => $noResultsMsg,
-                    'conversation_id' => $conversationId
-                ]);
             }
             
-            // Format search results for the AI
-            $formattedResults = "I found the following information from searching the web:\n\n";
+            // Perform web search with enhanced parameters
+            $searchResults = $exaService->search(
+                $searchParams['query'], 
+                $searchParams['num_results'], 
+                $searchParams['include_domains'], 
+                true, 
+                $excludeDomains,
+                $searchParams['search_type'],
+                $searchParams['category'],
+                $dateRange,
+                $contentsOptions
+            );
+            
+            if (!$searchResults['success'] || empty($searchResults['results'])) {
+                // Retry with broader parameters if no results
+                if ($searchParams['search_type'] === 'neural') {
+                    // Try keyword search as fallback
+                    $searchResults = $exaService->search(
+                        $searchParams['query'], 
+                        $searchParams['num_results'], 
+                        [], // No domain restrictions
+                        true, 
+                        $excludeDomains,
+                        'keyword', // Switch to keyword search
+                        '',        // No category filter
+                        [],        // No date restrictions
+                        $contentsOptions
+                    );
+                }
+                
+                // If still no results
+                if (!$searchResults['success'] || empty($searchResults['results'])) {
+                    $noResultsMsg = "I searched the web for information about your query, but couldn't find relevant results. Could you try rephrasing your question?";
+                    
+                    // Store in conversation
+                    $this->storeConversationInDatabase($user, $conversationId, $question, $noResultsMsg);
+                    
+                    // Add to context
+                    $context[] = [
+                        'role' => 'assistant',
+                        'content' => $noResultsMsg
+                    ];
+                    
+                    // Store updated context
+                    $conversationKey = 'cogni_conversation_' . $conversationId;
+                    Session::put($conversationKey, $context);
+                    
+                    return response()->json([
+                        'success' => true,
+                        'answer' => $noResultsMsg,
+                        'conversation_id' => $conversationId
+                    ]);
+                }
+            }
+            
+            // Format search results for the AI with improved formatting
+            $formattedResults = "I found the following information from searching the web";
+            if (isset($searchResults['search_type'])) {
+                $formattedResults .= " using " . $searchResults['search_type'] . " search";
+            }
+            $formattedResults .= ":\n\n";
             
             foreach ($searchResults['results'] as $index => $result) {
                 $formattedResults .= "[" . ($index + 1) . "] " . $result['title'] . "\n";
                 $formattedResults .= "Source: " . $result['url'] . "\n";
-                $formattedResults .= "Content: " . substr($result['text'], 0, 500) . "...\n\n";
+                
+                // Use summary if available, otherwise use highlights or text
+                if (isset($result['summary'])) {
+                    $formattedResults .= "Summary: " . $result['summary'] . "\n";
+                } elseif (isset($result['highlights']) && !empty($result['highlights'])) {
+                    $formattedResults .= "Highlights: " . implode(" ... ", $result['highlights']) . "\n";
+                } else {
+                    $formattedResults .= "Content: " . substr($result['text'], 0, 500) . "...\n";
+                }
+                
+                if (isset($result['published_date']) && !empty($result['published_date'])) {
+                    $formattedResults .= "Published: " . $result['published_date'] . "\n";
+                }
+                
+                $formattedResults .= "\n";
             }
             
-            // Create a prompt for the AI to synthesize the search results
+            // Create an improved prompt for the AI to synthesize the search results
             $synthesisPrompt = "Based on the web search results above, please provide a comprehensive answer to the user's question: \"" . $question . "\". ";
             $synthesisPrompt .= "Include relevant information from the search results, and cite your sources using the [1], [2], etc. notation from the results. ";
-            $synthesisPrompt .= "If the search results don't fully answer the question, acknowledge that and provide what information is available.";
+            $synthesisPrompt .= "If the search results don't fully answer the question, acknowledge that and provide what information is available. ";
+            $synthesisPrompt .= "If the sources provide conflicting information, note the discrepancies and explain the different perspectives. ";
+            $synthesisPrompt .= "Prioritize recent and authoritative sources when available.";
             
             // Add search results to the system context for this question
             $newContext = $context;
@@ -845,21 +921,50 @@ class CogniController extends Controller
                 $conversationKey = 'cogni_conversation_' . $conversationId;
                 Session::put($conversationKey, $context);
                 
+                // Prepare web results with more useful information
+                $enrichedWebResults = array_map(function($result) {
+                    return [
+                        'title' => $result['title'] ?? 'Untitled',
+                        'url' => $result['url'] ?? '',
+                        'domain' => $result['domain'] ?? parse_url($result['url'] ?? '', PHP_URL_HOST),
+                        'summary' => $result['summary'] ?? null,
+                        'highlights' => $result['highlights'] ?? [],
+                        'published_date' => $result['published_date'] ?? null,
+                    ];
+                }, $searchResults['results']);
+                
                 return response()->json([
                     'success' => true,
                     'answer' => $result['answer'],
                     'conversation_id' => $conversationId,
                     'has_web_results' => true,
-                    'web_results' => $searchResults['results']
+                    'web_results' => $enrichedWebResults,
+                    'search_metadata' => [
+                        'search_type' => $searchResults['search_type'] ?? null,
+                        'total_results' => $searchResults['total_results'] ?? count($searchResults['results']),
+                        'query' => $searchParams['query']
+                    ]
                 ]);
             }
             
             // Fallback if synthesis fails
-            $fallbackMsg = "I found some information from the web, but couldn't synthesize it properly. Here are some relevant sources:\n\n";
+            $fallbackMsg = "I found information from the web about your query, but couldn't synthesize it completely. Here are the most relevant sources I found:\n\n";
             
             foreach ($searchResults['results'] as $index => $result) {
-                $fallbackMsg .= "- " . $result['title'] . ": " . $result['url'] . "\n";
+                $fallbackMsg .= ($index + 1) . ". " . $result['title'] . "\n";
+                $fallbackMsg .= "   URL: " . $result['url'] . "\n";
+                
+                // Add a brief highlight if available
+                if (isset($result['highlights']) && !empty($result['highlights'])) {
+                    $fallbackMsg .= "   Highlight: " . $result['highlights'][0] . "\n";
+                } elseif (isset($result['summary'])) {
+                    $fallbackMsg .= "   Summary: " . substr($result['summary'], 0, 150) . "...\n";
+                }
+                
+                $fallbackMsg .= "\n";
             }
+            
+            $fallbackMsg .= "You can click on these links to explore further. Would you like me to try analyzing any specific aspect of these results?";
             
             // Store in conversation
             $this->storeConversationInDatabase($user, $conversationId, $question, $fallbackMsg);
@@ -896,6 +1001,96 @@ class CogniController extends Controller
                 'conversation_id' => $conversationId
             ]);
         }
+    }
+    
+    /**
+     * Analyze a search query to determine appropriate search parameters
+     *
+     * @param string $query The user's query
+     * @return array Search parameters
+     */
+    private function analyzeSearchQuery($query)
+    {
+        $params = [
+            'query' => $query,
+            'num_results' => 7,              // Slightly more results for better synthesis
+            'search_type' => 'auto',         // Default to auto
+            'include_domains' => [],         // No domain restrictions by default
+            'category' => '',                // No category filter by default
+            'recent_events' => false         // Not a recent events query by default
+        ];
+        
+        // Check for specific query types
+        
+        // Educational query
+        if (preg_match('/how\s+to|learn|tutorial|guide|explain|what\s+is|understanding|beginner|course/i', $query)) {
+            $params['search_type'] = 'neural';  // Better for conceptual understanding
+            $params['category'] = 'educational';
+            $params['include_domains'] = [
+                'edu',
+                'org',
+                'coursera.org',
+                'khanacademy.org',
+                'youtube.com',
+                'developer.mozilla.org',
+                'stackoverflow.com',
+                'github.com'
+            ];
+        }
+        
+        // News or current events query
+        if (preg_match('/latest|current|recent|news|update|today|this week|this month|what happened|event/i', $query)) {
+            $params['search_type'] = 'keyword'; // Better for news retrieval
+            $params['category'] = 'news';
+            $params['recent_events'] = true;
+            $params['include_domains'] = [
+                'reuters.com',
+                'apnews.com',
+                'nytimes.com',
+                'bbc.com',
+                'bloomberg.com',
+                'cnn.com',
+                'washingtonpost.com',
+                'theguardian.com',
+                'news.google.com'
+            ];
+        }
+        
+        // Research or academic query
+        if (preg_match('/research|study|paper|journal|academic|science|scientific|evidence|data|statistics|analysis/i', $query)) {
+            $params['search_type'] = 'neural'; // Better for research content
+            $params['category'] = 'research';
+            $params['include_domains'] = [
+                'edu',
+                'gov',
+                'org',
+                'scholar.google.com',
+                'arxiv.org',
+                'researchgate.net',
+                'ncbi.nlm.nih.gov',
+                'science.org',
+                'nature.com',
+                'sciencedirect.com'
+            ];
+        }
+        
+        // Technology or programming query
+        if (preg_match('/code|programming|software|developer|api|framework|library|tech|technology|app|application/i', $query)) {
+            $params['search_type'] = 'neural';
+            $params['include_domains'] = [
+                'github.com',
+                'stackoverflow.com',
+                'developer.mozilla.org',
+                'docs.python.org',
+                'dev.to',
+                'medium.com',
+                'hackernoon.com',
+                'npmjs.com',
+                'pypi.org'
+            ];
+        }
+        
+        return $params;
     }
     
     /**
