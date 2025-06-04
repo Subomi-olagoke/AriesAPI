@@ -342,34 +342,35 @@ class CogniController extends Controller
                     'summary' => true     // Get AI-generated summaries when available
                 ];
                 
-                // Special handling for 'the Davinci' query which often fails
-                if (strtolower(trim($description)) === 'the davinci' || 
-                    strtolower(trim($description)) === 'davinci' ||
-                    strtolower(trim($description)) === 'leonardo da vinci') {
-                    \Log::info("Detected special case 'the Davinci' search, using optimized parameters");
+                // Perform web search with optimized parameters
+                $webSearchResults = $searchService->search(
+                    $description . " " . $queryType['additional_terms'],
+                    10, 
+                    $includeDomains, 
+                    true, 
+                    $excludeDomains,
+                    $queryType['search_type'],
+                    $queryType['category'],
+                    [] // No date range filter
+                );
+                
+                // If search failed or returned no results, try a more generic approach
+                if (!$webSearchResults['success'] || empty($webSearchResults['results'])) {
+                    \Log::info("First search attempt failed, trying with more generic parameters", [
+                        'query' => $description,
+                        'success' => $webSearchResults['success'] ?? false,
+                        'result_count' => count($webSearchResults['results'] ?? [])
+                    ]);
                     
-                    // Use more specific search terms for Da Vinci to improve results
-                    $optimizedQuery = "Leonardo da Vinci Renaissance artist inventor scientist";
+                    // Try a more generic search with fewer restrictions
                     $webSearchResults = $searchService->search(
-                        $optimizedQuery,
+                        $description . " information resources",
                         10, 
-                        ['en.wikipedia.org', 'britannica.com', 'history.com', 'louvre.fr', 'mos.org', 'edu'], 
+                        [], // No domain restrictions 
                         true, 
                         $excludeDomains,
-                        'neural',
-                        'educational',
-                        [] // No date range filter
-                    );
-                } else {
-                    // Standard search for other queries
-                    $webSearchResults = $searchService->search(
-                        $description . " " . $queryType['additional_terms'],
-                        10, 
-                        $includeDomains, 
-                        true, 
-                        $excludeDomains,
-                        $queryType['search_type'],
-                        $queryType['category'],
+                        'keyword', // Switch to keyword search for better recall
+                        '', // No category restriction
                         [] // No date range filter
                     );
                 }
@@ -382,17 +383,8 @@ class CogniController extends Controller
                 ]);
                 
                 if ($webSearchResults['success'] && !empty($webSearchResults['results'])) {
-                    // Add web content to readlist as external items
-                    $webItems = [];
-                    foreach ($webSearchResults['results'] as $result) {
-                        $webItems[] = [
-                            'title' => $result['title'],
-                            'description' => substr($result['text'], 0, 200) . '...',
-                            'url' => $result['url'],
-                            'type' => 'external',
-                            'notes' => 'From web search: ' . $result['domain']
-                        ];
-                    }
+                    // Process web search results into standardized readlist items
+                    $webItems = $this->processWebSearchResultsToItems($webSearchResults, $description);
                     
                     // Create a readlist combining internal and external content
                     // If we have too few internal items, create a mostly external-based readlist
@@ -467,8 +459,8 @@ class CogniController extends Controller
             );
             
             if ($result['success'] && isset($result['readlist'])) {
-                // Check if there are any items in the readlist
-                if (empty($result['readlist']['items'])) {
+                // Check if there are any items in the readlist, or if we have web items to add
+                if (empty($result['readlist']['items']) && (empty($webItems) || !isset($webItems))) {
                     $noItemsMsg = "I tried to create a readlist about \"{$description}\" but couldn't find any relevant content. Would you like me to try a different topic?";
                     
                     $debugLogs['process_steps'][] = "Empty items array in readlist data";
@@ -494,6 +486,23 @@ class CogniController extends Controller
                             }, $webSearchResults['results'] ?? [])
                         ];
                     }
+                } else if (empty($result['readlist']['items']) && !empty($webItems)) {
+                    // We have web items but no internal items - use the web items to create the readlist
+                    $debugLogs['process_steps'][] = "Using web items only for readlist";
+                    \Log::info("Using web items as primary content for readlist", [
+                        'web_item_count' => count($webItems),
+                        'description' => $description
+                    ]);
+                    
+                    // Create a new readlist data structure with just web items
+                    $result['readlist']['items'] = $webItems;
+                    
+                    // Update title and description to better reflect web content
+                    if (stripos($description, 'davinci') !== false || stripos($description, 'da vinci') !== false) {
+                        $result['readlist']['title'] = 'Leonardo da Vinci: A Curated Reading List';
+                        $result['readlist']['description'] = 'Explore the life, works, and legacy of Leonardo da Vinci, the remarkable Renaissance polymath known for his paintings, inventions, and scientific studies.';
+                    }
+                }
                     
                     // Add specific diagnosis for "the Davinci" and similar queries
                     if (stripos($description, 'davinci') !== false) {
@@ -888,6 +897,58 @@ class CogniController extends Controller
     }
     
     /**
+     * Process web search results into readlist items
+     * 
+     * @param array $webSearchResults The search results from GPT/fallback search
+     * @param string $description The description/query used for the search
+     * @return array Array of web items formatted for readlist
+     */
+    private function processWebSearchResultsToItems($webSearchResults, $description)
+    {
+        $webItems = [];
+        
+        if (!empty($webSearchResults['results'])) {
+            foreach ($webSearchResults['results'] as $result) {
+                // Make sure we have the minimum required fields
+                if (!empty($result['url']) && !empty($result['title'])) {
+                    // Handle various content formats
+                    $itemDescription = '';
+                    if (!empty($result['text'])) {
+                        $itemDescription = substr($result['text'], 0, 200) . '...';
+                    } elseif (!empty($result['summary'])) {
+                        $itemDescription = $result['summary'];
+                    } elseif (!empty($result['content'])) {
+                        $itemDescription = substr($result['content'], 0, 200) . '...';
+                    } else {
+                        $itemDescription = 'Resource about ' . $description;
+                    }
+                    
+                    // Get domain from either provided domain or parse from URL
+                    $domain = $result['domain'] ?? parse_url($result['url'], PHP_URL_HOST) ?? 'unknown';
+                    
+                    $webItems[] = [
+                        'title' => $result['title'],
+                        'description' => $itemDescription,
+                        'url' => $result['url'],
+                        'type' => 'external',
+                        'notes' => 'From web search: ' . $domain
+                    ];
+                }
+            }
+        }
+        
+        // Log the processing results
+        \Log::info("Processed web search results into readlist items", [
+            'items_count' => count($webItems),
+            'results_count' => count($webSearchResults['results'] ?? []),
+            'search_type' => $webSearchResults['search_type'] ?? 'unknown',
+            'used_fallback' => $webSearchResults['used_fallback'] ?? false
+        ]);
+        
+        return $webItems;
+    }
+
+    /**
      * Find relevant content for readlist creation
      * 
      * @param string $description
@@ -1228,17 +1289,55 @@ class CogniController extends Controller
                 'invalid_items' => count($invalidItems)
             ]);
             
-            // If no valid items were found, return null
+            // If no valid items were found, try to generate fallback results
             if ($validItemCount === 0) {
-                \Log::warning('No valid items for readlist creation - all items failed validation', [
-                    'title' => $readlistData['title'] ?? 'Unknown title',
-                    'description' => substr($readlistData['description'] ?? 'No description', 0, 100),
-                    'item_count' => count($readlistData['items']),
-                    'user_id' => $user->id,
-                    'invalid_items_sample' => array_slice($invalidItems, 0, 5), // Log up to 5 invalid items
-                    'validation_failure_count' => count($invalidItems)
-                ]);
-                return null;
+                $description = $readlistData['description'] ?? '';
+                $title = $readlistData['title'] ?? '';
+                $searchQuery = !empty($description) ? $description : $title;
+                
+                if (!empty($searchQuery)) {
+                    \Log::info('No valid items found - attempting to generate fallback content', [
+                        'title' => $title,
+                        'description' => substr($description, 0, 100),
+                        'search_query' => $searchQuery
+                    ]);
+                    
+                    // Get fallback items using the generic fallback generator
+                    $searchService = app(\App\Services\GPTSearchService::class);
+                    $fallbackResults = $searchService->generateFallbackResults($searchQuery);
+                    
+                    // Add each item as an external item
+                    foreach ($fallbackResults as $result) {
+                        if (!empty($result['url']) && !empty($result['title'])) {
+                            $validItemCount++;
+                            $externalItems[] = [
+                                'title' => $result['title'],
+                                'description' => $result['content'] ?? $result['summary'] ?? 'Resource about ' . $searchQuery,
+                                'url' => $result['url'],
+                                'type' => 'external',
+                                'notes' => 'From curated source: ' . ($result['domain'] ?? 'educational resource')
+                            ];
+                        }
+                    }
+                    
+                    \Log::info('Added fallback items for readlist', [
+                        'added_items' => $validItemCount,
+                        'search_query' => $searchQuery
+                    ]);
+                }
+                
+                // If still no valid items, return null
+                if ($validItemCount === 0) {
+                    \Log::warning('No valid items for readlist creation - all items failed validation', [
+                        'title' => $readlistData['title'] ?? 'Unknown title',
+                        'description' => substr($readlistData['description'] ?? 'No description', 0, 100),
+                        'item_count' => count($readlistData['items']),
+                        'user_id' => $user->id,
+                        'invalid_items_sample' => array_slice($invalidItems, 0, 5), // Log up to 5 invalid items
+                        'validation_failure_count' => count($invalidItems)
+                    ]);
+                    return null;
+                }
             }
             
             // Create the readlist
