@@ -278,7 +278,59 @@ class CogniController extends Controller
             // Search for relevant internal content
             $internalContent = $this->findRelevantContent($description);
             
-            // Generate readlist
+            // Check if we have enough internal content before proceeding
+            $minRequiredContent = 3; // Minimum number of internal items needed
+            if (count($internalContent) < $minRequiredContent) {
+                // Not enough internal content, try to get some from the web
+                \Log::info("Not enough internal content for readlist on '{$description}', searching web", [
+                    'found_content_count' => count($internalContent)
+                ]);
+                
+                // Get web content using Exa
+                $exaService = app(\App\Services\ExaSearchService::class);
+                $webSearchResults = $exaService->search($description . " educational resources", 10, true, true);
+                
+                if ($webSearchResults['success'] && !empty($webSearchResults['results'])) {
+                    // Add web content to readlist as external items
+                    $webItems = [];
+                    foreach ($webSearchResults['results'] as $result) {
+                        $webItems[] = [
+                            'title' => $result['title'],
+                            'description' => substr($result['text'], 0, 200) . '...',
+                            'url' => $result['url'],
+                            'type' => 'external',
+                            'notes' => 'From web search: ' . $result['domain']
+                        ];
+                    }
+                    
+                    // If we have literally no internal content, try to generate a readlist structure with just external content
+                    if (empty($internalContent)) {
+                        $readlistData = [
+                            'title' => 'Readlist: ' . ucfirst($description),
+                            'description' => 'A collection of resources about ' . $description . ' curated from the web.',
+                            'items' => $webItems
+                        ];
+                        
+                        $readlist = $this->createReadlistInDatabase($user, $readlistData);
+                        
+                        if ($readlist) {
+                            $response = "I couldn't find any internal content about " . $description . ", so I've created a readlist with " . 
+                                        count($webItems) . " resources from the web.";
+                            
+                            $this->storeConversationInDatabase($user, $conversationId, $question, $response);
+                            
+                            return response()->json([
+                                'success' => true,
+                                'answer' => $response,
+                                'conversation_id' => $conversationId,
+                                'readlist' => $readlist->load('items')
+                            ]);
+                        }
+                    }
+                }
+            }
+            
+            // Generate readlist with available content (internal + potentially external)
             $result = $this->cogniService->generateReadlistFromDescription(
                 $description, 
                 $internalContent, 
@@ -308,8 +360,52 @@ class CogniController extends Controller
             }
             
             // If we get here, something went wrong with readlist generation
+            // Try one more time with web search if we haven't already used it
+            if (count($internalContent) >= $minRequiredContent) {
+                // We had enough internal content but still failed, try with web search
+                $exaService = app(\App\Services\ExaSearchService::class);
+                $webSearchResults = $exaService->search($description . " educational resources", 10, true, true);
+                
+                if ($webSearchResults['success'] && !empty($webSearchResults['results'])) {
+                    // Create a readlist with web content
+                    $webItems = [];
+                    foreach ($webSearchResults['results'] as $result) {
+                        $webItems[] = [
+                            'title' => $result['title'],
+                            'description' => substr($result['text'], 0, 200) . '...',
+                            'url' => $result['url'],
+                            'type' => 'external',
+                            'notes' => 'From web search: ' . $result['domain']
+                        ];
+                    }
+                    
+                    $readlistData = [
+                        'title' => 'Readlist: ' . ucfirst($description),
+                        'description' => 'A collection of resources about ' . $description . ' curated from the web.',
+                        'items' => $webItems
+                    ];
+                    
+                    $readlist = $this->createReadlistInDatabase($user, $readlistData);
+                    
+                    if ($readlist) {
+                        $response = "I couldn't create a readlist with our internal content about " . $description . 
+                                    ", so I've created one with " . count($webItems) . " resources from the web instead.";
+                        
+                        $this->storeConversationInDatabase($user, $conversationId, $question, $response);
+                        
+                        return response()->json([
+                            'success' => true,
+                            'answer' => $response,
+                            'conversation_id' => $conversationId,
+                            'readlist' => $readlist->load('items')
+                        ]);
+                    }
+                }
+            }
+            
+            // If all else fails, return a helpful error message
             $errorMsg = "I tried to create a readlist about " . $description . " but couldn't find enough relevant content. " .
-                        "Would you like me to suggest some external resources instead?";
+                        "Would you like me to try a different topic?";
                         
             $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
             
