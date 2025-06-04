@@ -58,16 +58,24 @@ class ExaSearchService
         try {
             $numResults = min($numResults, 20); // Maximum 20 results per Exa API
             
+            // Ensure we're following the exact API schema for Exa v2
             $payload = [
                 'query' => $query,
-                'numResults' => $numResults,
-                'includeDomains' => $includeDomains,
-                'safeSearch' => $safeSearch
+                'num_results' => $numResults // Use num_results as that's what the API expects
             ];
+            
+            // Add optional parameters only if they're needed by this version of the API
+            if ($includeDomains !== null) {
+                $payload['include_domains'] = $includeDomains;
+            }
+            
+            if ($safeSearch !== null) {
+                $payload['safe_search'] = $safeSearch;
+            }
             
             // Add excluded domains if provided
             if (!empty($excludeDomains)) {
-                $payload['excludeDomains'] = $excludeDomains;
+                $payload['exclude_domains'] = $excludeDomains;
             }
             
             // Log the attempt to call Exa API
@@ -85,7 +93,10 @@ class ExaSearchService
             Log::info('Exa API response', [
                 'status' => $response->status(),
                 'success' => $response->successful(),
-                'body_excerpt' => substr($response->body(), 0, 500)
+                'body_excerpt' => substr($response->body(), 0, 500),
+                'full_response_body' => $response->body(),
+                'request_payload' => $payload,
+                'headers' => $this->defaultHeaders
             ]);
 
             if ($response->successful()) {

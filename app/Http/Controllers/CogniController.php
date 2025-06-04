@@ -455,7 +455,19 @@ class CogniController extends Controller
                 $diagnostics['test_search'] = [
                     'success' => $testSearchResult['success'] ?? false,
                     'message' => $testSearchResult['message'] ?? 'No message',
-                    'result_count' => count($testSearchResult['results'] ?? [])
+                    'result_count' => count($testSearchResult['results'] ?? []),
+                    'details' => $testSearchResult['details'] ?? null,
+                    'error_diagnostic' => $testSearchResult['diagnostic'] ?? null
+                ];
+                
+                // Try a different query format to see if that works
+                $testSearchResult2 = $exaService->search("educational resources", 1, false, false);
+                $diagnostics['alternate_test_search'] = [
+                    'success' => $testSearchResult2['success'] ?? false,
+                    'message' => $testSearchResult2['message'] ?? 'No message',
+                    'query' => "educational resources",
+                    'include_domains' => false,
+                    'safe_search' => false
                 ];
                 
                 $errorMsg .= "I tried to search the web for content but encountered an error. This might be due to temporary API limits or connectivity issues. ";
