@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class AdminLibraryController extends Controller
@@ -224,7 +225,12 @@ class AdminLibraryController extends Controller
             $library->type = $request->type;
             $library->course_id = $request->course_id;
             $library->thumbnail_url = $request->thumbnail_url;
-            $library->approval_status = 'pending';
+            
+            // Check if approval_status column exists before trying to use it
+            if (Schema::hasColumn('open_libraries', 'approval_status')) {
+                $library->approval_status = 'pending';
+            }
+            
             $library->is_approved = false;
             $library->save();
             
@@ -574,7 +580,7 @@ class AdminLibraryController extends Controller
             ->take(50)
             ->get();
             
-        $posts = \App\Models\Post::select('id', 'title', 'content', 'created_at')
+        $posts = \App\Models\Post::select('id', 'title', 'body', 'created_at')
             ->orderBy('created_at', 'desc')
             ->take(50)
             ->get();
@@ -585,7 +591,7 @@ class AdminLibraryController extends Controller
                 return [
                     'id' => $course->id,
                     'title' => $course->title,
-                    'description' => $course->description ?? substr($course->content ?? '', 0, 100),
+                    'description' => $course->description ?? '',
                     'type' => 'Course',
                     'created_at' => $course->created_at
                 ];
@@ -594,7 +600,7 @@ class AdminLibraryController extends Controller
                 return [
                     'id' => $post->id,
                     'title' => $post->title ?? 'Untitled Post',
-                    'description' => substr($post->content ?? '', 0, 100),
+                    'description' => substr($post->body ?? '', 0, 100),
                     'type' => 'Post',
                     'created_at' => $post->created_at
                 ];
