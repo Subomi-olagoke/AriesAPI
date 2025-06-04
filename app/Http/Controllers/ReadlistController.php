@@ -473,7 +473,22 @@ class ReadlistController extends Controller
         ]);
         
         try {
+            // Log the incoming ID for debugging
+            \Log::info('Looking for readlist with ID', [
+                'id' => $id,
+                'id_type' => gettype($id)
+            ]);
+            
+            // Try both with direct UUID and by querying
             $readlist = Readlist::find($id);
+            
+            if (!$readlist) {
+                // If not found, try with where query
+                $readlist = Readlist::where('id', (string)$id)->first();
+                \Log::info('Tried alternative lookup method', [
+                    'found' => $readlist ? 'yes' : 'no'
+                ]);
+            }
             
             if (!$readlist) {
                 return response()->json([
