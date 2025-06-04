@@ -315,30 +315,68 @@ class CogniController extends Controller
                         ];
                     }
                     
-                    // If we have literally no internal content, try to generate a readlist structure with just external content
-                    if (empty($internalContent)) {
-                        $readlistData = [
-                            'title' => 'Readlist: ' . ucfirst($description),
-                            'description' => 'A collection of resources about ' . $description . ' curated from the web.',
-                            'items' => $webItems
-                        ];
-                        
-                        $readlist = $this->createReadlistInDatabase($user, $readlistData);
-                        
-                        if ($readlist) {
-                            $response = "I couldn't find any internal content about " . $description . ", so I've created a readlist with " . 
-                                        count($webItems) . " resources from the web.";
-                            
-                            $this->storeConversationInDatabase($user, $conversationId, $question, $response);
-                            
-                            return response()->json([
-                                'success' => true,
-                                'answer' => $response,
-                                'conversation_id' => $conversationId,
-                                'readlist' => $readlist->load('items')
-                            ]);
-                        }
+                    // Create a readlist combining internal and external content
+                    // If we have too few internal items, create a mostly external-based readlist
+                    $readlistTitle = 'Readlist: ' . ucfirst($description);
+                    $readlistDescription = 'A collection of resources about ' . $description;
+                    
+                    // Add additional description text based on content sources
+                    if (count($internalContent) < 2 && !empty($webItems)) {
+                        $readlistDescription .= ' curated primarily from the web.';
+                    } elseif (!empty($webItems)) {
+                        $readlistDescription .= ' curated from platform content and supplemented with web resources.';
+                    } else {
+                        $readlistDescription .= ' curated from platform content.';
                     }
+                    
+                    // Combine internal and external content
+                    $allItems = [];
+                    
+                    // Add internal content first (if any)
+                    foreach ($internalContent as $item) {
+                        $allItems[] = [
+                            'id' => $item['id'],
+                            'type' => $item['type'],
+                            'notes' => 'Internal content: ' . ($item['title'] ?? 'Untitled')
+                        ];
+                    }
+                    
+                    // Add external content
+                    foreach ($webItems as $item) {
+                        $allItems[] = $item;
+                    }
+                    
+                    // Create the readlist
+                    $readlistData = [
+                        'title' => $readlistTitle,
+                        'description' => $readlistDescription,
+                        'items' => $allItems
+                    ];
+                    
+                    $readlist = $this->createReadlistInDatabase($user, $readlistData);
+                    
+                    if ($readlist) {
+                        // Create appropriate response based on content sources
+                        if (count($internalContent) < 2) {
+                            $response = "I found limited internal content about " . $description . ", so I've created a readlist with " . 
+                                      count($internalContent) . " internal resources and " . count($webItems) . 
+                                      " additional resources from the web.";
+                        } else {
+                            $response = "I've created a readlist about " . $description . " with " . 
+                                      count($internalContent) . " internal resources and " . count($webItems) . 
+                                      " supplementary resources from the web.";
+                        }
+                        
+                        $this->storeConversationInDatabase($user, $conversationId, $question, $response);
+                        
+                        return response()->json([
+                            'success' => true,
+                            'answer' => $response,
+                            'conversation_id' => $conversationId,
+                            'readlist' => $readlist->load('items')
+                        ]);
+                    }
+                }
                 }
             }
             
@@ -403,17 +441,39 @@ class CogniController extends Controller
                         ];
                     }
                     
+                    // Create a combined readlist with priority on internal content
+                    $readlistTitle = 'Readlist: ' . ucfirst($description);
+                    $readlistDescription = 'A collection of resources about ' . $description . ' combining platform content with web resources.';
+                    
+                    // Combine all content
+                    $allItems = [];
+                    
+                    // Add internal content first
+                    foreach ($internalContent as $item) {
+                        $allItems[] = [
+                            'id' => $item['id'],
+                            'type' => $item['type'],
+                            'notes' => 'Internal content: ' . ($item['title'] ?? 'Untitled')
+                        ];
+                    }
+                    
+                    // Add external content
+                    foreach ($webItems as $item) {
+                        $allItems[] = $item;
+                    }
+                    
                     $readlistData = [
-                        'title' => 'Readlist: ' . ucfirst($description),
-                        'description' => 'A collection of resources about ' . $description . ' curated from the web.',
-                        'items' => $webItems
+                        'title' => $readlistTitle,
+                        'description' => $readlistDescription,
+                        'items' => $allItems
                     ];
                     
                     $readlist = $this->createReadlistInDatabase($user, $readlistData);
                     
                     if ($readlist) {
-                        $response = "I couldn't create a readlist with our internal content about " . $description . 
-                                    ", so I've created one with " . count($webItems) . " resources from the web instead.";
+                        $response = "I've created a readlist about " . $description . " with " . 
+                                    count($internalContent) . " internal resources and " . count($webItems) . 
+                                    " additional resources from the web.";
                         
                         $this->storeConversationInDatabase($user, $conversationId, $question, $response);
                         
@@ -428,7 +488,7 @@ class CogniController extends Controller
             }
             
             // If all else fails, return a helpful error message with diagnostics
-            $errorMsg = "I tried to create a readlist about " . $description . " but couldn't find enough relevant content. ";
+            $errorMsg = "I tried to create a readlist about \"" . $description . "\" but ";
             
             // Check if Exa is properly configured and test it
             $exaService = app(\App\Services\ExaSearchService::class);
@@ -447,33 +507,48 @@ class CogniController extends Controller
             \Log::warning("Readlist creation failed - Exa diagnostics", $diagnostics);
             
             // Direct error message based on actual issue
-            if (!$exaIsConfigured) {
-                $errorMsg .= "It looks like our web search capability isn't working properly at the moment. The administrator needs to set up the Exa API key. ";
+            if (count($internalContent) < 2) {
+                $errorMsg .= "I couldn't find enough relevant content in our platform. ";
+                
+                if (!$exaIsConfigured) {
+                    $errorMsg .= "Additionally, our web search capability isn't available at the moment. ";
+                } else {
+                    // Test if web search is working
+                    $testSearchResult = $exaService->search("test query", 1, []);
+                    $diagnostics['test_search'] = [
+                        'success' => $testSearchResult['success'] ?? false,
+                        'message' => $testSearchResult['message'] ?? 'No message',
+                        'result_count' => count($testSearchResult['results'] ?? []),
+                        'details' => $testSearchResult['details'] ?? null,
+                        'error_diagnostic' => $testSearchResult['diagnostic'] ?? null
+                    ];
+                    
+                    // Try another format
+                    $testSearchResult2 = $exaService->search("educational resources", 1, [], false);
+                    $diagnostics['alternate_test_search'] = [
+                        'success' => $testSearchResult2['success'] ?? false,
+                        'message' => $testSearchResult2['message'] ?? 'No message',
+                        'query' => "educational resources",
+                        'include_domains' => false,
+                        'safe_search' => false
+                    ];
+                    
+                    if ($testSearchResult['success'] && !empty($testSearchResult['results'])) {
+                        $errorMsg .= "I tried searching the web, but couldn't find suitable content about this topic. ";
+                    } else {
+                        $errorMsg .= "I tried to search the web, but encountered connectivity issues. ";
+                    }
+                }
             } else {
-                // Since Exa is configured but not working, let's test the API with a simple query
-                $testSearchResult = $exaService->search("test query", 1, []);
-                $diagnostics['test_search'] = [
-                    'success' => $testSearchResult['success'] ?? false,
-                    'message' => $testSearchResult['message'] ?? 'No message',
-                    'result_count' => count($testSearchResult['results'] ?? []),
-                    'details' => $testSearchResult['details'] ?? null,
-                    'error_diagnostic' => $testSearchResult['diagnostic'] ?? null
-                ];
+                $errorMsg .= "I had trouble creating a coherent readlist with the available content. ";
                 
-                // Try a different query format to see if that works
-                $testSearchResult2 = $exaService->search("educational resources", 1, [], false);
-                $diagnostics['alternate_test_search'] = [
-                    'success' => $testSearchResult2['success'] ?? false,
-                    'message' => $testSearchResult2['message'] ?? 'No message',
-                    'query' => "educational resources",
-                    'include_domains' => false,
-                    'safe_search' => false
-                ];
-                
-                $errorMsg .= "I tried to search the web for content but encountered an error. This might be due to temporary API limits or connectivity issues. ";
+                if ($exaIsConfigured) {
+                    $errorMsg .= "I also tried supplementing with web content but couldn't find relevant additional resources. ";
+                }
             }
             
-            $errorMsg .= "Would you like me to try a different topic?";
+            // Suggest alternatives
+            $errorMsg .= "Would you like me to try a different topic? Popular topics include technology, science, history, or business.";
             
             $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
             
