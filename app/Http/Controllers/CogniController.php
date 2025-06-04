@@ -286,15 +286,60 @@ class CogniController extends Controller
                     'found_content_count' => count($internalContent)
                 ]);
                 
-                // Get web content using Exa
+                // Get web content using Exa with enhanced search
                 $exaService = app(\App\Services\ExaSearchService::class);
                 // Log that we're attempting a web search
                 \Log::info("Attempting web search for readlist content", [
-                    'query' => $description . " educational resources",
+                    'query' => $description,
                     'exa_configured' => $exaService->isConfigured()
                 ]);
-                // Use a more direct query without adding "educational resources"
-                $webSearchResults = $exaService->search($description, 10, [], false);
+                
+                // Determine if this is an educational, technical, or general query
+                $queryType = $this->analyzeReadlistQueryType($description);
+                
+                // Educational websites to prioritize
+                $includeDomains = [
+                    'edu', // Educational institutions
+                    'gov', // Government resources
+                    'org', // Non-profit organizations
+                    'coursera.org',
+                    'khanacademy.org',
+                    'edx.org',
+                    'udemy.com',
+                    'medium.com',
+                    'dev.to',
+                    'openculture.com'
+                ];
+                
+                // Common spam or inappropriate domains to exclude
+                $excludeDomains = [
+                    'pinterest.com', // Often contains low-quality content
+                    'quora.com',     // Can contain unverified information
+                    'reddit.com',    // May contain inappropriate content
+                    'twitter.com',   // May contain unverified information
+                    'facebook.com',  // May contain unverified information
+                    'instagram.com', // May contain inappropriate content
+                ];
+                
+                // Define content options for better results
+                $contentsOptions = [
+                    'highlights' => true, // Get relevant snippets
+                    'text' => true,       // Get full text
+                    'summary' => true     // Get AI-generated summaries when available
+                ];
+                
+                // Use the enhanced search with appropriate parameters
+                $webSearchResults = $exaService->search(
+                    $description . " " . $queryType['additional_terms'],
+                    10, 
+                    $includeDomains, 
+                    true, 
+                    $excludeDomains,
+                    $queryType['search_type'],
+                    $queryType['category'],
+                    [], // No date range filter
+                    $contentsOptions
+                );
                 
                 // Log search results for debugging
                 \Log::info("Web search results", [
@@ -416,11 +461,45 @@ class CogniController extends Controller
                 $exaService = app(\App\Services\ExaSearchService::class);
                 // Log that we're attempting a web search as fallback
                 \Log::info("Attempting web search as fallback for readlist generation", [
-                    'query' => $description . " educational resources",
+                    'query' => $description,
                     'exa_configured' => $exaService->isConfigured()
                 ]);
-                // Use a more direct query without adding "educational resources"
-                $webSearchResults = $exaService->search($description, 10, [], false);
+                
+                // Determine if this is an educational, technical, or general query
+                $queryType = $this->analyzeReadlistQueryType($description);
+                
+                // For fallback, try a broader search with fewer restrictions
+                $includeDomains = []; // No domain restrictions for fallback
+                
+                // Common spam or inappropriate domains to exclude
+                $excludeDomains = [
+                    'pinterest.com',
+                    'quora.com',
+                    'reddit.com',
+                    'twitter.com',
+                    'facebook.com',
+                    'instagram.com',
+                ];
+                
+                // Define content options for better results
+                $contentsOptions = [
+                    'highlights' => true,
+                    'text' => true,
+                    'summary' => true
+                ];
+                
+                // Use a more generic search as fallback
+                $webSearchResults = $exaService->search(
+                    $description . " " . $queryType['additional_terms'],
+                    10, 
+                    $includeDomains, 
+                    true, 
+                    $excludeDomains,
+                    'keyword', // Use keyword search for broader results
+                    '',        // No category filter for fallback
+                    [],        // No date restrictions
+                    $contentsOptions
+                );
                 
                 // Log search results for debugging
                 \Log::info("Web search fallback results", [
@@ -2586,5 +2665,71 @@ class CogniController extends Controller
             'success' => false,
             'message' => $result['message'] ?? 'Failed to retrieve daily fact'
         ], $result['code'] ?? 500);
+    }
+    
+    /**
+     * Analyze a readlist query to determine the best search approach
+     *
+     * @param string $description The readlist description
+     * @return array Parameters for search
+     */
+    private function analyzeReadlistQueryType($description)
+    {
+        $result = [
+            'search_type' => 'neural',           // Default to neural for better semantic understanding
+            'category' => 'educational',         // Default to educational content
+            'additional_terms' => 'learning resources guides tutorials educational' // Default additional terms
+        ];
+        
+        // Check for educational/academic content
+        if (preg_match('/learn|study|course|education|school|university|college|academic|lecture|tutorial|lesson|class/i', $description)) {
+            $result['search_type'] = 'neural';
+            $result['category'] = 'educational';
+            $result['additional_terms'] = 'educational resources tutorials guides courses learning materials';
+        }
+        
+        // Check for technical/programming content
+        else if (preg_match('/code|program|develop|software|app|tech|api|library|framework|web|mobile|computer|language|script/i', $description)) {
+            $result['search_type'] = 'neural';
+            $result['category'] = 'technical';
+            $result['additional_terms'] = 'programming resources documentation tutorials technical guides examples';
+        }
+        
+        // Check for science/research content
+        else if (preg_match('/science|research|study|experiment|lab|data|analysis|physics|chemistry|biology|math|statistics|journal|paper/i', $description)) {
+            $result['search_type'] = 'neural';
+            $result['category'] = 'research';
+            $result['additional_terms'] = 'scientific papers research studies academic journals educational resources';
+        }
+        
+        // Check for business/professional content
+        else if (preg_match('/business|company|corporate|entrepreneur|marketing|finance|management|professional|career|industry|market/i', $description)) {
+            $result['search_type'] = 'neural';
+            $result['category'] = 'business';
+            $result['additional_terms'] = 'business resources professional guides case studies best practices';
+        }
+        
+        // Check for arts/humanities content
+        else if (preg_match('/art|music|literature|history|philosophy|culture|language|writing|creative|design|film|theater|humanities/i', $description)) {
+            $result['search_type'] = 'neural';
+            $result['category'] = 'arts';
+            $result['additional_terms'] = 'arts humanities educational resources guides creative works';
+        }
+        
+        // Check for news/current events
+        else if (preg_match('/news|current|recent|today|update|event|latest|development|trend/i', $description)) {
+            $result['search_type'] = 'keyword'; // Better for news
+            $result['category'] = 'news';
+            $result['additional_terms'] = 'news articles recent developments analysis reports';
+        }
+        
+        // Check for health/medical content
+        else if (preg_match('/health|medical|medicine|doctor|disease|condition|treatment|therapy|wellness|fitness|nutrition|diet/i', $description)) {
+            $result['search_type'] = 'neural';
+            $result['category'] = 'medical';
+            $result['additional_terms'] = 'health medical information educational resources reputable sources';
+        }
+        
+        return $result;
     }
 }
