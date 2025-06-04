@@ -205,7 +205,7 @@
                                     </div>
                                     <div class="ml-3 flex-1">
                                         <h3 class="text-lg font-medium text-neutral-900">{{ $course->title }}</h3>
-                                        <p class="text-sm text-neutral-500 mt-1">{{ Str::limit($course->description ?? 'No description available', 100) }}</p>
+                                        <p class="text-sm text-neutral-500 mt-1">{{ substr($course->description ?? 'No description available', 0, 100) }}{{ strlen($course->description ?? '') > 100 ? '...' : '' }}</p>
                                         
                                         <div class="flex justify-between items-center mt-4">
                                             <span class="text-xs text-neutral-500">Created: {{ $course->created_at->format('M d, Y') }}</span>
@@ -239,7 +239,7 @@
                                     </div>
                                     <div class="ml-3 flex-1">
                                         <h3 class="text-lg font-medium text-neutral-900">{{ $post->title ?? 'Untitled Post' }}</h3>
-                                        <p class="text-sm text-neutral-500 mt-1">{{ Str::limit($post->body ?? 'No content available', 100) }}</p>
+                                        <p class="text-sm text-neutral-500 mt-1">{{ substr($post->body ?? 'No content available', 0, 100) }}{{ strlen($post->body ?? '') > 100 ? '...' : '' }}</p>
                                         
                                         <div class="flex justify-between items-center mt-4">
                                             <span class="text-xs text-neutral-500">Created: {{ $post->created_at->format('M d, Y') }}</span>
