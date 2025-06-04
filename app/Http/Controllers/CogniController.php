@@ -40,12 +40,14 @@ class CogniController extends Controller
     {
         $request->validate([
             'question' => 'required|string|max:1000',
-            'conversation_id' => 'nullable|string'
+            'conversation_id' => 'nullable|string',
+            'use_web_search' => 'nullable|boolean'
         ]);
 
         $user = Auth::user();
         $question = $request->input('question');
         $conversationId = $request->input('conversation_id');
+        $useWebSearch = $request->input('use_web_search', false);
 
         if (empty($conversationId)) {
             // Generate a new conversation ID if none provided
@@ -58,6 +60,11 @@ class CogniController extends Controller
             return $this->handleReadlistCreationRequest($user, $question, $conversationId);
         }
 
+        // Check if this is a search request
+        $isSearchRequest = $useWebSearch || 
+                          preg_match('/search(\s+for|\s+the|\s+about)?\s+|find(\s+information|\s+about|\s+articles)?\s+|look\s+up|research/i', $question) ||
+                          preg_match('/what\'s\s+the\s+latest|what\s+is\s+happening|current\s+news|recent\s+developments/i', $question);
+
         // Get conversation history from session or initialize new one
         $conversationKey = 'cogni_conversation_' . $conversationId;
         $context = Session::get($conversationKey, []);
@@ -67,6 +74,11 @@ class CogniController extends Controller
             'role' => 'user',
             'content' => $question
         ];
+
+        // Use web search if requested or detected
+        if ($isSearchRequest) {
+            return $this->handleWebSearchRequest($user, $question, $context, $conversationId);
+        }
 
         // Ask the question with context
         $result = $this->cogniService->askQuestion($question, $context);
@@ -481,6 +493,168 @@ class CogniController extends Controller
             \DB::rollBack();
             \Log::error('Error creating readlist in database: ' . $e->getMessage());
             return null;
+        }
+    }
+    
+    /**
+     * Handle web search requests using Exa.ai
+     *
+     * @param \App\Models\User $user
+     * @param string $question
+     * @param array $context
+     * @param string $conversationId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    private function handleWebSearchRequest($user, $question, $context, $conversationId)
+    {
+        try {
+            // Get Exa search service
+            $exaService = app(\App\Services\ExaSearchService::class);
+            
+            // Content moderation check
+            $contentModerationService = app(\App\Services\ContentModerationService::class);
+            $moderationResult = $contentModerationService->analyzeText($question);
+            
+            if (!$moderationResult['isAllowed']) {
+                $errorMsg = "I'm sorry, but I can't search for that topic as it contains inappropriate content.";
+                
+                // Store in conversation history
+                $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
+                
+                // Add to context
+                $context[] = [
+                    'role' => 'assistant',
+                    'content' => $errorMsg
+                ];
+                
+                // Store updated context
+                $conversationKey = 'cogni_conversation_' . $conversationId;
+                Session::put($conversationKey, $context);
+                
+                return response()->json([
+                    'success' => false,
+                    'answer' => $errorMsg,
+                    'conversation_id' => $conversationId
+                ], 400);
+            }
+            
+            // Extract search query
+            $searchQuery = $question;
+            
+            // Perform web search
+            $searchResults = $exaService->search($searchQuery, 5, true, true);
+            
+            if (!$searchResults['success'] || empty($searchResults['results'])) {
+                $noResultsMsg = "I searched the web for information about your query, but couldn't find relevant results. Could you try rephrasing your question?";
+                
+                // Store in conversation
+                $this->storeConversationInDatabase($user, $conversationId, $question, $noResultsMsg);
+                
+                // Add to context
+                $context[] = [
+                    'role' => 'assistant',
+                    'content' => $noResultsMsg
+                ];
+                
+                // Store updated context
+                $conversationKey = 'cogni_conversation_' . $conversationId;
+                Session::put($conversationKey, $context);
+                
+                return response()->json([
+                    'success' => true,
+                    'answer' => $noResultsMsg,
+                    'conversation_id' => $conversationId
+                ]);
+            }
+            
+            // Format search results for the AI
+            $formattedResults = "I found the following information from searching the web:\n\n";
+            
+            foreach ($searchResults['results'] as $index => $result) {
+                $formattedResults .= "[" . ($index + 1) . "] " . $result['title'] . "\n";
+                $formattedResults .= "Source: " . $result['url'] . "\n";
+                $formattedResults .= "Content: " . substr($result['text'], 0, 500) . "...\n\n";
+            }
+            
+            // Create a prompt for the AI to synthesize the search results
+            $synthesisPrompt = "Based on the web search results above, please provide a comprehensive answer to the user's question: \"" . $question . "\". ";
+            $synthesisPrompt .= "Include relevant information from the search results, and cite your sources using the [1], [2], etc. notation from the results. ";
+            $synthesisPrompt .= "If the search results don't fully answer the question, acknowledge that and provide what information is available.";
+            
+            // Add search results to the system context for this question
+            $newContext = $context;
+            array_unshift($newContext, [
+                'role' => 'system',
+                'content' => $formattedResults . "\n" . $synthesisPrompt
+            ]);
+            
+            // Get AI synthesis of the search results
+            $result = $this->cogniService->askQuestion("", $newContext);
+            
+            if ($result['success'] && isset($result['answer'])) {
+                // Store in conversation
+                $this->storeConversationInDatabase($user, $conversationId, $question, $result['answer']);
+                
+                // Add to context, but without the search results to keep context size reasonable
+                $context[] = [
+                    'role' => 'assistant',
+                    'content' => $result['answer']
+                ];
+                
+                // Store updated context
+                $conversationKey = 'cogni_conversation_' . $conversationId;
+                Session::put($conversationKey, $context);
+                
+                return response()->json([
+                    'success' => true,
+                    'answer' => $result['answer'],
+                    'conversation_id' => $conversationId,
+                    'has_web_results' => true,
+                    'web_results' => $searchResults['results']
+                ]);
+            }
+            
+            // Fallback if synthesis fails
+            $fallbackMsg = "I found some information from the web, but couldn't synthesize it properly. Here are some relevant sources:\n\n";
+            
+            foreach ($searchResults['results'] as $index => $result) {
+                $fallbackMsg .= "- " . $result['title'] . ": " . $result['url'] . "\n";
+            }
+            
+            // Store in conversation
+            $this->storeConversationInDatabase($user, $conversationId, $question, $fallbackMsg);
+            
+            // Add to context
+            $context[] = [
+                'role' => 'assistant',
+                'content' => $fallbackMsg
+            ];
+            
+            // Store updated context
+            $conversationKey = 'cogni_conversation_' . $conversationId;
+            Session::put($conversationKey, $context);
+            
+            return response()->json([
+                'success' => true,
+                'answer' => $fallbackMsg,
+                'conversation_id' => $conversationId,
+                'has_web_results' => true,
+                'web_results' => $searchResults['results']
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error in handleWebSearchRequest: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            $errorMsg = "I encountered an error while searching the web. Could you try again later?";
+            $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
+            
+            return response()->json([
+                'success' => true,
+                'answer' => $errorMsg,
+                'conversation_id' => $conversationId
+            ]);
         }
     }
     
