@@ -434,14 +434,37 @@ class CogniController extends Controller
             );
             
             if ($result['success'] && isset($result['readlist'])) {
+                // Check if there are any items in the readlist
+                if (empty($result['readlist']['items'])) {
+                    $noItemsMsg = "I tried to create a readlist about \"{$description}\" but couldn't find any relevant content. Would you like me to try a different topic?";
+                    
+                    // Store in conversation history
+                    $this->storeConversationInDatabase($user, $conversationId, $question, $noItemsMsg);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'answer' => $noItemsMsg,
+                        'conversation_id' => $conversationId
+                    ]);
+                }
+                
                 // Create readlist in database
                 $readlist = $this->createReadlistInDatabase($user, $result['readlist']);
                 
                 if ($readlist) {
+                    // Get the actual item count
+                    $itemCount = $readlist->items()->count();
+                    
                     // Create a user-friendly response
-                    $response = "I've created a readlist titled \"" . $readlist->title . "\" for you. " .
-                               "It contains " . $readlist->items()->count() . " items related to " . $description . ".";
-                               
+                    $response = "I've created a readlist titled \"" . $readlist->title . "\" for you. ";
+                    
+                    if ($itemCount > 0) {
+                        $response .= "It contains " . $itemCount . " item" . ($itemCount != 1 ? "s" : "") . " related to " . $description . ".";
+                    } else {
+                        // This shouldn't happen with our updated createReadlistInDatabase, but just in case
+                        $response .= "However, I couldn't add any items to it. Would you like me to try a different topic?";
+                    }
+                    
                     // Store in conversation history
                     $this->storeConversationInDatabase($user, $conversationId, $question, $response);
                     
@@ -449,7 +472,20 @@ class CogniController extends Controller
                         'success' => true,
                         'answer' => $response,
                         'conversation_id' => $conversationId,
-                        'readlist' => $readlist->load('items.item')
+                        'readlist' => $readlist->load('items.item'),
+                        'item_count' => $itemCount
+                    ]);
+                } else {
+                    // Readlist creation failed
+                    $failureMsg = "I couldn't create a readlist about \"{$description}\" because I couldn't find enough relevant content. Would you like me to try a different topic?";
+                    
+                    // Store in conversation history
+                    $this->storeConversationInDatabase($user, $conversationId, $question, $failureMsg);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'answer' => $failureMsg,
+                        'conversation_id' => $conversationId
                     ]);
                 }
             }
@@ -512,13 +548,35 @@ class CogniController extends Controller
                     // Create a readlist with web content
                     $webItems = [];
                     foreach ($webSearchResults['results'] as $result) {
-                        $webItems[] = [
-                            'title' => $result['title'],
-                            'description' => substr($result['text'], 0, 200) . '...',
-                            'url' => $result['url'],
-                            'type' => 'external',
-                            'notes' => 'From web search: ' . $result['domain']
-                        ];
+                        // Only add items with valid URLs
+                        if (!empty($result['url'])) {
+                            // Use summary if available, otherwise use text with ellipsis
+                            $description = isset($result['summary']) 
+                                ? $result['summary'] 
+                                : (isset($result['text']) ? substr($result['text'], 0, 250) . '...' : '');
+                                
+                            $webItems[] = [
+                                'title' => $result['title'] ?? 'Educational Resource',
+                                'description' => $description,
+                                'url' => $result['url'],
+                                'type' => 'external',
+                                'notes' => 'From web search: ' . ($result['domain'] ?? parse_url($result['url'], PHP_URL_HOST))
+                            ];
+                        }
+                    }
+                    
+                    // Check if we have any valid web items
+                    if (empty($webItems)) {
+                        $noItemsMsg = "I tried to create a readlist about \"{$description}\" but couldn't find any relevant content, even after searching the web. Would you like me to try a different topic?";
+                        
+                        // Store in conversation history
+                        $this->storeConversationInDatabase($user, $conversationId, $question, $noItemsMsg);
+                        
+                        return response()->json([
+                            'success' => false,
+                            'answer' => $noItemsMsg,
+                            'conversation_id' => $conversationId
+                        ]);
                     }
                     
                     // Create a combined readlist with priority on internal content
@@ -551,9 +609,25 @@ class CogniController extends Controller
                     $readlist = $this->createReadlistInDatabase($user, $readlistData);
                     
                     if ($readlist) {
-                        $response = "I've created a readlist about " . $description . " with " . 
-                                    count($internalContent) . " internal resources and " . count($webItems) . 
-                                    " additional resources from the web.";
+                        // Get the actual item count
+                        $internalItemCount = $readlist->items()->whereNotNull('item_id')->count();
+                        $externalItemCount = $readlist->items()->whereNull('item_id')->whereNotNull('url')->count();
+                        $totalCount = $internalItemCount + $externalItemCount;
+                        
+                        $response = "I've created a readlist about " . $description . " with ";
+                        
+                        if ($internalItemCount > 0) {
+                            $response .= $internalItemCount . " internal resource" . ($internalItemCount != 1 ? "s" : "");
+                            if ($externalItemCount > 0) {
+                                $response .= " and ";
+                            }
+                        }
+                        
+                        if ($externalItemCount > 0) {
+                            $response .= $externalItemCount . " resource" . ($externalItemCount != 1 ? "s" : "") . " from the web";
+                        }
+                        
+                        $response .= ".";
                         
                         $this->storeConversationInDatabase($user, $conversationId, $question, $response);
                         
@@ -561,9 +635,35 @@ class CogniController extends Controller
                             'success' => true,
                             'answer' => $response,
                             'conversation_id' => $conversationId,
-                            'readlist' => $readlist->load('items')
+                            'readlist' => $readlist->load('items'),
+                            'item_count' => $totalCount
+                        ]);
+                    } else {
+                        // Readlist creation failed
+                        $failureMsg = "I tried to create a readlist about \"{$description}\" but encountered an issue. Would you like me to try a different topic?";
+                        
+                        // Store in conversation history
+                        $this->storeConversationInDatabase($user, $conversationId, $question, $failureMsg);
+                        
+                        return response()->json([
+                            'success' => false,
+                            'answer' => $failureMsg,
+                            'conversation_id' => $conversationId
                         ]);
                     }
+                } else {
+                    // No web results found
+                    $noResultsMsg = "I tried to create a readlist about \"{$description}\" but couldn't find any relevant content on the web. Would you like me to try a different topic?";
+                    
+                    // Store in conversation history
+                    $this->storeConversationInDatabase($user, $conversationId, $question, $noResultsMsg);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'answer' => $noResultsMsg,
+                        'conversation_id' => $conversationId
+                    ]);
+                }
                 }
             }
             
@@ -730,6 +830,65 @@ class CogniController extends Controller
     private function createReadlistInDatabase($user, $readlistData)
     {
         try {
+            // Check if there are any items to add to the readlist
+            if (empty($readlistData['items'])) {
+                \Log::warning('Attempted to create empty readlist', [
+                    'title' => $readlistData['title'] ?? 'Unknown title',
+                    'description' => $readlistData['description'] ?? 'No description',
+                    'user_id' => $user->id
+                ]);
+                return null; // Return null for empty readlists
+            }
+            
+            // Count valid items to make sure we have at least one
+            $validItemCount = 0;
+            $externalItems = [];
+            $internalItems = [];
+            
+            // Pre-check items to verify we have at least one valid item
+            foreach ($readlistData['items'] as $item) {
+                if (isset($item['type']) && $item['type'] === 'external') {
+                    // Check that external item has valid URL
+                    if (!empty($item['url'])) {
+                        $validItemCount++;
+                        $externalItems[] = $item;
+                    }
+                } else {
+                    // Check if internal item exists
+                    $itemId = $item['id'] ?? null;
+                    $itemExists = false;
+                    
+                    if ($itemId) {
+                        if (strpos($item['type'] ?? '', 'course') !== false) {
+                            $itemExists = \App\Models\Course::where('id', $itemId)->exists();
+                        } elseif (strpos($item['type'] ?? '', 'post') !== false) {
+                            $itemExists = \App\Models\Post::where('id', $itemId)->exists();
+                        } else {
+                            // Try both types
+                            $itemExists = \App\Models\Course::where('id', $itemId)->exists() || 
+                                         \App\Models\Post::where('id', $itemId)->exists();
+                        }
+                        
+                        if ($itemExists) {
+                            $validItemCount++;
+                            $internalItems[] = $item;
+                        }
+                    }
+                }
+            }
+            
+            // If no valid items were found, return null
+            if ($validItemCount === 0) {
+                \Log::warning('No valid items for readlist creation', [
+                    'title' => $readlistData['title'] ?? 'Unknown title',
+                    'description' => $readlistData['description'] ?? 'No description',
+                    'item_count' => count($readlistData['items']),
+                    'user_id' => $user->id
+                ]);
+                return null;
+            }
+            
+            // Create the readlist
             \DB::beginTransaction();
             
             $readlist = new \App\Models\Readlist([
@@ -743,76 +902,102 @@ class CogniController extends Controller
             
             // Add items to the readlist
             $order = 1;
-            foreach ($readlistData['items'] as $item) {
-                if (isset($item['type']) && $item['type'] === 'external') {
-                    // Handle external item
-                    $readlistItem = new \App\Models\ReadlistItem([
-                        'readlist_id' => $readlist->id,
-                        'title' => $item['title'] ?? 'Educational Resource',
-                        'description' => $item['description'] ?? '',
-                        'url' => $item['url'] ?? '',
-                        'type' => 'external',
-                        'order' => $order++,
-                        'notes' => $item['notes'] ?? null
-                    ]);
-                    
-                    $readlistItem->save();
+            $addedItems = 0;
+            
+            // Add all external items
+            foreach ($externalItems as $item) {
+                $readlistItem = new \App\Models\ReadlistItem([
+                    'readlist_id' => $readlist->id,
+                    'title' => $item['title'] ?? 'Educational Resource',
+                    'description' => $item['description'] ?? '',
+                    'url' => $item['url'] ?? '',
+                    'type' => 'external',
+                    'order' => $order++,
+                    'notes' => $item['notes'] ?? null
+                ]);
+                
+                $readlistItem->save();
+                $addedItems++;
+            }
+            
+            // Add all internal items
+            foreach ($internalItems as $item) {
+                $itemId = $item['id'];
+                $notes = $item['notes'] ?? null;
+                $itemType = null;
+                $itemModel = null;
+                
+                // Check if this is a course
+                if (strpos($item['type'] ?? '', 'course') !== false) {
+                    $course = \App\Models\Course::find($itemId);
+                    if ($course) {
+                        $itemType = \App\Models\Course::class;
+                        $itemModel = $course;
+                    }
+                } elseif (strpos($item['type'] ?? '', 'post') !== false) {
+                    $post = \App\Models\Post::find($itemId);
+                    if ($post) {
+                        $itemType = \App\Models\Post::class;
+                        $itemModel = $post;
+                    }
                 } else {
-                    // Handle internal item (course or post)
-                    $itemId = $item['id'];
-                    $notes = $item['notes'] ?? null;
-                    $itemType = null;
-                    $itemModel = null;
-                    
-                    // Check if internal item exists
-                    if (strpos($item['type'] ?? '', 'internal_course') !== false || strpos($item['type'] ?? '', 'course') !== false) {
-                        $course = \App\Models\Course::find($itemId);
-                        if ($course) {
-                            $itemType = \App\Models\Course::class;
-                            $itemModel = $course;
-                        }
-                    } elseif (strpos($item['type'] ?? '', 'internal_post') !== false || strpos($item['type'] ?? '', 'post') !== false) {
+                    // Try to determine type automatically
+                    $course = \App\Models\Course::find($itemId);
+                    if ($course) {
+                        $itemType = \App\Models\Course::class;
+                        $itemModel = $course;
+                    } else {
                         $post = \App\Models\Post::find($itemId);
                         if ($post) {
                             $itemType = \App\Models\Post::class;
                             $itemModel = $post;
                         }
-                    } else {
-                        // Try to determine type automatically
-                        $course = \App\Models\Course::find($itemId);
-                        if ($course) {
-                            $itemType = \App\Models\Course::class;
-                            $itemModel = $course;
-                        } else {
-                            $post = \App\Models\Post::find($itemId);
-                            if ($post) {
-                                $itemType = \App\Models\Post::class;
-                                $itemModel = $post;
-                            }
-                        }
                     }
+                }
+                
+                // If we found a valid internal item, add it to the readlist
+                if ($itemModel) {
+                    $readlistItem = new \App\Models\ReadlistItem([
+                        'readlist_id' => $readlist->id,
+                        'item_id' => $itemId,
+                        'item_type' => $itemType,
+                        'order' => $order++,
+                        'notes' => $notes
+                    ]);
                     
-                    // If we found a valid internal item, add it to the readlist
-                    if ($itemModel) {
-                        $readlistItem = new \App\Models\ReadlistItem([
-                            'readlist_id' => $readlist->id,
-                            'item_id' => $itemId,
-                            'item_type' => $itemType,
-                            'order' => $order++,
-                            'notes' => $notes
-                        ]);
-                        
-                        $readlistItem->save();
-                    }
+                    $readlistItem->save();
+                    $addedItems++;
                 }
             }
             
+            // If no items were added (all failed validation), roll back
+            if ($addedItems === 0) {
+                \DB::rollBack();
+                \Log::warning('Created readlist but no items could be added', [
+                    'title' => $readlistData['title'],
+                    'description' => $readlistData['description']
+                ]);
+                return null;
+            }
+            
             \DB::commit();
+            
+            // Log success
+            \Log::info('Successfully created readlist', [
+                'id' => $readlist->id,
+                'title' => $readlist->title,
+                'item_count' => $addedItems
+            ]);
+            
             return $readlist;
             
         } catch (\Exception $e) {
             \DB::rollBack();
-            \Log::error('Error creating readlist in database: ' . $e->getMessage());
+            \Log::error('Error creating readlist in database: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'title' => $readlistData['title'] ?? 'Unknown',
+                'item_count' => count($readlistData['items'] ?? [])
+            ]);
             return null;
         }
     }
