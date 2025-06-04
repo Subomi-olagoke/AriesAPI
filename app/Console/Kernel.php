@@ -35,6 +35,8 @@ class Kernel extends ConsoleKernel {
 		\App\Console\Commands\GenerateLibrariesFromPosts::class,
 		\App\Console\Commands\GenerateOpenLibraries::class,
 		\App\Console\Commands\CleanupExpiredLiveClasses::class,
+		\App\Console\Commands\EnsureAllUsersHaveCognitionReadlist::class,
+		\App\Console\Commands\CreateTestReadlist::class,
 	];
 
 	/**

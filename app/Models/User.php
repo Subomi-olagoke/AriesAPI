@@ -693,4 +693,12 @@ class User extends Authenticatable {
         
         return $this->avatar;
     }
+    
+    /**
+     * Get the readlists that belong to the user.
+     */
+    public function readlists()
+    {
+        return $this->hasMany(Readlist::class);
+    }
 }
