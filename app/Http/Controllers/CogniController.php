@@ -52,6 +52,12 @@ class CogniController extends Controller
             $conversationId = 'conv_' . uniqid() . '_' . time();
         }
 
+        // Check if this is a readlist creation request
+        if (preg_match('/create\s+a\s+readlist|make\s+a\s+readlist|create\s+readlist|build\s+a\s+readlist/i', $question)) {
+            // This appears to be a readlist creation request
+            return $this->handleReadlistCreationRequest($user, $question, $conversationId);
+        }
+
         // Get conversation history from session or initialize new one
         $conversationKey = 'cogni_conversation_' . $conversationId;
         $context = Session::get($conversationKey, []);
@@ -212,6 +218,272 @@ class CogniController extends Controller
         }
     }
 
+    /**
+     * Handle readlist creation request from chat interface
+     *
+     * @param \App\Models\User $user
+     * @param string $question
+     * @param string $conversationId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    private function handleReadlistCreationRequest($user, $question, $conversationId)
+    {
+        try {
+            // Extract the topic from the question
+            // Remove common phrases like "create a readlist about" to get just the topic
+            $description = preg_replace('/^(cogni,?\s*)?(please\s*)?(create|make|build)(\s+a|\s+me\s+a)?\s+(readlist|reading list)(\s+for\s+me)?(\s+about|\s+on)?\s*/i', '', $question);
+            $description = trim($description);
+            
+            if (empty($description)) {
+                $description = $question; // Use the full question if extraction failed
+            }
+            
+            // Default values
+            $itemCount = 8;
+            $includeExternal = true;
+            $externalCount = 3;
+            
+            // Content moderation check
+            $contentModerationService = app(\App\Services\ContentModerationService::class);
+            $moderationResult = $contentModerationService->analyzeText($description);
+            
+            if (!$moderationResult['isAllowed']) {
+                // Store this interaction in the conversation history
+                $this->storeConversationInDatabase(
+                    $user, 
+                    $conversationId, 
+                    $question, 
+                    "I'm sorry, but I can't create a readlist on this topic as it contains inappropriate content."
+                );
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Your request contains inappropriate content. Please modify and try again.',
+                    'conversation_id' => $conversationId
+                ], 400);
+            }
+            
+            // Search for relevant internal content
+            $internalContent = $this->findRelevantContent($description);
+            
+            // Generate readlist
+            $result = $this->cogniService->generateReadlistFromDescription(
+                $description, 
+                $internalContent, 
+                $itemCount, 
+                $externalCount
+            );
+            
+            if ($result['success'] && isset($result['readlist'])) {
+                // Create readlist in database
+                $readlist = $this->createReadlistInDatabase($user, $result['readlist']);
+                
+                if ($readlist) {
+                    // Create a user-friendly response
+                    $response = "I've created a readlist titled \"" . $readlist->title . "\" for you. " .
+                               "It contains " . $readlist->items()->count() . " items related to " . $description . ".";
+                               
+                    // Store in conversation history
+                    $this->storeConversationInDatabase($user, $conversationId, $question, $response);
+                    
+                    return response()->json([
+                        'success' => true,
+                        'answer' => $response,
+                        'conversation_id' => $conversationId,
+                        'readlist' => $readlist->load('items.item')
+                    ]);
+                }
+            }
+            
+            // If we get here, something went wrong with readlist generation
+            $errorMsg = "I tried to create a readlist about " . $description . " but couldn't find enough relevant content. " .
+                        "Would you like me to suggest some external resources instead?";
+                        
+            $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
+            
+            return response()->json([
+                'success' => true,
+                'answer' => $errorMsg,
+                'conversation_id' => $conversationId
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error in handleReadlistCreationRequest: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            $errorMsg = "I'm sorry, I encountered an error while trying to create your readlist. Please try again later.";
+            $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
+            
+            return response()->json([
+                'success' => true,
+                'answer' => $errorMsg,
+                'conversation_id' => $conversationId
+            ]);
+        }
+    }
+    
+    /**
+     * Find relevant content for readlist creation
+     * 
+     * @param string $description
+     * @return array
+     */
+    private function findRelevantContent($description)
+    {
+        $internalContent = [];
+        
+        // Extract keywords
+        $keywords = preg_split('/[\s,]+/', $description);
+        $keywords = array_filter($keywords, function($word) {
+            return strlen($word) > 3; // Only use words longer than 3 characters
+        });
+        
+        // If no good keywords, use the whole description
+        if (empty($keywords)) {
+            $keywords = [$description];
+        }
+        
+        // Search for relevant courses
+        $courseQuery = \App\Models\Course::query();
+        foreach ($keywords as $keyword) {
+            $courseQuery->orWhere('title', 'like', "%{$keyword}%")
+                ->orWhere('description', 'like', "%{$keyword}%");
+        }
+        
+        $courses = $courseQuery->limit(30)->get(['id', 'title', 'description', 'user_id', 'created_at']);
+        
+        foreach ($courses as $course) {
+            $internalContent[] = [
+                'id' => $course->id,
+                'type' => 'course',
+                'title' => $course->title,
+                'description' => $course->description,
+                'user_id' => $course->user_id,
+                'created_at' => $course->created_at
+            ];
+        }
+        
+        // Search for relevant posts
+        $postQuery = \App\Models\Post::query();
+        foreach ($keywords as $keyword) {
+            $postQuery->orWhere('title', 'like', "%{$keyword}%")
+                ->orWhere('body', 'like', "%{$keyword}%");
+        }
+        
+        $posts = $postQuery->limit(30)->get(['id', 'title', 'body', 'user_id', 'created_at']);
+        
+        foreach ($posts as $post) {
+            $internalContent[] = [
+                'id' => $post->id,
+                'type' => 'post',
+                'title' => $post->title ?? 'Untitled Post',
+                'description' => substr(strip_tags($post->body), 0, 200),
+                'user_id' => $post->user_id,
+                'created_at' => $post->created_at
+            ];
+        }
+        
+        return $internalContent;
+    }
+    
+    /**
+     * Create a readlist in the database
+     * 
+     * @param \App\Models\User $user
+     * @param array $readlistData
+     * @return \App\Models\Readlist|null
+     */
+    private function createReadlistInDatabase($user, $readlistData)
+    {
+        try {
+            \DB::beginTransaction();
+            
+            $readlist = new \App\Models\Readlist([
+                'user_id' => $user->id,
+                'title' => $readlistData['title'],
+                'description' => $readlistData['description'],
+                'is_public' => true,
+            ]);
+            
+            $readlist->save();
+            
+            // Add items to the readlist
+            $order = 1;
+            foreach ($readlistData['items'] as $item) {
+                if (isset($item['type']) && $item['type'] === 'external') {
+                    // Handle external item
+                    $readlistItem = new \App\Models\ReadlistItem([
+                        'readlist_id' => $readlist->id,
+                        'title' => $item['title'] ?? 'Educational Resource',
+                        'description' => $item['description'] ?? '',
+                        'url' => $item['url'] ?? '',
+                        'type' => 'external',
+                        'order' => $order++,
+                        'notes' => $item['notes'] ?? null
+                    ]);
+                    
+                    $readlistItem->save();
+                } else {
+                    // Handle internal item (course or post)
+                    $itemId = $item['id'];
+                    $notes = $item['notes'] ?? null;
+                    $itemType = null;
+                    $itemModel = null;
+                    
+                    // Check if internal item exists
+                    if (strpos($item['type'] ?? '', 'internal_course') !== false || strpos($item['type'] ?? '', 'course') !== false) {
+                        $course = \App\Models\Course::find($itemId);
+                        if ($course) {
+                            $itemType = \App\Models\Course::class;
+                            $itemModel = $course;
+                        }
+                    } elseif (strpos($item['type'] ?? '', 'internal_post') !== false || strpos($item['type'] ?? '', 'post') !== false) {
+                        $post = \App\Models\Post::find($itemId);
+                        if ($post) {
+                            $itemType = \App\Models\Post::class;
+                            $itemModel = $post;
+                        }
+                    } else {
+                        // Try to determine type automatically
+                        $course = \App\Models\Course::find($itemId);
+                        if ($course) {
+                            $itemType = \App\Models\Course::class;
+                            $itemModel = $course;
+                        } else {
+                            $post = \App\Models\Post::find($itemId);
+                            if ($post) {
+                                $itemType = \App\Models\Post::class;
+                                $itemModel = $post;
+                            }
+                        }
+                    }
+                    
+                    // If we found a valid internal item, add it to the readlist
+                    if ($itemModel) {
+                        $readlistItem = new \App\Models\ReadlistItem([
+                            'readlist_id' => $readlist->id,
+                            'item_id' => $itemId,
+                            'item_type' => $itemType,
+                            'order' => $order++,
+                            'notes' => $notes
+                        ]);
+                        
+                        $readlistItem->save();
+                    }
+                }
+            }
+            
+            \DB::commit();
+            return $readlist;
+            
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            \Log::error('Error creating readlist in database: ' . $e->getMessage());
+            return null;
+        }
+    }
+    
     /**
      * Get an explanation for a topic
      *
