@@ -12,11 +12,11 @@ class Readlist extends Model
 {
     use HasFactory;
 
-    // Enable auto-incrementing for consistency with your database
-    public $incrementing = true;
+    // Disable auto-incrementing for UUID primary keys
+    public $incrementing = false;
     
-    // Ensure key type is integer
-    protected $keyType = 'int';
+    // Set key type to string for UUID
+    protected $keyType = 'string';
     
     protected $fillable = [
         'user_id',
@@ -39,6 +39,10 @@ class Readlist extends Model
 
         // Automatically generate a unique share_key when creating a readlist
         static::creating(function ($model) {
+            if (!$model->id) {
+                $model->id = (string) \Illuminate\Support\Str::uuid();
+            }
+            
             if (!$model->share_key) {
                 $model->share_key = Str::random(10);
             }

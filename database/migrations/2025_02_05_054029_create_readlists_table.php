@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('readlists', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->uuid('user_id');
             $table->string('title');
             $table->text('description')->nullable();
