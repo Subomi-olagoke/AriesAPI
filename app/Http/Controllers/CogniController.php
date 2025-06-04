@@ -286,12 +286,12 @@ class CogniController extends Controller
                     'found_content_count' => count($internalContent)
                 ]);
                 
-                // Get web content using Exa with enhanced search
-                $exaService = app(\App\Services\ExaSearchService::class);
+                // Get web content using GPT search
+                $searchService = app(\App\Services\GPTSearchService::class);
                 // Log that we're attempting a web search
                 \Log::info("Attempting web search for readlist content", [
                     'query' => $description,
-                    'exa_configured' => $exaService->isConfigured()
+                    'gpt_configured' => $searchService->isConfigured()
                 ]);
                 
                 // Determine if this is an educational, technical, or general query
@@ -328,8 +328,8 @@ class CogniController extends Controller
                     'summary' => true     // Get AI-generated summaries when available
                 ];
                 
-                // Use the enhanced search with appropriate parameters
-                $webSearchResults = $exaService->search(
+                // Use GPT search
+                $webSearchResults = $searchService->search(
                     $description . " " . $queryType['additional_terms'],
                     10, 
                     $includeDomains, 
@@ -337,8 +337,7 @@ class CogniController extends Controller
                     $excludeDomains,
                     $queryType['search_type'],
                     $queryType['category'],
-                    [], // No date range filter
-                    $contentsOptions
+                    [] // No date range filter
                 );
                 
                 // Log search results for debugging
@@ -494,11 +493,11 @@ class CogniController extends Controller
             // Try one more time with web search if we haven't already used it
             if (count($internalContent) >= $minRequiredContent) {
                 // We had enough internal content but still failed, try with web search
-                $exaService = app(\App\Services\ExaSearchService::class);
+                $searchService = app(\App\Services\GPTSearchService::class);
                 // Log that we're attempting a web search as fallback
                 \Log::info("Attempting web search as fallback for readlist generation", [
                     'query' => $description,
-                    'exa_configured' => $exaService->isConfigured()
+                    'gpt_configured' => $searchService->isConfigured()
                 ]);
                 
                 // Determine if this is an educational, technical, or general query
@@ -525,16 +524,15 @@ class CogniController extends Controller
                 ];
                 
                 // Use a more generic search as fallback
-                $webSearchResults = $exaService->search(
+                $webSearchResults = $searchService->search(
                     $description . " " . $queryType['additional_terms'],
                     10, 
                     $includeDomains, 
                     true, 
                     $excludeDomains,
-                    'keyword', // Use keyword search for broader results
+                    'keyword', // Use keyword parameter for consistent interface
                     '',        // No category filter for fallback
-                    [],        // No date restrictions
-                    $contentsOptions
+                    []         // No date restrictions
                 );
                 
                 // Log search results for debugging
@@ -669,47 +667,45 @@ class CogniController extends Controller
             // If all else fails, return a helpful error message with diagnostics
             $errorMsg = "I tried to create a readlist about \"" . $description . "\" but ";
             
-            // Check if Exa is properly configured and test it
-            $exaService = app(\App\Services\ExaSearchService::class);
-            $exaIsConfigured = $exaService->isConfigured();
+            // Check if GPT search is properly configured
+            $searchService = app(\App\Services\GPTSearchService::class);
+            $searchIsConfigured = $searchService->isConfigured();
             
-            // Create diagnostic info about Exa configuration
+            // Create diagnostic info about search configuration
             $diagnostics = [
-                'exa_configured' => $exaIsConfigured,
-                'api_key_set' => !empty(config('services.exa.api_key')),
-                'api_key_length' => !empty(config('services.exa.api_key')) ? strlen(config('services.exa.api_key')) : 0,
-                'api_endpoint' => config('services.exa.endpoint', 'https://api.exa.ai'),
+                'gpt_search_configured' => $searchIsConfigured,
+                'api_key_set' => !empty(config('services.openai.api_key')),
+                'api_key_length' => !empty(config('services.openai.api_key')) ? strlen(config('services.openai.api_key')) : 0,
+                'api_endpoint' => config('services.openai.endpoint', 'https://api.openai.com/v1'),
+                'model' => config('services.openai.model', 'gpt-3.5-turbo'),
                 'internal_content_count' => count($internalContent)
             ];
             
             // Log diagnostics
-            \Log::warning("Readlist creation failed - Exa diagnostics", $diagnostics);
+            \Log::warning("Readlist creation failed - GPT search diagnostics", $diagnostics);
             
             // Direct error message based on actual issue
             if (count($internalContent) < 2) {
                 $errorMsg .= "I couldn't find enough relevant content in our platform. ";
                 
-                if (!$exaIsConfigured) {
+                if (!$searchIsConfigured) {
                     $errorMsg .= "Additionally, our web search capability isn't available at the moment. ";
                 } else {
                     // Test if web search is working
-                    $testSearchResult = $exaService->search("test query", 1, []);
+                    $testSearchResult = $searchService->search("test query", 1, []);
                     $diagnostics['test_search'] = [
                         'success' => $testSearchResult['success'] ?? false,
                         'message' => $testSearchResult['message'] ?? 'No message',
                         'result_count' => count($testSearchResult['results'] ?? []),
-                        'details' => $testSearchResult['details'] ?? null,
-                        'error_diagnostic' => $testSearchResult['diagnostic'] ?? null
+                        'details' => $testSearchResult['details'] ?? null
                     ];
                     
                     // Try another format
-                    $testSearchResult2 = $exaService->search("educational resources", 1, [], false);
+                    $testSearchResult2 = $searchService->search("educational resources", 1, []);
                     $diagnostics['alternate_test_search'] = [
                         'success' => $testSearchResult2['success'] ?? false,
                         'message' => $testSearchResult2['message'] ?? 'No message',
-                        'query' => "educational resources",
-                        'include_domains' => false,
-                        'safe_search' => false
+                        'query' => "educational resources"
                     ];
                     
                     if ($testSearchResult['success'] && !empty($testSearchResult['results'])) {
@@ -721,7 +717,7 @@ class CogniController extends Controller
             } else {
                 $errorMsg .= "I had trouble creating a coherent readlist with the available content. ";
                 
-                if ($exaIsConfigured) {
+                if ($searchIsConfigured) {
                     $errorMsg .= "I also tried supplementing with web content but couldn't find relevant additional resources. ";
                 }
             }
@@ -1013,8 +1009,8 @@ class CogniController extends Controller
     private function handleWebSearchRequest($user, $question, $context, $conversationId)
     {
         try {
-            // Get Exa search service
-            $exaService = app(\App\Services\ExaSearchService::class);
+            // Get GPT search service (replacing Exa)
+            $searchService = app(\App\Services\GPTSearchService::class);
             
             // Content moderation check
             $contentModerationService = app(\App\Services\ContentModerationService::class);
@@ -1071,8 +1067,8 @@ class CogniController extends Controller
                 ];
             }
             
-            // Perform web search with enhanced parameters
-            $searchResults = $exaService->search(
+            // Perform web search with GPT
+            $searchResults = $searchService->search(
                 $searchParams['query'], 
                 $searchParams['num_results'], 
                 $searchParams['include_domains'], 
@@ -1080,24 +1076,22 @@ class CogniController extends Controller
                 $excludeDomains,
                 $searchParams['search_type'],
                 $searchParams['category'],
-                $dateRange,
-                $contentsOptions
+                $dateRange
             );
             
             if (!$searchResults['success'] || empty($searchResults['results'])) {
                 // Retry with broader parameters if no results
                 if ($searchParams['search_type'] === 'neural') {
-                    // Try keyword search as fallback
-                    $searchResults = $exaService->search(
+                    // Try more general search as fallback
+                    $searchResults = $searchService->search(
                         $searchParams['query'], 
                         $searchParams['num_results'], 
                         [], // No domain restrictions
                         true, 
                         $excludeDomains,
-                        'keyword', // Switch to keyword search
+                        'keyword', // Use keyword parameter (GPT ignores this but keeps consistent interface)
                         '',        // No category filter
-                        [],        // No date restrictions
-                        $contentsOptions
+                        []         // No date restrictions
                     );
                 }
                 

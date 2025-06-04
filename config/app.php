@@ -177,7 +177,8 @@ return [
         App\Providers\AlexPointsServiceProvider::class,
         App\Providers\CognitionServiceProvider::class,
         App\Providers\ApiClientServiceProvider::class,
-        App\Providers\ExaServiceProvider::class,
+        App\Providers\GPTSearchServiceProvider::class,
+        // App\Providers\ExaServiceProvider::class, // Commented out as we're replacing with GPT
     ])->toArray(),
 
     /*
