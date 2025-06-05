@@ -238,6 +238,7 @@ class LiveClassController extends Controller
     /**
      * Join a live class.
      * Subscription is required.
+     * Users can join a live class at any time after the scheduled time.
      */
     public function join(LiveClass $liveClass)
     {
@@ -260,6 +261,14 @@ class LiveClassController extends Controller
                     'course_id' => $liveClass->course_id
                 ], 403);
             }
+        }
+
+        // Check if class has ended - can't join ended classes
+        if ($liveClass->status === 'ended') {
+            return response()->json([
+                'message' => 'This class has already ended and cannot be joined',
+                'ended_at' => $liveClass->ended_at
+            ], 400);
         }
 
         try {
@@ -292,7 +301,7 @@ class LiveClassController extends Controller
                 ]
             ]);
 
-            // Start class if it's the scheduled time and teacher is joining
+            // Start class if teacher is joining (regardless of scheduled time)
             if ($liveClass->status === 'scheduled' && $user->id === $liveClass->teacher_id) {
                 $liveClass->update(['status' => 'live']);
             }
