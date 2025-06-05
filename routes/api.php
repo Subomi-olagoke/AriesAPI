@@ -450,6 +450,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/library/{id}/refresh', [OpenLibraryController::class, 'refreshLibrary']); // Additional route
     Route::post('/libraries/{id}/content', [OpenLibraryController::class, 'addContent']);
     Route::post('/library/{id}/content', [OpenLibraryController::class, 'addContent']); // Additional route
+    Route::post('/libraries/{id}/urls', [OpenLibraryController::class, 'addUrl']);
+    Route::post('/library/{id}/urls', [OpenLibraryController::class, 'addUrl']); 
+    Route::post('/libraries/{id}/url', [OpenLibraryController::class, 'addUrl']);
+    Route::post('/library/{id}/url', [OpenLibraryController::class, 'addUrl']);
+    Route::delete('/libraries/{id}/urls', [OpenLibraryController::class, 'removeUrl']);
+    Route::delete('/library/{id}/urls', [OpenLibraryController::class, 'removeUrl']);
+    Route::delete('/libraries/{id}/url', [OpenLibraryController::class, 'removeUrl']);
+    Route::delete('/library/{id}/url', [OpenLibraryController::class, 'removeUrl']);
     Route::delete('/libraries/{id}/content', [OpenLibraryController::class, 'removeContent']);
     Route::delete('/library/{id}/content', [OpenLibraryController::class, 'removeContent']); // Additional route
     Route::post('/libraries/dynamic', [OpenLibraryController::class, 'createDynamicLibrary']);

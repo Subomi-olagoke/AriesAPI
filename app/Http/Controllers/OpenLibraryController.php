@@ -7,21 +7,25 @@ use App\Models\Course;
 use App\Models\Post;
 use App\Models\Topic;
 use App\Services\OpenLibraryService;
+use App\Services\UrlFetchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Validator;
 
 class OpenLibraryController extends Controller
 {
     protected $libraryService;
+    protected $urlFetchService;
     
     /**
      * Create a new controller instance.
      */
-    public function __construct(OpenLibraryService $libraryService)
+    public function __construct(OpenLibraryService $libraryService, UrlFetchService $urlFetchService)
     {
         $this->libraryService = $libraryService;
+        $this->urlFetchService = $urlFetchService;
     }
     
     /**
@@ -203,6 +207,27 @@ class OpenLibraryController extends Controller
                 }
             }
             
+            // Get URL items from the library if they exist
+            $urlItems = $library->url_items ?? [];
+            
+            // Add URL items to the formatted contents
+            foreach ($urlItems as $urlItem) {
+                $formattedContents[] = [
+                    'id' => $urlItem['id'] ?? uniqid('url_'),
+                    'title' => $urlItem['title'] ?? 'No title',
+                    'url' => $urlItem['url'] ?? '',
+                    'description' => $urlItem['summary'] ?? $urlItem['description'] ?? '',
+                    'type' => 'url',
+                    'relevance_score' => $urlItem['relevance_score'] ?? 0.5,
+                    'created_at' => $urlItem['created_at'] ?? null
+                ];
+            }
+            
+            // Sort all contents by relevance score
+            usort($formattedContents, function($a, $b) {
+                return $b['relevance_score'] <=> $a['relevance_score'];
+            });
+            
             return response()->json([
                 'library' => $library,
                 'contents' => $formattedContents
@@ -252,9 +277,6 @@ class OpenLibraryController extends Controller
         }
     }
     
-    /**
-     * Remove the specified library.
-     */
     /**
      * Remove the specified library.
      */
@@ -371,6 +393,144 @@ class OpenLibraryController extends Controller
             Log::error('Adding content to library failed: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Adding content to library failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Add a URL to a library with automatic content fetching and summarization.
+     */
+    public function addUrl(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'url' => 'required|url|max:2048',
+            'notes' => 'nullable|string|max:1000',
+            'relevance_score' => 'nullable|numeric|min:0|max:1',
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        try {
+            // Find the library
+            $library = OpenLibrary::findOrFail($id);
+            
+            // Fetch and summarize the URL content
+            $url = $request->url;
+            $urlData = $this->urlFetchService->fetchAndSummarize($url);
+            
+            if (!$urlData['success']) {
+                throw new \Exception('Failed to fetch URL content: ' . ($urlData['error'] ?? 'Unknown error'));
+            }
+            
+            // Create the URL item with fetched data
+            $urlItem = [
+                'id' => uniqid('url_'),
+                'url' => $url,
+                'title' => $urlData['title'] ?? 'No title',
+                'summary' => $urlData['summary'] ?? 'No summary available',
+                'notes' => $request->notes,
+                'relevance_score' => $request->input('relevance_score', 0.8),
+                'created_at' => now()->toIso8601String(),
+                'updated_at' => now()->toIso8601String()
+            ];
+            
+            // Get current URL items or initialize empty array
+            $urlItems = $library->url_items ?? [];
+            
+            // Add new URL item
+            $urlItems[] = $urlItem;
+            
+            // Update the library with the new URL item
+            $library->url_items = $urlItems;
+            $library->save();
+            
+            return response()->json([
+                'message' => 'URL added to library successfully',
+                'url_item' => $urlItem,
+                'url_data' => [
+                    'title' => $urlData['title'] ?? 'No title',
+                    'summary' => $urlData['summary'] ?? 'No summary available',
+                    'url' => $url
+                ]
+            ], 201);
+            
+        } catch (\Exception $e) {
+            Log::error('Adding URL to library failed: ' . $e->getMessage(), [
+                'url' => $request->url,
+                'library_id' => $id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Failed to add URL to library: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Remove a URL from a library.
+     */
+    public function removeUrl(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'url_id' => 'required|string',
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        try {
+            // Find the library
+            $library = OpenLibrary::findOrFail($id);
+            
+            // Get current URL items
+            $urlItems = $library->url_items ?? [];
+            
+            // Find the URL item by ID
+            $urlItemIndex = null;
+            foreach ($urlItems as $index => $item) {
+                if (isset($item['id']) && $item['id'] === $request->url_id) {
+                    $urlItemIndex = $index;
+                    break;
+                }
+            }
+            
+            // If URL item not found
+            if ($urlItemIndex === null) {
+                return response()->json([
+                    'message' => 'URL not found in this library'
+                ], 404);
+            }
+            
+            // Remove the URL item
+            array_splice($urlItems, $urlItemIndex, 1);
+            
+            // Update the library
+            $library->url_items = $urlItems;
+            $library->save();
+            
+            return response()->json([
+                'message' => 'URL removed from library successfully'
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Removing URL from library failed: ' . $e->getMessage(), [
+                'url_id' => $request->url_id,
+                'library_id' => $id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Failed to remove URL from library: ' . $e->getMessage()
             ], 500);
         }
     }

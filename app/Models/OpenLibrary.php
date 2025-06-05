@@ -18,6 +18,7 @@ class OpenLibrary extends Model
         'course_id',
         'criteria',
         'keywords',
+        'url_items',
         'is_approved',
         'approval_status',
         'approval_date',
@@ -33,6 +34,7 @@ class OpenLibrary extends Model
     protected $casts = [
         'criteria' => 'array',
         'keywords' => 'array',
+        'url_items' => 'array',
         'is_approved' => 'boolean',
         'has_ai_cover' => 'boolean',
         'ai_generated' => 'boolean',
