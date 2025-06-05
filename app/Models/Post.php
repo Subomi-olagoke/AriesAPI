@@ -6,6 +6,7 @@ namespace App\Models;
 use App\Notifications\MentionNotification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class Post extends Model {
@@ -85,7 +86,12 @@ class Post extends Model {
      */
     public function likes()
     {
-        return $this->hasMany(Like::class, 'post_id');
+        // For backward compatibility, check if the likeable_type column exists
+        if (Schema::hasColumn('likes', 'likeable_type')) {
+            return $this->morphMany(Like::class, 'likeable');
+        } else {
+            return $this->hasMany(Like::class, 'post_id');
+        }
     }
 
     /**

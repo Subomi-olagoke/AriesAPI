@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Schema;
 
 class Course extends Model {
     
@@ -43,7 +43,12 @@ class Course extends Model {
     }
 
     public function likes() {
-        return $this->hasMany(Like::class, 'course_id');
+        // For backward compatibility, check if the likeable_type column exists
+        if (Schema::hasColumn('likes', 'likeable_type')) {
+            return $this->morphMany(Like::class, 'likeable');
+        } else {
+            return $this->hasMany(Like::class, 'course_id');
+        }
     }
     
     public function topic() {

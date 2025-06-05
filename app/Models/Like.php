@@ -8,12 +8,21 @@ use Illuminate\Database\Eloquent\Model;
 class Like extends Model
 {
     use HasFactory;
-    protected $fillable = ['user_id'];
+    protected $fillable = ['user_id', 'likeable_id', 'likeable_type'];
 
     public function user() {
-		return $this->belongsTo(User::class, 'user_id');
-	}
+        return $this->belongsTo(User::class, 'user_id');
+    }
 
+    /**
+     * Get the parent likeable model (post, comment, or course).
+     */
+    public function likeable()
+    {
+        return $this->morphTo();
+    }
+    
+    // Keep the old relationships for backwards compatibility
     public function post() {
         return $this->belongsTo(Post::class, 'post_id');
     }

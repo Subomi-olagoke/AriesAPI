@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class Comment extends Model {
     use HasFactory;
@@ -34,6 +35,12 @@ class Comment extends Model {
      */
     public function getLikeCountAttribute()
     {
-        return $this->likes()->count();
+        // Check if the database has been migrated to support polymorphic relationships
+        if (Schema::hasColumn('likes', 'likeable_type')) {
+            return $this->likes()->count();
+        } else {
+            // If not yet migrated, use the old relationship structure
+            return Like::where('comment_id', $this->id)->count();
+        }
     }
 }
