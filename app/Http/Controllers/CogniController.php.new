@@ -1,0 +1,31 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\CogniChat;
+use App\Models\CogniChatMessage;
+use App\Services\CogniService;
+use App\Services\PersonalizedFactsService;
+use App\Services\YouTubeService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
+
+class CogniController extends Controller
+{
+    protected $cogniService;
+    protected $youtubeService;
+    protected $factsService;
+
+    public function __construct(
+        CogniService $cogniService, 
+        YouTubeService $youtubeService,
+        PersonalizedFactsService $factsService
+    ) {
+        $this->cogniService = $cogniService;
+        $this->youtubeService = $youtubeService;
+        $this->factsService = $factsService;
+    }

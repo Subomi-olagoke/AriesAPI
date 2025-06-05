@@ -225,8 +225,7 @@ class CogniController extends Controller
                 'question' => $question,
                 'answer' => $answer
             ]);
-        }
-    catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Failed to store conversation: ' . $e->getMessage());
         }
     }
@@ -1382,8 +1381,7 @@ class CogniController extends Controller
                     
                     $readlistItem->save();
                     $addedItems++;
-                }
-    catch (\Exception $e) {
+                } catch (\Exception $e) {
                     \Log::error('Failed to add external item to readlist', [
                         'readlist_id' => $readlist->id,
                         'item' => $item,
@@ -1470,8 +1468,7 @@ class CogniController extends Controller
                             'type' => 'internal'
                         ];
                     }
-                }
-    catch (\Exception $e) {
+                } catch (\Exception $e) {
                     \Log::error('Failed to add internal item to readlist', [
                         'readlist_id' => $readlist->id,
                         'item' => $item,
@@ -1515,8 +1512,7 @@ class CogniController extends Controller
             
             return $readlist;
             
-        }
-    catch (\Exception $e) {
+        } catch (\Exception $e) {
             if (isset($readlist) && \DB::transactionLevel() > 0) {
                 \DB::rollBack();
             }
@@ -1779,8 +1775,7 @@ class CogniController extends Controller
                 'web_results' => $searchResults['results']
             ]);
             
-        }
-    catch (\Exception $e) {
+        } catch (\Exception $e) {
             \Log::error('Error in handleWebSearchRequest: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
             ]);
@@ -2068,8 +2063,7 @@ class CogniController extends Controller
                 'message' => $result ? 'Cognition readlist updated successfully' : 'No new recommendations found',
                 'readlist' => $readlist
             ]);
-        }
-    catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Failed to generate Cognition readlist: ' . $e->getMessage());
             
             return response()->json([
@@ -2225,8 +2219,7 @@ class CogniController extends Controller
                     'readlist' => $readlistWithItems
                 ]);
                 
-            }
-    catch (\Exception $e) {
+            } catch (\Exception $e) {
                 \DB::rollBack();
                 \Log::error('Error creating readlist: ' . $e->getMessage());
                 
@@ -2394,8 +2387,7 @@ class CogniController extends Controller
                                         $urlIsValid = false;
                                     }
                                 }
-                            }
-    catch (\Exception $e) {
+                            } catch (\Exception $e) {
                                 $urlIsValid = false;
                                 \Log::error('Error parsing URL in readlist item', [
                                     'url' => $item['url'],
@@ -2484,8 +2476,7 @@ class CogniController extends Controller
                     'readlist' => $readlistWithItems
                 ]);
                 
-            }
-    catch (\Exception $e) {
+            } catch (\Exception $e) {
                 \DB::rollBack();
                 \Log::error('Error creating description-based readlist: ' . $e->getMessage());
                 
@@ -2555,8 +2546,7 @@ class CogniController extends Controller
                 'success' => true,
                 'chats' => $chats
             ]);
-        }
-    catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Failed to get chats: ' . $e->getMessage());
             
             return response()->json([
@@ -2644,8 +2634,7 @@ class CogniController extends Controller
                     'messages' => $messages
                 ]
             ]);
-        }
-    catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Failed to get chat: ' . $e->getMessage());
             
             return response()->json([
@@ -2728,8 +2717,7 @@ class CogniController extends Controller
                     'created_at' => $chat->created_at
                 ]
             ]);
-        }
-    catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Failed to create chat: ' . $e->getMessage());
             
             return response()->json([
@@ -2938,8 +2926,7 @@ class CogniController extends Controller
                     'created_at' => $chat->created_at
                 ]
             ]);
-        }
-    catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Failed to create chat from shared content: ' . $e->getMessage());
             
             return response()->json([
@@ -3241,8 +3228,7 @@ class CogniController extends Controller
                 'message' => 'Message added successfully',
                 'data' => $responseData
             ]);
-        }
-    catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Failed to add message to chat: ' . $e->getMessage());
             
             return response()->json([
@@ -3294,8 +3280,7 @@ class CogniController extends Controller
                 'success' => true,
                 'message' => 'Chat deleted successfully'
             ]);
-        }
-    catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Failed to delete chat: ' . $e->getMessage());
             
             return response()->json([
