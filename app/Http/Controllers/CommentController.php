@@ -34,8 +34,12 @@ class CommentController extends Controller {
                 $notifiable->notify(new CommentNotification($comment, $user));
             }
 
+            // Reload the comment to get fresh data including relationships
+            $comment = Comment::find($comment->id);
+            
             return response()->json([
-                'message' => 'Comment successful',
+                'success' => true,
+                'message' => 'Comment added successfully',
                 'comment' => $comment,
             ], 201);
 
@@ -81,23 +85,29 @@ class CommentController extends Controller {
     }
 
     public function displayComments(Post $post) {
-        //$comments = Comment::where('post_id', '=', $post->id)->get();
         $comments = Comment::where('post_id', $post->id)
-        ->with('user')
-        ->get();
+            ->orderBy('created_at', 'desc')
+            ->get();
+            
         if($comments->isEmpty()) {
             return response()->json([
-                'message' => 'no comments for this post yet'
-            ], 404);
+                'success' => true,
+                'message' => 'No comments for this post yet',
+                'comments' => []
+            ], 200); // Return 200 with empty array instead of 404
         }
-        return response()->json(
-            $comments, 200
-        );
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Comments retrieved successfully',
+            'comments' => $comments
+        ], 200);
     }
     
     public function getCommentCount($postId) {
         $count = Comment::where('post_id', $postId)->count();
         return response()->json([
+            'success' => true,
             'post_id' => $postId,
             'comment_count' => $count
         ]);
