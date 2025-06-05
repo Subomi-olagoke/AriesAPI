@@ -238,6 +238,7 @@ class CogniController extends Controller
      * @param string $conversationId
      * @return \Illuminate\Http\JsonResponse
      */
+    // Fixed version of handleReadlistCreationRequest
     private function handleReadlistCreationRequest($user, $question, $conversationId)
     {
         // Create an array to collect debug information throughout the process
@@ -854,7 +855,6 @@ class CogniController extends Controller
                 'conversation_id' => $conversationId,
                 'debug_info' => $diagnostics
             ]);
-            
         } catch (\Exception $e) {
             // Enhanced error logging with more context
             $errorId = uniqid('readlist_error_');
@@ -3432,4 +3432,3 @@ class CogniController extends Controller
         
         return $result;
     }
-}

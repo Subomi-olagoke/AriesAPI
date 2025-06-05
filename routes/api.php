@@ -423,6 +423,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/readlist/{id}/items', [ReadlistController::class, 'addItem'])->where('id', '[0-9]+');
     Route::post('/readlist/{id}/item', [ReadlistController::class, 'addItem'])->where('id', '[0-9]+');
     Route::post('/readlists/{id}/item', [ReadlistController::class, 'addItem'])->where('id', '[0-9]+');
+    Route::post('/readlists/{id}/urls', [ReadlistController::class, 'addUrl'])->where('id', '[0-9]+');
+    Route::post('/readlist/{id}/urls', [ReadlistController::class, 'addUrl'])->where('id', '[0-9]+');
+    Route::post('/readlist/{id}/url', [ReadlistController::class, 'addUrl'])->where('id', '[0-9]+');
+    Route::post('/readlists/{id}/url', [ReadlistController::class, 'addUrl'])->where('id', '[0-9]+');
     Route::delete('/readlists/{id}/items/{itemId}', [ReadlistController::class, 'removeItem'])->where(['id' => '[0-9]+', 'itemId' => '[0-9]+']);
     Route::delete('/readlist/{id}/items/{itemId}', [ReadlistController::class, 'removeItem'])->where(['id' => '[0-9]+', 'itemId' => '[0-9]+']);
     Route::delete('/readlist/{id}/item/{itemId}', [ReadlistController::class, 'removeItem'])->where(['id' => '[0-9]+', 'itemId' => '[0-9]+']);

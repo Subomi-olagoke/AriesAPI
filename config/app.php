@@ -178,6 +178,7 @@ return [
         App\Providers\CognitionServiceProvider::class,
         App\Providers\ApiClientServiceProvider::class,
         App\Providers\GPTSearchServiceProvider::class,
+        App\Providers\UrlFetchServiceProvider::class,
         // App\Providers\ExaServiceProvider::class, // Commented out as we're replacing with GPT
     ])->toArray(),
 

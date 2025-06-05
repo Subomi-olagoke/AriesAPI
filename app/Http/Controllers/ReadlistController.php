@@ -7,25 +7,30 @@ use App\Models\ReadlistItem;
 use App\Models\Readlist;
 use App\Helpers\SimpleIdGenerator;
 use App\Services\FileUploadService;
+use App\Services\UrlFetchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 class ReadlistController extends Controller
 {
     protected $fileUploadService;
+    protected $urlFetchService;
 
     /**
      * Create a new controller instance.
      *
      * @param FileUploadService $fileUploadService
+     * @param UrlFetchService $urlFetchService
      * @return void
      */
-    public function __construct(FileUploadService $fileUploadService)
+    public function __construct(FileUploadService $fileUploadService, UrlFetchService $urlFetchService)
     {
         $this->fileUploadService = $fileUploadService;
+        $this->urlFetchService = $urlFetchService;
     }
 
     /**
@@ -768,6 +773,106 @@ class ReadlistController extends Controller
         }
     }
     
+    /**
+     * Add a URL to a readlist
+     * 
+     * @param Request $request
+     * @param int $id The readlist ID
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function addUrl(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'url' => 'required|url|max:2048',
+            'order' => 'nullable|integer|min:0',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        try {
+            // Find the readlist
+            $readlist = Readlist::find($id);
+            
+            if (!$readlist) {
+                return response()->json([
+                    'message' => 'Readlist not found'
+                ], 404);
+            }
+            
+            // Check if user owns the readlist
+            if (auth()->id() !== $readlist->user_id) {
+                return response()->json([
+                    'message' => 'You do not have permission to modify this readlist'
+                ], 403);
+            }
+            
+            DB::beginTransaction();
+            
+            // Fetch and summarize the URL content
+            $url = $request->url;
+            $urlData = $this->urlFetchService->fetchAndSummarize($url);
+            
+            if (!$urlData['success']) {
+                throw new \Exception('Failed to fetch URL content: ' . ($urlData['error'] ?? 'Unknown error'));
+            }
+            
+            // If no order specified, add to the end
+            $order = $request->order;
+            if ($order === null) {
+                $maxOrder = $readlist->items()->max('order') ?? -1;
+                $order = $maxOrder + 1;
+            } else {
+                // If order is specified, shift existing items
+                $readlist->items()
+                    ->where('order', '>=', $order)
+                    ->increment('order');
+            }
+            
+            // Create the readlist item with URL data
+            $readlistItem = new ReadlistItem([
+                'readlist_id' => $readlist->id,
+                'order' => $order,
+                'notes' => $request->notes,
+                'type' => 'url',
+                'url' => $url,
+                'title' => $urlData['title'] ?? 'No title',
+                'description' => $urlData['summary'] ?? 'No description'
+            ]);
+            
+            $readlistItem->save();
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'URL added to readlist',
+                'readlist_item' => $readlistItem,
+                'url_data' => [
+                    'title' => $urlData['title'] ?? 'No title',
+                    'summary' => $urlData['summary'] ?? 'No description',
+                    'url' => $url
+                ]
+            ], 201);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Adding URL to readlist failed: ' . $e->getMessage(), [
+                'url' => $request->url,
+                'readlist_id' => $id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Failed to add URL to readlist: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     /**
      * Helper function to truncate text safely without mb_strimwidth
      */

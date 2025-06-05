@@ -22,3 +22,5 @@ go.mod
 go.sum
 .env
 .env
+
+**/.claude/settings.local.json
