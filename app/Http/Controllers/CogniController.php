@@ -855,45 +855,50 @@ class CogniController extends Controller
                 'conversation_id' => $conversationId,
                 'debug_info' => $diagnostics
             ]);
-        } catch (\Exception $e) {
-            // Enhanced error logging with more context
-            $errorId = uniqid('readlist_error_');
-            $errorContext = [
-                'error_id' => $errorId,
-                'trace' => $e->getTraceAsString(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'message' => $e->getMessage(),
-                'description' => $description ?? 'No description extracted',
-                'query' => $question,
-                'user_id' => $user ? $user->id : 'not_authenticated',
-                'exception_type' => get_class($e)
-            ];
-            
-            // Log with all available diagnostic information
-            if (isset($debugLogs)) {
-                $errorContext['debug_logs'] = $debugLogs;
-            }
-            
-            \Log::error('Error in handleReadlistCreationRequest: ' . $e->getMessage(), $errorContext);
-            
-            $errorMsg = "I'm sorry, I encountered an error while trying to create your readlist. Please try again later.";
-            $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
-            
-            // Return more detailed information for debugging
-            return response()->json([
-                'success' => false,
-                'answer' => $errorMsg,
-                'conversation_id' => $conversationId,
-                'error_details' => [
-                    'error_id' => $errorId,
-                    'error_type' => get_class($e),
-                    'error_message' => $e->getMessage(),
-                    'error_location' => $e->getFile() . ':' . $e->getLine(),
-                    'description' => $description ?? 'No description extracted'
-                ]
-            ]);
+    }
+
+    /**
+     * Handle readlist generation error
+     */
+    private function handleReadlistError(\Exception $e, $description, $question, $user, $conversationId)
+    {
+        // Enhanced error logging with more context
+        $errorId = uniqid('readlist_error_');
+        $errorContext = [
+            'error_id' => $errorId,
+            'trace' => $e->getTraceAsString(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'message' => $e->getMessage(),
+            'description' => $description ?? 'No description extracted',
+            'query' => $question,
+            'user_id' => $user ? $user->id : 'not_authenticated',
+            'exception_type' => get_class($e)
+        ];
+        
+        // Log with all available diagnostic information
+        if (isset($debugLogs)) {
+            $errorContext['debug_logs'] = $debugLogs;
         }
+        
+        \Log::error('Error in handleReadlistCreationRequest: ' . $e->getMessage(), $errorContext);
+        
+        $errorMsg = "I'm sorry, I encountered an error while trying to create your readlist. Please try again later.";
+        $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
+        
+        // Return more detailed information for debugging
+        return response()->json([
+            'success' => false,
+            'answer' => $errorMsg,
+            'conversation_id' => $conversationId,
+            'error_details' => [
+                'error_id' => $errorId,
+                'error_type' => get_class($e),
+                'error_message' => $e->getMessage(),
+                'error_location' => $e->getFile() . ':' . $e->getLine(),
+                'description' => $description ?? 'No description extracted'
+            ]
+        ]);
     }
     
     /**
