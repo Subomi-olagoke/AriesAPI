@@ -288,9 +288,9 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Live Class Chat
     Route::prefix('live-class-chat')->group(function () {
-        Route::post('/{classId}/send', [LiveClassChatController::class, 'sendMessage']);
-        Route::get('/{classId}/history', [LiveClassChatController::class, 'getChatHistory']);
-        Route::delete('/message/{messageId}', [LiveClassChatController::class, 'deleteMessage']);
+        Route::post('/{classId}/send', [LiveClassController::class, 'sendChatMessage']);
+        Route::get('/{classId}/history', [LiveClassController::class, 'getChatHistory']);
+        Route::delete('/message/{messageId}', [LiveClassController::class, 'deleteChatMessage']);
     });
     
     // Subscription Check
