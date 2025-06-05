@@ -848,6 +848,7 @@ class LiveClassController extends Controller
     /**
      * Stop the live stream for a class.
      * Subscription is required and only moderators can stop the stream.
+     * When a stream is ended, the live class is deleted.
      */
     public function stopStream(LiveClass $liveClass)
     {
@@ -863,14 +864,43 @@ class LiveClassController extends Controller
             return response()->json(['message' => 'Only moderators can stop the stream'], 403);
         }
 
-        $liveClass->update([
-            'status' => 'ended',
-            'ended_at' => now()
-        ]);
+        try {
+            // First update the status to ended for the broadcast event
+            $liveClass->update([
+                'status' => 'ended',
+                'ended_at' => now()
+            ]);
 
-        broadcast(new StreamEnded($liveClass))->toOthers();
-
-        return response()->json(['message' => 'Stream ended']);
+            // Broadcast that the stream has ended
+            broadcast(new StreamEnded($liveClass))->toOthers();
+            
+            // Get the class ID for the response
+            $classId = $liveClass->id;
+            
+            // Delete participants first (foreign key constraints)
+            $liveClass->participants()->delete();
+            
+            // Delete any chat messages
+            if (method_exists($liveClass, 'chatMessages')) {
+                $liveClass->chatMessages()->delete();
+            }
+            
+            // Delete the live class
+            $liveClass->delete();
+            
+            return response()->json([
+                'message' => 'Stream ended and class deleted',
+                'class_id' => $classId
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to delete live class after ending stream: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Stream ended but failed to delete class: ' . $e->getMessage(),
+                'class_id' => $liveClass->id
+            ]);
+        }
     }
     
     /**
