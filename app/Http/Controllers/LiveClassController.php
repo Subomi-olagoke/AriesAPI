@@ -210,9 +210,21 @@ class LiveClassController extends Controller
                 'class_type' => $classType
             ]);
             
+            // Automatically add the creator as a participant with moderator role
+            $participant = $liveClass->participants()->create([
+                'user_id' => $user->id,
+                'role' => 'moderator',
+                'joined_at' => now(),
+                'preferences' => [
+                    'video' => $settings['video_on_join'] ?? false,
+                    'audio' => !($settings['mute_on_join'] ?? false),
+                    'screen_share' => false
+                ]
+            ]);
+            
             DB::commit();
 
-            $liveClass->load('teacher');
+            $liveClass->load('teacher', 'activeParticipants.user');
             
             // Add course and lesson details if applicable
             if ($liveClass->course_id) {
@@ -222,7 +234,8 @@ class LiveClassController extends Controller
             return response()->json([
                 'message' => 'Live class created successfully',
                 'live_class' => $liveClass,
-                'meeting_id' => $meetingId
+                'meeting_id' => $meetingId,
+                'participant' => $participant
             ], 201);
             
         } catch (\Exception $e) {
@@ -856,6 +869,53 @@ class LiveClassController extends Controller
         broadcast(new StreamEnded($liveClass))->toOthers();
 
         return response()->json(['message' => 'Stream ended']);
+    }
+    
+    /**
+     * Get stream information for a live class.
+     * Includes active participants, stream status, and settings.
+     */
+    public function getStreamInfo(LiveClass $liveClass)
+    {
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
+        }
+        
+        // Check if user is a participant
+        $participant = $liveClass->participants()
+            ->where('user_id', auth()->id())
+            ->first();
+            
+        if (!$participant) {
+            return response()->json([
+                'message' => 'You are not a participant in this class',
+                'join_required' => true
+            ], 403);
+        }
+        
+        // Get active participants
+        $activeParticipants = $liveClass->activeParticipants()
+            ->with('user:id,username,first_name,last_name,avatar,role')
+            ->get();
+            
+        // Get stream settings and status
+        $streamInfo = [
+            'class_id' => $liveClass->id,
+            'meeting_id' => $liveClass->meeting_id,
+            'status' => $liveClass->status,
+            'started_at' => $liveClass->status === 'live' ? $liveClass->updated_at : null,
+            'ended_at' => $liveClass->ended_at,
+            'settings' => $liveClass->settings,
+            'active_participants' => $activeParticipants,
+            'is_moderator' => $participant->role === 'moderator',
+            'current_user' => [
+                'participant_id' => $participant->id,
+                'role' => $participant->role,
+                'preferences' => $participant->preferences
+            ]
+        ];
+        
+        return response()->json($streamInfo);
     }
 
     /**

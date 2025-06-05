@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\LiveClass;
 use App\Models\LiveClassChat;
+use App\Models\User;
 use App\Events\LiveClassChatMessage;
-use App\Services\ContentModerationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -13,87 +13,111 @@ use Illuminate\Support\Facades\Log;
 class LiveClassChatController extends Controller
 {
     /**
-     * Send a chat message to a live class
-     *
-     * @param Request $request
-     * @param int $classId
-     * @return \Illuminate\Http\JsonResponse
+     * Send a message in a live class chat.
+     * User must be a participant in the class.
      */
     public function sendMessage(Request $request, $classId)
     {
-        $request->validate([
+        $validated = $request->validate([
             'message' => 'required|string|max:1000',
-            'type' => 'nullable|string|in:text,system,file',
-            'metadata' => 'nullable|array',
         ]);
-
-        // Find the live class
-        $liveClass = LiveClass::findOrFail($classId);
         
-        // Check if the user is a participant in this class
-        $participant = $liveClass->participants()
-            ->where('user_id', auth()->id())
+        $liveClass = LiveClass::findOrFail($classId);
+        $user = auth()->user();
+        
+        // Check if user is a participant
+        $isParticipant = $liveClass->participants()
+            ->where('user_id', $user->id)
             ->whereNull('left_at')
-            ->first();
+            ->exists();
             
-        if (!$participant) {
+        if (!$isParticipant) {
             return response()->json([
-                'message' => 'You are not a participant in this class'
+                'message' => 'You must be a participant to send messages in this class',
+                'join_required' => true
             ], 403);
         }
         
-        // Moderate content before processing
-        $contentModerationService = app(ContentModerationService::class);
-        $moderationResult = $contentModerationService->analyzeText($request->message);
-        
-        if (!$moderationResult['isAllowed']) {
+        // Check if chat is enabled in class settings
+        if (!($liveClass->settings['enable_chat'] ?? false)) {
             return response()->json([
-                'message' => $moderationResult['reason'] ?? 'Your message contains inappropriate content that is not allowed'
-            ], 422);
+                'message' => 'Chat is disabled for this class'
+            ], 403);
         }
         
         try {
-            // Create the chat message
             $chatMessage = LiveClassChat::create([
                 'live_class_id' => $liveClass->id,
-                'user_id' => auth()->id(),
-                'message' => $request->message,
-                'type' => $request->type ?? 'text',
-                'metadata' => $request->metadata ?? null,
+                'user_id' => $user->id,
+                'message' => $validated['message'],
+                'type' => 'text',
             ]);
             
-            // Broadcast the message to all participants
-            broadcast(new LiveClassChatMessage($chatMessage->load('user')))->toOthers();
+            $chatMessage->load('user:id,username,first_name,last_name,avatar,role');
+            
+            // Broadcast to other participants
+            broadcast(new LiveClassChatMessage($chatMessage))->toOthers();
             
             return response()->json([
-                'message' => 'Chat message sent successfully',
+                'message' => 'Message sent successfully',
                 'chat_message' => $chatMessage
             ]);
             
         } catch (\Exception $e) {
-            Log::error('Error sending chat message: ' . $e->getMessage());
+            Log::error('Failed to send live class chat message: ' . $e->getMessage());
             
             return response()->json([
-                'message' => 'Failed to send chat message'
+                'message' => 'Failed to send message: ' . $e->getMessage()
             ], 500);
         }
     }
     
     /**
-     * Get chat history for a live class
-     *
-     * @param Request $request
-     * @param int $classId
-     * @return \Illuminate\Http\JsonResponse
+     * Get chat history for a live class.
+     * User must be a participant in the class.
      */
-    public function getChatHistory(Request $request, $classId)
+    public function getChatHistory($classId)
     {
-        // Find the live class
         $liveClass = LiveClass::findOrFail($classId);
+        $user = auth()->user();
         
-        // Check if the user is a participant in this class
+        // Check if user is a participant
+        $isParticipant = $liveClass->participants()
+            ->where('user_id', $user->id)
+            ->exists();
+            
+        if (!$isParticipant) {
+            return response()->json([
+                'message' => 'You must be a participant to view chat history',
+                'join_required' => true
+            ], 403);
+        }
+        
+        // Get chat messages with user info
+        $chatMessages = $liveClass->chatMessages()
+            ->with('user:id,username,first_name,last_name,avatar,role')
+            ->orderBy('created_at')
+            ->get();
+            
+        return response()->json([
+            'chat_messages' => $chatMessages,
+            'chat_enabled' => $liveClass->settings['enable_chat'] ?? false
+        ]);
+    }
+    
+    /**
+     * Delete a chat message.
+     * Only the message author or a moderator can delete a message.
+     */
+    public function deleteMessage($messageId)
+    {
+        $chatMessage = LiveClassChat::findOrFail($messageId);
+        $liveClass = LiveClass::findOrFail($chatMessage->live_class_id);
+        $user = auth()->user();
+        
+        // Check if user is the message author or a moderator
         $participant = $liveClass->participants()
-            ->where('user_id', auth()->id())
+            ->where('user_id', $user->id)
             ->first();
             
         if (!$participant) {
@@ -102,38 +126,12 @@ class LiveClassChatController extends Controller
             ], 403);
         }
         
-        // Get the chat history with pagination
-        $limit = $request->get('limit', 50);
-        $chatMessages = LiveClassChat::where('live_class_id', $liveClass->id)
-            ->with('user:id,username,first_name,last_name,avatar,role')
-            ->orderBy('created_at', 'desc')
-            ->paginate($limit);
-            
-        return response()->json([
-            'chat_messages' => $chatMessages
-        ]);
-    }
-    
-    /**
-     * Delete a chat message (only for moderators or message owner)
-     *
-     * @param Request $request
-     * @param int $messageId
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function deleteMessage(Request $request, $messageId)
-    {
-        $chatMessage = LiveClassChat::findOrFail($messageId);
+        $isAuthor = $chatMessage->user_id === $user->id;
+        $isModerator = $participant->role === 'moderator';
         
-        // Check if the user is a moderator or the message owner
-        $liveClass = $chatMessage->liveClass;
-        $participant = $liveClass->participants()
-            ->where('user_id', auth()->id())
-            ->first();
-            
-        if (!$participant || ($participant->role !== 'moderator' && $chatMessage->user_id !== auth()->id())) {
+        if (!$isAuthor && !$isModerator) {
             return response()->json([
-                'message' => 'You do not have permission to delete this message'
+                'message' => 'You can only delete your own messages'
             ], 403);
         }
         
@@ -141,14 +139,14 @@ class LiveClassChatController extends Controller
             $chatMessage->delete();
             
             return response()->json([
-                'message' => 'Chat message deleted successfully'
+                'message' => 'Message deleted successfully'
             ]);
             
         } catch (\Exception $e) {
-            Log::error('Error deleting chat message: ' . $e->getMessage());
+            Log::error('Failed to delete live class chat message: ' . $e->getMessage());
             
             return response()->json([
-                'message' => 'Failed to delete chat message'
+                'message' => 'Failed to delete message: ' . $e->getMessage()
             ], 500);
         }
     }
