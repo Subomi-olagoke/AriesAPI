@@ -177,7 +177,7 @@ class CogniController extends Controller
             // Your implementation logic here
             
             // For example:
-            $errorMsg = "I'm currently unable to create a readlist about \"{$description}\". This feature is being fixed.";
+            $errorMsg = "I'm currently unable to create a readlist about \"{$description}\". The system is low on api credit";
             
             $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
             
