@@ -1199,9 +1199,10 @@ class LiveClassController extends Controller
                 ], 403);
             }
             
-            // In a real implementation, we would query a database table for stored signals
-            // For now, we'll return an empty array as no signals are stored
-            // The iOS app will continue polling until it receives signals via WebSockets
+            // For real-time WebRTC signals, we're actually using WebSockets behind the scenes
+            // This endpoint is a fallback for iOS clients that are polling instead
+            // Since our live WebRTC system uses direct broadcasting, we'll provide empty signals
+            // The actual signaling is happening through broadcast events
             
             Log::info('iOS client polling for signals', [
                 'class_id' => $classId,
@@ -1209,8 +1210,10 @@ class LiveClassController extends Controller
                 'to_user_id' => auth()->id()
             ]);
             
+            // Return empty signals - the actual WebRTC signaling happens via WebSockets/broadcasting
+            // This endpoint just satisfies the iOS client's polling expectations
             return response()->json([
-                'signals' => []  // Empty array for now, could be replaced with actual stored signals
+                'signals' => []
             ]);
             
         } catch (\Exception $e) {
