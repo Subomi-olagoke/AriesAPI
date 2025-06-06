@@ -36,11 +36,32 @@ class PostAnalysisController extends Controller
             $content = $post->title . "\n\n" . $post->body;
             $postContext = $content; // Save for image analysis
             
-            // Prepare media analysis
+            // STEP 1: First, identify the key topics in the post
+            $topicsPrompt = "Analyze this post and identify the 3-5 main educational topics or concepts it covers. " .
+                            "Be specific, academic, and educational in your identification. " .
+                            "Return only a comma-separated list of key educational topics with no explanations.";
+            
+            $topicsResult = $this->cogniService->askQuestion($topicsPrompt . "\n\nHere's the content:\n" . $content);
+            
+            $topics = "";
+            if ($topicsResult['success']) {
+                $topics = $topicsResult['answer'];
+                Log::info('Identified post topics', ['topics' => $topics]);
+            }
+            
+            // STEP 2: Find educational resources related to the post topics
+            $relatedResources = [];
+            if (!empty($topics) && $this->exaSearchService->isConfigured()) {
+                $searchResult = $this->exaSearchService->findRelatedContent($topics, 5);
+                if ($searchResult['success'] && !empty($searchResult['results'])) {
+                    $relatedResources = $searchResult['results'];
+                }
+            }
+            
+            // STEP 3: Process each media item
             $mediaAnalyses = [];
             $hasMediaToAnalyze = $post->media && $post->media->count() > 0;
             
-            // Process each media item
             if ($hasMediaToAnalyze) {
                 $content .= "\n\nThis post includes the following media:\n";
                 
@@ -60,14 +81,19 @@ class PostAnalysisController extends Controller
                         'analysis' => null
                     ];
                     
-                    // Add media info to context regardless of analysis
+                    // Add media info to context
                     if (strpos($mediaType, 'image') !== false || strpos($mediaMimeType, 'image/') !== false) {
                         $content .= "- Image: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
                         
-                        // Analyze images directly for all users
+                        // Analyze images with educational focus
                         try {
-                            $prompt = "Analyze this image in the context of the post. Describe what's shown, how it relates to the post content, and any educational value it provides.";
+                            $prompt = "Analyze this image in the context of an educational post. " . 
+                                      "First, describe what's shown in the image clearly. " .
+                                      "Then, explain its educational significance and how it relates to the post topic. " .
+                                      "If the image contains any diagrams, charts, or educational elements, explain them in detail. " .
+                                      "Focus on making your analysis educational and informative.";
+                            
                             $imageResult = $this->cogniService->analyzeImage($mediaUrl, $prompt, $postContext);
                             
                             if ($imageResult['success']) {
@@ -75,15 +101,17 @@ class PostAnalysisController extends Controller
                             }
                         } catch (\Exception $e) {
                             Log::warning('Failed to analyze image: ' . $e->getMessage(), ['media_id' => $mediaId]);
-                            // Continue with other media even if one fails
                         }
                     } 
                     else if (strpos($mediaType, 'video') !== false || strpos($mediaMimeType, 'video/') !== false) {
                         $content .= "- Video: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
                         
-                        // For videos, use text-based analysis
-                        $prompt = "Based on the post context, what would you expect this video to show or explain? What educational value might it provide?";
+                        // Enhanced video analysis
+                        $prompt = "Based on the post topics ({$topics}), provide an educational analysis of what this video likely contains. " .
+                                 "What concepts might it explain? What educational value does it provide? " .
+                                 "How does it support learning about the post topics?";
+                        
                         $videoResult = $this->cogniService->askQuestion($prompt . "\n\nPost context:\n" . $postContext . "\n\nVideo file: " . $mediaName);
                         
                         if ($videoResult['success']) {
@@ -94,8 +122,11 @@ class PostAnalysisController extends Controller
                         $content .= "- Audio: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
                         
-                        // For audio files
-                        $prompt = "Based on the post context, what would you expect this audio file to contain? What educational value might it provide?";
+                        // Enhanced audio analysis
+                        $prompt = "Based on the post topics ({$topics}), provide an educational analysis of what this audio file likely contains. " .
+                                 "What concepts might it explain? What educational value does it provide? " .
+                                 "How does it support learning about the post topics?";
+                        
                         $audioResult = $this->cogniService->askQuestion($prompt . "\n\nPost context:\n" . $postContext . "\n\nAudio file: " . $mediaName);
                         
                         if ($audioResult['success']) {
@@ -107,7 +138,9 @@ class PostAnalysisController extends Controller
                         $content .= "- {$mediaType}: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
                         
-                        $prompt = "Based on the post context, what educational value might this file provide?";
+                        $prompt = "Based on the post topics ({$topics}), explain the educational value this file might provide. " .
+                                 "How does it enhance understanding of the post topics?";
+                        
                         $fileResult = $this->cogniService->askQuestion($prompt . "\n\nPost context:\n" . $postContext . "\n\nFile: " . $mediaName . " (Type: " . $mediaType . ")");
                         
                         if ($fileResult['success']) {
@@ -117,29 +150,52 @@ class PostAnalysisController extends Controller
                 }
             }
             
-            // Request overall post analysis from Cogni
-            $prompt = "Provide a brief, concise summary of this post in 2-3 sentences. " .
-                      "Make it conversational and easy to understand. " .
-                      "Keep your response very short and to the point.";
+            // STEP 4: Get educational insights and interesting facts
+            $insightsPrompt = "Based on this post about '{$topics}', provide educational insights and interesting facts. " .
+                             "Focus on making this truly educational and enlightening. Include: " .
+                             "1) A concise explanation of the main concepts (2-3 sentences) " .
+                             "2) 2-3 interesting facts or insights related to the topics " .
+                             "3) A brief educational takeaway that expands the reader's understanding " .
+                             "Keep your response educational, informative, and engaging.";
             
-            $result = $this->cogniService->askQuestion($prompt . "\n\nHere's the content:\n" . $content);
+            $insightsResult = $this->cogniService->askQuestion($insightsPrompt . "\n\nHere's the content:\n" . $content);
             
-            if (!$result['success']) {
+            if (!$insightsResult['success']) {
                 return response()->json([
-                    'message' => 'Analysis failed: ' . ($result['message'] ?? 'Unknown error')
+                    'message' => 'Analysis failed: ' . ($insightsResult['message'] ?? 'Unknown error')
                 ], 500);
             }
             
-            // Prepare response
+            // STEP 5: Get categorized learning resources if available
+            $categorizedResources = [];
+            if (!empty($topics) && $this->exaSearchService->isConfigured()) {
+                $categorizedResult = $this->exaSearchService->getCategorizedResources($topics);
+                if ($categorizedResult['success']) {
+                    $categorizedResources = $categorizedResult['categories'];
+                }
+            }
+            
+            // Prepare comprehensive educational response
             $response = [
                 'success' => true,
-                'analysis' => $result['answer'],
+                'analysis' => $insightsResult['answer'],
+                'topics' => $topics,
                 'has_media' => $hasMediaToAnalyze
             ];
             
-            // Add media analyses for all users
+            // Add media analyses
             if (!empty($mediaAnalyses)) {
-                $response['media_analyses'] = array_values($mediaAnalyses); // Convert to indexed array
+                $response['media_analyses'] = array_values($mediaAnalyses);
+            }
+            
+            // Add educational resources
+            if (!empty($relatedResources)) {
+                $response['related_resources'] = $relatedResources;
+            }
+            
+            // Add categorized learning resources
+            if (!empty($categorizedResources)) {
+                $response['learning_paths'] = $categorizedResources;
             }
             
             return response()->json($response);
