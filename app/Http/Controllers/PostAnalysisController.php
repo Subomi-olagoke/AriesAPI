@@ -150,52 +150,47 @@ class PostAnalysisController extends Controller
                 }
             }
             
-            // STEP 4: Get educational insights and interesting facts
-            $insightsPrompt = "Based on this post about '{$topics}', provide educational insights and interesting facts. " .
-                             "Focus on making this truly educational and enlightening. Include: " .
-                             "1) A concise explanation of the main concepts (2-3 sentences) " .
-                             "2) 2-3 interesting facts or insights related to the topics " .
-                             "3) A brief educational takeaway that expands the reader's understanding " .
-                             "Keep your response educational, informative, and engaging.";
+            // STEP 4: Create a concise educational summary that includes interesting facts
+            $summaryPrompt = "Based on this post about '{$topics}', provide a concise educational summary in a conversational tone. " .
+                             "In 3-5 sentences total, include: " .
+                             "1) A clear explanation of what the post is about " .
+                             "2) 1-2 interesting educational facts related to the topics " .
+                             "Make it engaging, informative, and educational without being verbose. " .
+                             "This should read like a helpful explanation from a knowledgeable friend.";
             
-            $insightsResult = $this->cogniService->askQuestion($insightsPrompt . "\n\nHere's the content:\n" . $content);
+            $summaryResult = $this->cogniService->askQuestion($summaryPrompt . "\n\nHere's the content:\n" . $content);
             
-            if (!$insightsResult['success']) {
+            if (!$summaryResult['success']) {
                 return response()->json([
-                    'message' => 'Analysis failed: ' . ($insightsResult['message'] ?? 'Unknown error')
+                    'message' => 'Analysis failed: ' . ($summaryResult['message'] ?? 'Unknown error')
                 ], 500);
             }
             
-            // STEP 5: Get categorized learning resources if available
-            $categorizedResources = [];
-            if (!empty($topics) && $this->exaSearchService->isConfigured()) {
-                $categorizedResult = $this->exaSearchService->getCategorizedResources($topics);
-                if ($categorizedResult['success']) {
-                    $categorizedResources = $categorizedResult['categories'];
-                }
-            }
-            
-            // Prepare comprehensive educational response
+            // Prepare a simplified educational response
             $response = [
                 'success' => true,
-                'analysis' => $insightsResult['answer'],
-                'topics' => $topics,
+                'analysis' => $summaryResult['answer'],
                 'has_media' => $hasMediaToAnalyze
             ];
             
-            // Add media analyses
+            // Add media analyses - but only include the ones that were successfully analyzed
             if (!empty($mediaAnalyses)) {
-                $response['media_analyses'] = array_values($mediaAnalyses);
+                $validMediaAnalyses = [];
+                foreach ($mediaAnalyses as $mediaId => $analysis) {
+                    if (!empty($analysis['analysis'])) {
+                        $validMediaAnalyses[] = $analysis;
+                    }
+                }
+                
+                if (!empty($validMediaAnalyses)) {
+                    $response['media_analyses'] = $validMediaAnalyses;
+                }
             }
             
-            // Add educational resources
+            // Add relevant educational resources only if we found good results
             if (!empty($relatedResources)) {
-                $response['related_resources'] = $relatedResources;
-            }
-            
-            // Add categorized learning resources
-            if (!empty($categorizedResources)) {
-                $response['learning_paths'] = $categorizedResources;
+                // Just take the top 2 most relevant resources to keep it simple
+                $response['related_resources'] = array_slice($relatedResources, 0, 2);
             }
             
             return response()->json($response);
