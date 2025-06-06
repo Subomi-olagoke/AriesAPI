@@ -378,12 +378,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // Bookmark routes
     Route::post('/bookmark/course/{courseId}', [BookmarkController::class, 'bookmarkCourse'])->where('courseId', '[0-9]+');
     Route::post('/bookmark/post/{postId}', [BookmarkController::class, 'bookmarkPost'])->where('postId', '[0-9]+');
+    Route::post('/bookmark/library/{libraryId}', [BookmarkController::class, 'bookmarkOpenLibrary'])->where('libraryId', '[0-9]+');
     Route::delete('/bookmark/course/{courseId}', [BookmarkController::class, 'removeBookmarkCourse'])->where('courseId', '[0-9]+');
     Route::delete('/bookmark/post/{postId}', [BookmarkController::class, 'removeBookmarkPost'])->where('postId', '[0-9]+');
+    Route::delete('/bookmark/library/{libraryId}', [BookmarkController::class, 'removeBookmarkOpenLibrary'])->where('libraryId', '[0-9]+');
     
     // Bookmark count routes
     Route::get('/bookmark/post/{postId}/count', [BookmarkController::class, 'getPostBookmarkCount'])->where('postId', '[0-9]+');
     Route::get('/bookmark/course/{courseId}/count', [BookmarkController::class, 'getCourseBookmarkCount'])->where('courseId', '[0-9]+');
+    Route::get('/bookmark/library/{libraryId}/count', [BookmarkController::class, 'getOpenLibraryBookmarkCount'])->where('libraryId', '[0-9]+');
 
     // Notification routes
     Route::get('/notifications', [NotificationController::class, 'getNotifications']);

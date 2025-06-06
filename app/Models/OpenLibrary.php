@@ -117,4 +117,12 @@ class OpenLibrary extends Model
     {
         return $query->where('approval_status', 'rejected');
     }
+    
+    /**
+     * Get bookmarks for this library
+     */
+    public function bookmarks()
+    {
+        return $this->hasMany(Bookmark::class, 'open_library_id');
+    }
 }

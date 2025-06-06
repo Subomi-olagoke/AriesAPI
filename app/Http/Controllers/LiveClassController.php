@@ -1210,11 +1210,9 @@ class LiveClassController extends Controller
                 'to_user_id' => auth()->id()
             ]);
             
-            // Return empty signals - the actual WebRTC signaling happens via WebSockets/broadcasting
-            // This endpoint just satisfies the iOS client's polling expectations
-            return response()->json([
-                'signals' => []
-            ]);
+            // Return empty array directly - not wrapped in a 'signals' object
+            // This matches what the iOS app expects for JSONDecoder().decode([SignalMessage].self, from: data)
+            return response()->json([]);
             
         } catch (\Exception $e) {
             Log::error('Failed to poll signals', [
@@ -1223,9 +1221,9 @@ class LiveClassController extends Controller
                 'user_id' => auth()->id()
             ]);
             
-            return response()->json([
-                'message' => 'Failed to poll signals: ' . $e->getMessage()
-            ], 500);
+            // For consistency with iOS error handling, return an empty array
+            // rather than an error message, as the iOS app expects an array format
+            return response()->json([], 500);
         }
     }
 
