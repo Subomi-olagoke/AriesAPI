@@ -151,12 +151,13 @@ class PostAnalysisController extends Controller
             }
             
             // STEP 4: Create a concise educational summary that includes interesting facts
-            $summaryPrompt = "Based on this post about '{$topics}', provide a concise educational summary in a conversational tone. " .
+            $summaryPrompt = "Based on this post about '{$topics}', provide a concise educational summary in a professional, system-like tone. " .
                              "In 3-5 sentences total, include: " .
-                             "1) A clear explanation of what the post is about " .
-                             "2) 1-2 interesting educational facts related to the topics " .
-                             "Make it engaging, informative, and educational without being verbose. " .
-                             "This should read like a helpful explanation from a knowledgeable friend.";
+                             "1) A clear, factual explanation of what the post is about " .
+                             "2) 1-2 educational facts related to the topics " .
+                             "Make it informative and educational without being verbose or overly friendly. " .
+                             "Maintain a neutral, professional tone throughout. Avoid exclamations, casual language, or first-person references. " .
+                             "This should read like a system-generated educational analysis.";
             
             $summaryResult = $this->cogniService->askQuestion($summaryPrompt . "\n\nHere's the content:\n" . $content);
             
