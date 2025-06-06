@@ -21,7 +21,7 @@ class PostAnalysisController extends Controller
     }
 
     /**
-     * Analyze any post with AI
+     * Analyze any post with AI, including direct analysis of media content
      * 
      * @param int $postId The ID of the post to analyze
      * @return \Illuminate\Http\JsonResponse
@@ -34,9 +34,14 @@ class PostAnalysisController extends Controller
         try {
             // Prepare post content for analysis
             $content = $post->title . "\n\n" . $post->body;
+            $postContext = $content; // Save for image analysis
             
-            // Add media descriptions if available
-            if ($post->media && $post->media->count() > 0) {
+            // Prepare media analysis
+            $mediaAnalyses = [];
+            $hasMediaToAnalyze = $post->media && $post->media->count() > 0;
+            
+            // Process each media item
+            if ($hasMediaToAnalyze) {
                 $content .= "\n\nThis post includes the following media:\n";
                 
                 foreach ($post->media as $index => $media) {
@@ -44,34 +49,76 @@ class PostAnalysisController extends Controller
                     $mediaUrl = $media->media_link ?? 'Not available';
                     $mediaName = $media->original_filename ?? 'Unnamed';
                     $mediaMimeType = $media->mime_type ?? '';
+                    $mediaId = $media->id;
                     
-                    // Add more detailed description based on media type
+                    // Initialize media analysis entry
+                    $mediaAnalyses[$mediaId] = [
+                        'media_id' => $mediaId,
+                        'media_type' => $mediaType,
+                        'media_name' => $mediaName,
+                        'media_url' => $mediaUrl,
+                        'analysis' => null
+                    ];
+                    
+                    // Add media info to context regardless of analysis
                     if (strpos($mediaType, 'image') !== false || strpos($mediaMimeType, 'image/') !== false) {
-                        // For images, add more context
-                        $content .= "- Image: {$mediaName} - Please analyze what this image might show based on the post context\n";
+                        $content .= "- Image: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
+                        
+                        // Analyze images directly for all users
+                        try {
+                            $prompt = "Analyze this image in the context of the post. Describe what's shown, how it relates to the post content, and any educational value it provides.";
+                            $imageResult = $this->cogniService->analyzeImage($mediaUrl, $prompt, $postContext);
+                            
+                            if ($imageResult['success']) {
+                                $mediaAnalyses[$mediaId]['analysis'] = $imageResult['answer'];
+                            }
+                        } catch (\Exception $e) {
+                            Log::warning('Failed to analyze image: ' . $e->getMessage(), ['media_id' => $mediaId]);
+                            // Continue with other media even if one fails
+                        }
                     } 
                     else if (strpos($mediaType, 'video') !== false || strpos($mediaMimeType, 'video/') !== false) {
-                        // For videos, add context
-                        $content .= "- Video: {$mediaName} - Please describe what this video might contain based on the post context\n";
+                        $content .= "- Video: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
+                        
+                        // For videos, use text-based analysis
+                        $prompt = "Based on the post context, what would you expect this video to show or explain? What educational value might it provide?";
+                        $videoResult = $this->cogniService->askQuestion($prompt . "\n\nPost context:\n" . $postContext . "\n\nVideo file: " . $mediaName);
+                        
+                        if ($videoResult['success']) {
+                            $mediaAnalyses[$mediaId]['analysis'] = $videoResult['answer'];
+                        }
                     }
                     else if (strpos($mediaType, 'audio') !== false || strpos($mediaMimeType, 'audio/') !== false) {
-                        // For audio
-                        $content .= "- Audio: {$mediaName} - Please suggest what this audio might contain based on the post context\n";
+                        $content .= "- Audio: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
+                        
+                        // For audio files
+                        $prompt = "Based on the post context, what would you expect this audio file to contain? What educational value might it provide?";
+                        $audioResult = $this->cogniService->askQuestion($prompt . "\n\nPost context:\n" . $postContext . "\n\nAudio file: " . $mediaName);
+                        
+                        if ($audioResult['success']) {
+                            $mediaAnalyses[$mediaId]['analysis'] = $audioResult['answer'];
+                        }
                     }
                     else {
                         // For other file types
                         $content .= "- {$mediaType}: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
+                        
+                        $prompt = "Based on the post context, what educational value might this file provide?";
+                        $fileResult = $this->cogniService->askQuestion($prompt . "\n\nPost context:\n" . $postContext . "\n\nFile: " . $mediaName . " (Type: " . $mediaType . ")");
+                        
+                        if ($fileResult['success']) {
+                            $mediaAnalyses[$mediaId]['analysis'] = $fileResult['answer'];
+                        }
                     }
                 }
             }
             
-            // Request analysis from Cogni
+            // Request overall post analysis from Cogni
             $prompt = "Provide a brief, concise summary of this post in 2-3 sentences. " .
-                      "If there are any media attachments (images, videos, etc.), analyze and describe what they might show based on the post context. " .
                       "Make it conversational and easy to understand. " .
                       "Keep your response very short and to the point.";
             
@@ -83,11 +130,19 @@ class PostAnalysisController extends Controller
                 ], 500);
             }
             
-            // Return the analysis directly as text
-            return response()->json([
+            // Prepare response
+            $response = [
                 'success' => true,
-                'analysis' => $result['answer']
-            ]);
+                'analysis' => $result['answer'],
+                'has_media' => $hasMediaToAnalyze
+            ];
+            
+            // Add media analyses for all users
+            if (!empty($mediaAnalyses)) {
+                $response['media_analyses'] = array_values($mediaAnalyses); // Convert to indexed array
+            }
+            
+            return response()->json($response);
             
         } catch (\Exception $e) {
             Log::error('Post analysis failed: ' . $e->getMessage());
