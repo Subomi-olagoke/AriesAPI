@@ -264,8 +264,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{liveClass}/end', [LiveClassController::class, 'end']);
         
         // WebRTC Signaling
-        Route::post('/{classId}/signal', [LiveClassController::class, 'signal']);
-        Route::post('/{classId}/ice-candidate', [LiveClassController::class, 'sendIceCandidate']);
+        Route::post('/{liveClass}/signal', [LiveClassController::class, 'signal']);
+        Route::post('/{liveClass}/ice-candidate', [LiveClassController::class, 'sendIceCandidate']);
+        
+        // Backwards compatibility routes (to support existing clients)
+        Route::post('/signals/{classId}', [LiveClassController::class, 'signal']);
+        Route::post('/ice-candidates/{classId}', [LiveClassController::class, 'sendIceCandidate']);
         
         // Stream Control
         Route::post('/{liveClass}/start-stream', [LiveClassController::class, 'startStream']);

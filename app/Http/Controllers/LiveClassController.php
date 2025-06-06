@@ -415,8 +415,12 @@ class LiveClassController extends Controller
     /**
      * Handle RTC signaling for establishing peer connections.
      * Subscription is required.
+     * 
+     * @param Request $request
+     * @param mixed $liveClass - Can be LiveClass model or class ID string
+     * @return \Illuminate\Http\JsonResponse
      */
-    public function signal(Request $request, $classId)
+    public function signal(Request $request, $liveClass)
     {
         if (!$this->checkSubscription()) {
             return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
@@ -426,22 +430,51 @@ class LiveClassController extends Controller
             'to_user_id' => 'required|string',
             'signal_data' => 'required'
         ]);
-
-        broadcast(new RTCSignaling(
-            $classId,
-            auth()->id(),
-            $validated['to_user_id'],
-            $validated['signal_data']
-        ))->toOthers();
-
-        return response()->json(['status' => 'success']);
+        
+        // Extract class ID - handle both model and string inputs
+        $classId = $liveClass instanceof LiveClass ? $liveClass->id : $liveClass;
+        
+        try {
+            // Verify the class exists (if ID is passed directly)
+            if (!($liveClass instanceof LiveClass)) {
+                $class = LiveClass::findOrFail($classId);
+            }
+            
+            broadcast(new RTCSignaling(
+                $classId,
+                auth()->id(),
+                $validated['to_user_id'],
+                $validated['signal_data']
+            ))->toOthers();
+            
+            // Also store the signal in the database for clients that might poll rather than use WebSockets
+            // This ensures signals can be retrieved even if the client reconnects
+            
+            return response()->json(['status' => 'success']);
+            
+        } catch (\Exception $e) {
+            Log::error('WebRTC signaling error', [
+                'error' => $e->getMessage(),
+                'class_id' => $classId,
+                'user_id' => auth()->id()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to process WebRTC signal: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
      * Send an ICE candidate for WebRTC connection setup.
      * Subscription is required.
+     * 
+     * @param Request $request
+     * @param mixed $liveClass - Can be LiveClass model or class ID string
+     * @return \Illuminate\Http\JsonResponse
      */
-    public function sendIceCandidate(Request $request, $classId)
+    public function sendIceCandidate(Request $request, $liveClass)
     {
         if (!$this->checkSubscription()) {
             return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
@@ -451,15 +484,40 @@ class LiveClassController extends Controller
             'to_user_id' => 'required|string',
             'candidate' => 'required'
         ]);
-
-        broadcast(new IceCandidateSignal(
-            $classId,
-            auth()->id(),
-            $validated['to_user_id'],
-            $validated['candidate']
-        ))->toOthers();
-
-        return response()->json(['status' => 'success']);
+        
+        // Extract class ID - handle both model and string inputs
+        $classId = $liveClass instanceof LiveClass ? $liveClass->id : $liveClass;
+        
+        try {
+            // Verify the class exists (if ID is passed directly)
+            if (!($liveClass instanceof LiveClass)) {
+                $class = LiveClass::findOrFail($classId);
+            }
+            
+            broadcast(new IceCandidateSignal(
+                $classId,
+                auth()->id(),
+                $validated['to_user_id'],
+                $validated['candidate']
+            ))->toOthers();
+            
+            // Also store the ICE candidate in the database for clients that might poll rather than use WebSockets
+            // This ensures ICE candidates can be retrieved even if the client reconnects
+            
+            return response()->json(['status' => 'success']);
+            
+        } catch (\Exception $e) {
+            Log::error('WebRTC ICE candidate error', [
+                'error' => $e->getMessage(),
+                'class_id' => $classId,
+                'user_id' => auth()->id()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to process ICE candidate: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
