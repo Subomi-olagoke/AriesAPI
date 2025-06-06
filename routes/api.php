@@ -271,6 +271,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/signals/{classId}', [LiveClassController::class, 'signal']);
         Route::post('/ice-candidates/{classId}', [LiveClassController::class, 'sendIceCandidate']);
         
+        // iOS compatibility route for signal polling
+        Route::get('/{classId}/signals/{userId}', [LiveClassController::class, 'pollSignals']);
+        
         // Stream Control
         Route::post('/{liveClass}/start-stream', [LiveClassController::class, 'startStream']);
         Route::post('/{liveClass}/stop-stream', [LiveClassController::class, 'stopStream']);

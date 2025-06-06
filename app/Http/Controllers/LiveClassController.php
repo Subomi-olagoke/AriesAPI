@@ -1170,6 +1170,63 @@ class LiveClassController extends Controller
     }
     
     /**
+     * Poll for WebRTC signals for iOS compatibility.
+     * This endpoint allows iOS clients to poll for signals instead of using WebSockets.
+     * 
+     * @param string $classId The ID of the live class
+     * @param string $userId The ID of the user to get signals for
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function pollSignals($classId, $userId)
+    {
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
+        }
+        
+        try {
+            // Verify the class exists
+            $liveClass = LiveClass::findOrFail($classId);
+            
+            // Verify the user is a participant
+            $participant = $liveClass->participants()
+                ->where('user_id', auth()->id())
+                ->first();
+                
+            if (!$participant) {
+                return response()->json([
+                    'message' => 'You are not a participant in this class',
+                    'join_required' => true
+                ], 403);
+            }
+            
+            // In a real implementation, we would query a database table for stored signals
+            // For now, we'll return an empty array as no signals are stored
+            // The iOS app will continue polling until it receives signals via WebSockets
+            
+            Log::info('iOS client polling for signals', [
+                'class_id' => $classId,
+                'from_user_id' => $userId,
+                'to_user_id' => auth()->id()
+            ]);
+            
+            return response()->json([
+                'signals' => []  // Empty array for now, could be replaced with actual stored signals
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to poll signals', [
+                'error' => $e->getMessage(),
+                'class_id' => $classId,
+                'user_id' => auth()->id()
+            ]);
+            
+            return response()->json([
+                'message' => 'Failed to poll signals: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Check the subscription status of the current user.
      *
      * @return \Illuminate\Http\JsonResponse
