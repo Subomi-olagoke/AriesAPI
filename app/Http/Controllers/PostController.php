@@ -282,6 +282,36 @@ class PostController extends Controller
             'post' => $post
         ]);
     }
+    
+    /**
+     * Display the specified post using route model binding.
+     * This is used by the viewSinglePost route.
+     */
+    public function viewSinglePost(Post $post)
+    {
+        // Check visibility permissions
+        $user = auth()->user();
+        
+        if ($post->visibility === 'private' && (!$user || $post->user_id !== $user->id)) {
+            return response()->json([
+                'message' => 'You do not have permission to view this post'
+            ], 403);
+        }
+        
+        if ($post->visibility === 'followers' && (!$user || !$user->isFollowing($post->user_id))) {
+            return response()->json([
+                'message' => 'This post is only visible to followers'
+            ], 403);
+        }
+        
+        // Load the relationships
+        $post->load('user', 'comments.user', 'likes', 'media');
+        
+        // The iOS app is expecting a 'data' wrapper in the response
+        return response()->json([
+            'data' => $post
+        ]);
+    }
 
     /**
      * Update the specified post.
