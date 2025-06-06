@@ -685,29 +685,29 @@ class PostController extends Controller
     }
     
     /**
-     * Get the number of readlists that include this post (selection count)
+     * Get the number of readlists that include this post (bookmark count)
      */
     public function getSelectionCount($postId)
     {
         try {
             $post = Post::findOrFail($postId);
-            $selectionCount = $post->readlistItems()->count();
+            $bookmarkCount = $post->readlistItems()->count();
             
             return response()->json([
-                'post_id' => $postId,
-                'selection_count' => $selectionCount
+                'post_id' => (int)$postId, // Cast to integer
+                'bookmark_count' => $bookmarkCount // Renamed from selection_count
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'message' => 'Post not found',
-                'post_id' => $postId,
-                'selection_count' => 0
+                'post_id' => (int)$postId, // Cast to integer
+                'bookmark_count' => 0 // Renamed from selection_count
             ], 404);
         } catch (\Exception $e) {
             return response()->json([
-                'message' => 'Error retrieving selection count: ' . $e->getMessage(),
-                'post_id' => $postId,
-                'selection_count' => 0
+                'message' => 'Error retrieving bookmark count: ' . $e->getMessage(),
+                'post_id' => (int)$postId, // Cast to integer
+                'bookmark_count' => 0 // Renamed from selection_count
             ], 500);
         }
     }
