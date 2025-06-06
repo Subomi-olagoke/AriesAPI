@@ -906,6 +906,7 @@ class LiveClassController extends Controller
     /**
      * Get stream information for a live class.
      * Includes active participants, stream status, and settings.
+     * If teacher accesses this endpoint and class isn't started, it automatically marks the stream as started.
      */
     public function getStreamInfo(LiveClass $liveClass)
     {
@@ -925,10 +926,31 @@ class LiveClassController extends Controller
             ], 403);
         }
         
-        // Get active participants
+        // Auto-start stream if teacher is accessing and the class isn't started yet
+        $user = auth()->user();
+        $isTeacher = $user->id === $liveClass->teacher_id;
+        $isModeratorOrTeacher = $participant->role === 'moderator' || $isTeacher;
+        
+        // If teacher/moderator is viewing and class is in scheduled status, start it
+        if ($isModeratorOrTeacher && $liveClass->status === 'scheduled') {
+            $liveClass->update(['status' => 'live']);
+            
+            // Broadcast that the stream has started
+            try {
+                broadcast(new StreamStarted($liveClass))->toOthers();
+                Log::info("Stream automatically started by teacher viewing stream info", ['class_id' => $liveClass->id]);
+            } catch (\Exception $e) {
+                Log::error("Failed to broadcast stream start", ['error' => $e->getMessage()]);
+            }
+        }
+        
+        // Get active participants (refresh after potential status update)
         $activeParticipants = $liveClass->activeParticipants()
             ->with('user:id,username,first_name,last_name,avatar,role')
             ->get();
+        
+        // Get stream settings and status (reload after potential update)
+        $liveClass = LiveClass::find($liveClass->id); // Refresh the model
             
         // Get stream settings and status
         $streamInfo = [
