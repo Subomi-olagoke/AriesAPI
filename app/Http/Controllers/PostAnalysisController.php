@@ -107,12 +107,140 @@ class PostAnalysisController extends Controller
                         $content .= "- Video: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
                         
-                        // Enhanced video analysis
-                        $prompt = "Based on the post topics ({$topics}), provide an educational analysis of what this video likely contains. " .
-                                 "What concepts might it explain? What educational value does it provide? " .
-                                 "How does it support learning about the post topics?";
+                        // Comprehensive video analysis
+                        $videoPrompt = "Perform a professional, detailed analysis of this video in the context of the post. " .
+                                      "In a system-like tone, provide: " .
+                                      "1. Likely content based on post context and video title/name " .
+                                      "2. Educational concepts that may be covered " .
+                                      "3. Potential learning outcomes from watching this video " .
+                                      "4. How it complements the post's educational value " .
+                                      "Format as a concise, factual analysis using professional language. " .
+                                      "If the video appears to be a demonstration, tutorial, lecture, or educational content, " .
+                                      "analyze what skills or knowledge viewers would gain.";
                         
-                        $videoResult = $this->cogniService->askQuestion($prompt . "\n\nPost context:\n" . $postContext . "\n\nVideo file: " . $mediaName);
+                        // Try to extract video ID if it's a YouTube URL
+                        $videoId = null;
+                        $videoThumbnail = null;
+                        $videoTitle = $mediaName;
+                        $frameAnalyses = [];
+                        
+                        if (strpos($mediaUrl, 'youtube.com') !== false || strpos($mediaUrl, 'youtu.be') !== false) {
+                            // Extract YouTube video ID
+                            preg_match('/(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/', $mediaUrl, $matches);
+                            
+                            if (!empty($matches[1])) {
+                                $videoId = $matches[1];
+                                $videoThumbnail = "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
+                                
+                                // Try to get YouTube video title and other metadata
+                                try {
+                                    // Use YouTube API if configured
+                                    $youtubeApiKey = config('services.youtube.api_key');
+                                    if (!empty($youtubeApiKey)) {
+                                        $videoInfoUrl = "https://www.googleapis.com/youtube/v3/videos?id={$videoId}&key={$youtubeApiKey}&part=snippet,contentDetails";
+                                        $response = Http::get($videoInfoUrl);
+                                        if ($response->successful()) {
+                                            $data = $response->json();
+                                            if (!empty($data['items'][0]['snippet']['title'])) {
+                                                $videoTitle = $data['items'][0]['snippet']['title'];
+                                            }
+                                            
+                                            // Get video duration if available for frame timestamps
+                                            $duration = null;
+                                            if (!empty($data['items'][0]['contentDetails']['duration'])) {
+                                                // Parse ISO 8601 duration format
+                                                $durationStr = $data['items'][0]['contentDetails']['duration'];
+                                                $interval = new \DateInterval($durationStr);
+                                                $duration = ($interval->h * 3600) + ($interval->i * 60) + $interval->s;
+                                            }
+                                            
+                                            // Analyze video frames at different timestamps if duration is available
+                                            if ($duration) {
+                                                // Get frames at 25%, 50%, and 75% of the video
+                                                $frameTimestamps = [
+                                                    round($duration * 0.25),
+                                                    round($duration * 0.5),
+                                                    round($duration * 0.75)
+                                                ];
+                                                
+                                                foreach ($frameTimestamps as $index => $timestamp) {
+                                                    // YouTube thumbnails at specific timestamps
+                                                    $frameUrl = "https://img.youtube.com/vi/{$videoId}/0.jpg"; // Default thumbnail
+                                                    
+                                                    // For custom timestamps, we would need a service that generates thumbnails
+                                                    // This is a placeholder - in production you would use a video frame extraction service
+                                                    // or YouTube's storyboard API (which requires additional implementation)
+                                                    
+                                                    // Since we can't dynamically generate frame images here, we'll use the available thumbnails
+                                                    $availableThumbnails = [
+                                                        "https://img.youtube.com/vi/{$videoId}/0.jpg",
+                                                        "https://img.youtube.com/vi/{$videoId}/1.jpg",
+                                                        "https://img.youtube.com/vi/{$videoId}/2.jpg",
+                                                        "https://img.youtube.com/vi/{$videoId}/3.jpg",
+                                                    ];
+                                                    
+                                                    if (isset($availableThumbnails[$index])) {
+                                                        $frameUrl = $availableThumbnails[$index];
+                                                    }
+                                                    
+                                                    // Analyze the frame with GPT Vision
+                                                    try {
+                                                        $framePrompt = "Analyze this frame from a YouTube video titled '{$videoTitle}'. " .
+                                                                      "Describe what's shown in the frame and how it relates to the educational topic. " .
+                                                                      "Focus on visual elements that provide educational value.";
+                                                        
+                                                        $frameResult = $this->cogniService->analyzeImage($frameUrl, $framePrompt, $postContext);
+                                                        
+                                                        if ($frameResult['success']) {
+                                                            $frameAnalyses[] = [
+                                                                'timestamp' => $timestamp,
+                                                                'timestamp_formatted' => gmdate('H:i:s', $timestamp),
+                                                                'frame_url' => $frameUrl,
+                                                                'analysis' => $frameResult['answer']
+                                                            ];
+                                                        }
+                                                    } catch (\Exception $e) {
+                                                        Log::warning('Failed to analyze video frame: ' . $e->getMessage(), [
+                                                            'video_id' => $videoId,
+                                                            'timestamp' => $timestamp
+                                                        ]);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch (\Exception $e) {
+                                    Log::warning('Failed to fetch YouTube video info: ' . $e->getMessage());
+                                }
+                            }
+                        }
+                        
+                        // Add video metadata to the analysis entry
+                        $mediaAnalyses[$mediaId]['video_id'] = $videoId;
+                        $mediaAnalyses[$mediaId]['video_thumbnail'] = $videoThumbnail;
+                        $mediaAnalyses[$mediaId]['video_title'] = $videoTitle;
+                        
+                        // Add frame analyses if available
+                        if (!empty($frameAnalyses)) {
+                            $mediaAnalyses[$mediaId]['frame_analyses'] = $frameAnalyses;
+                        }
+                        
+                        // Include video metadata in the prompt if available
+                        $contextAddition = "\n\nVideo file: " . $mediaName;
+                        if ($videoTitle !== $mediaName) {
+                            $contextAddition .= "\nVideo title: " . $videoTitle;
+                        }
+                        
+                        // Include frame analyses in the prompt to enhance the overall video analysis
+                        if (!empty($frameAnalyses)) {
+                            $contextAddition .= "\n\nFrame analyses:";
+                            foreach ($frameAnalyses as $frameAnalysis) {
+                                $contextAddition .= "\n- Frame at " . $frameAnalysis['timestamp_formatted'] . ": " . 
+                                                   substr($frameAnalysis['analysis'], 0, 100) . "...";
+                            }
+                        }
+                        
+                        $videoResult = $this->cogniService->askQuestion($videoPrompt . "\n\nPost context:\n" . $postContext . $contextAddition);
                         
                         if ($videoResult['success']) {
                             $mediaAnalyses[$mediaId]['analysis'] = $videoResult['answer'];
