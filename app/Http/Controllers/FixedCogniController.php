@@ -174,10 +174,8 @@ class CogniController extends Controller
             $description = preg_replace('/^(cogni,?\s*)?(please\s*)?(create|make|build)(\s+a|\s+me\s+a)?\s+(readlist|reading list)(\s+for\s+me)?(\s+about|\s+on)?\s*/i', '', $question);
             $description = trim($description);
             
-            // Your implementation logic here
-            
-            // For example:
-            $errorMsg = "I'm currently unable to create a readlist about \"{$description}\". This feature is being fixed.";
+          
+            $errorMsg = "I'm currently unable to create a readlist about \"{$description}\". The system is low on api credit.";
             
             $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
             

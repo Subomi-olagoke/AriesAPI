@@ -6,6 +6,7 @@ use App\Models\OpenLibrary;
 use App\Models\Course;
 use App\Models\Post;
 use App\Models\Topic;
+use App\Models\LibraryUrl;
 use App\Services\OpenLibraryService;
 use App\Services\UrlFetchService;
 use Illuminate\Http\Request;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
 
 class OpenLibraryController extends Controller
 {
@@ -205,22 +207,52 @@ class OpenLibraryController extends Controller
                         ];
                     }
                 }
+                elseif ($content->content_type === LibraryUrl::class) {
+                    $contentItem = LibraryUrl::find($content->content_id);
+                    if ($contentItem) {
+                        $formattedContents[] = [
+                            'id' => $contentItem->id,
+                            'title' => $contentItem->title,
+                            'url' => $contentItem->url,
+                            'description' => $contentItem->summary,
+                            'notes' => $contentItem->notes,
+                            'type' => 'url',
+                            'relevance_score' => $content->relevance_score,
+                            'created_at' => $contentItem->created_at
+                        ];
+                    }
+                }
             }
             
-            // Get URL items from the library if they exist
+            // For backward compatibility, also add URLs from the url_items array
+            // This ensures we don't miss any URLs that were added before the migration
             $urlItems = $library->url_items ?? [];
             
-            // Add URL items to the formatted contents
             foreach ($urlItems as $urlItem) {
-                $formattedContents[] = [
-                    'id' => $urlItem['id'] ?? uniqid('url_'),
-                    'title' => $urlItem['title'] ?? 'No title',
-                    'url' => $urlItem['url'] ?? '',
-                    'description' => $urlItem['summary'] ?? $urlItem['description'] ?? '',
-                    'type' => 'url',
-                    'relevance_score' => $urlItem['relevance_score'] ?? 0.5,
-                    'created_at' => $urlItem['created_at'] ?? null
-                ];
+                // Check if this URL is already included (based on the URL itself)
+                $url = $urlItem['url'] ?? '';
+                $alreadyIncluded = false;
+                
+                foreach ($formattedContents as $content) {
+                    if ($content['type'] === 'url' && isset($content['url']) && $content['url'] === $url) {
+                        $alreadyIncluded = true;
+                        break;
+                    }
+                }
+                
+                // Only add if not already included
+                if (!$alreadyIncluded && !empty($url)) {
+                    $formattedContents[] = [
+                        'id' => $urlItem['id'] ?? uniqid('url_'),
+                        'title' => $urlItem['title'] ?? 'No title',
+                        'url' => $url,
+                        'description' => $urlItem['summary'] ?? $urlItem['description'] ?? '',
+                        'notes' => $urlItem['notes'] ?? '',
+                        'type' => 'url',
+                        'relevance_score' => $urlItem['relevance_score'] ?? 0.5,
+                        'created_at' => $urlItem['created_at'] ?? now()->toIso8601String()
+                    ];
+                }
             }
             
             // Sort all contents by relevance score
@@ -399,6 +431,7 @@ class OpenLibraryController extends Controller
     
     /**
      * Add a URL to a library with automatic content fetching and summarization.
+     * Stores URLs inline with other content types.
      */
     public function addUrl(Request $request, $id)
     {
@@ -427,9 +460,48 @@ class OpenLibraryController extends Controller
                 throw new \Exception('Failed to fetch URL content: ' . ($urlData['error'] ?? 'Unknown error'));
             }
             
-            // Create the URL item with fetched data
+            // First, check if this URL already exists in our database
+            $existingUrl = LibraryUrl::where('url', $url)->first();
+            
+            if (!$existingUrl) {
+                // Create a new LibraryUrl record
+                $existingUrl = LibraryUrl::create([
+                    'url' => $url,
+                    'title' => $urlData['title'] ?? 'No title',
+                    'summary' => $urlData['summary'] ?? 'No summary available',
+                    'notes' => $request->notes,
+                    'created_by' => Auth::id()
+                ]);
+            }
+            
+            // Check if this URL is already in the library
+            $existing = DB::table('library_content')
+                ->where('library_id', $library->id)
+                ->where('content_id', $existingUrl->id)
+                ->where('content_type', LibraryUrl::class)
+                ->first();
+                
+            if ($existing) {
+                return response()->json([
+                    'message' => 'URL already exists in this library',
+                    'url_item' => $existingUrl
+                ], 400);
+            }
+            
+            // Add to library content table with the appropriate relevance score
+            DB::table('library_content')->insert([
+                'library_id' => $library->id,
+                'content_id' => $existingUrl->id,
+                'content_type' => LibraryUrl::class,
+                'relevance_score' => $request->input('relevance_score', 0.8),
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+            
+            // For backward compatibility, also maintain the url_items field
+            // This can be removed in a future version after all clients are updated
             $urlItem = [
-                'id' => uniqid('url_'),
+                'id' => 'url_' . $existingUrl->id,
                 'url' => $url,
                 'title' => $urlData['title'] ?? 'No title',
                 'summary' => $urlData['summary'] ?? 'No summary available',
@@ -445,13 +517,23 @@ class OpenLibraryController extends Controller
             // Add new URL item
             $urlItems[] = $urlItem;
             
-            // Update the library with the new URL item
+            // Update the library with the new URL item (for backward compatibility)
             $library->url_items = $urlItems;
             $library->save();
             
             return response()->json([
                 'message' => 'URL added to library successfully',
-                'url_item' => $urlItem,
+                'url_item' => [
+                    'id' => $existingUrl->id,
+                    'url' => $existingUrl->url,
+                    'title' => $existingUrl->title,
+                    'summary' => $existingUrl->summary,
+                    'notes' => $existingUrl->notes,
+                    'relevance_score' => $request->input('relevance_score', 0.8),
+                    'created_at' => $existingUrl->created_at,
+                    'updated_at' => $existingUrl->updated_at,
+                    'type' => 'url'
+                ],
                 'url_data' => [
                     'title' => $urlData['title'] ?? 'No title',
                     'summary' => $urlData['summary'] ?? 'No summary available',
@@ -491,32 +573,48 @@ class OpenLibraryController extends Controller
         try {
             // Find the library
             $library = OpenLibrary::findOrFail($id);
+            $urlId = $request->url_id;
             
-            // Get current URL items
+            // Handle both formats - numeric IDs (new) and string IDs with url_ prefix (old)
+            $numericId = $urlId;
+            if (strpos($urlId, 'url_') === 0) {
+                $numericId = substr($urlId, 4); // Remove 'url_' prefix
+            }
+            
+            // Remove from library_content table
+            $deleted = DB::table('library_content')
+                ->where('library_id', $library->id)
+                ->where('content_id', $numericId)
+                ->where('content_type', LibraryUrl::class)
+                ->delete();
+            
+            // For backward compatibility, also remove from url_items array
             $urlItems = $library->url_items ?? [];
+            $foundInLegacy = false;
             
-            // Find the URL item by ID
+            // Find the URL item by ID in the legacy storage
             $urlItemIndex = null;
             foreach ($urlItems as $index => $item) {
-                if (isset($item['id']) && $item['id'] === $request->url_id) {
+                if (isset($item['id']) && ($item['id'] === $urlId || $item['id'] === 'url_' . $numericId)) {
                     $urlItemIndex = $index;
+                    $foundInLegacy = true;
                     break;
                 }
             }
             
-            // If URL item not found
-            if ($urlItemIndex === null) {
+            // If found in legacy storage, remove it
+            if ($foundInLegacy && $urlItemIndex !== null) {
+                array_splice($urlItems, $urlItemIndex, 1);
+                $library->url_items = $urlItems;
+                $library->save();
+            }
+            
+            // If we didn't delete anything from either storage system
+            if (!$deleted && !$foundInLegacy) {
                 return response()->json([
                     'message' => 'URL not found in this library'
                 ], 404);
             }
-            
-            // Remove the URL item
-            array_splice($urlItems, $urlItemIndex, 1);
-            
-            // Update the library
-            $library->url_items = $urlItems;
-            $library->save();
             
             return response()->json([
                 'message' => 'URL removed from library successfully'
