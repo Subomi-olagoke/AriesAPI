@@ -18,6 +18,7 @@ use App\Http\Controllers\EducatorProfileController;
 use App\Http\Controllers\FeedController;
 use App\Http\Controllers\ForgotPasswordManager;
 use App\Http\Controllers\FollowController;
+use App\Http\Controllers\TrendingTopicsController;
 use App\Http\Controllers\HireController;
 use App\Http\Controllers\HireRequestController;
 use App\Http\Controllers\LikeController;
@@ -205,6 +206,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/featured-course', [CoursesController::class, 'getFeaturedCourses']);
     Route::post('/courses/{id}/toggle-featured', [CoursesController::class, 'toggleFeatured']);
     Route::post('/course/{id}/toggle-featured', [CoursesController::class, 'toggleFeatured']);
+    
+    // Trending Topics route
+    Route::get('/trending-topics', [TrendingTopicsController::class, 'getTrendingTopics'])->middleware('auth:sanctum');
 
     // Course Section routes
     Route::get('/courses/{courseId}/sections', [CourseSectionController::class, 'index']);
