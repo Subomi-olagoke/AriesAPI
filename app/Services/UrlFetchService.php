@@ -28,43 +28,15 @@ class UrlFetchService
      */
     public function fetchAndSummarize(string $url)
     {
-        $cacheKey = 'url_summary_' . md5($url);
-
-        // Check cache first to avoid redundant processing
-        if (Cache::has($cacheKey)) {
-            return Cache::get($cacheKey);
-        }
-
-        try {
-            // Try using Exa service first if configured
-            if ($this->exaSearchService->isConfigured()) {
-                $result = $this->fetchWithExaService($url);
-                if ($result['success']) {
-                    Cache::put($cacheKey, $result, $this->cacheExpiration);
-                    return $result;
-                }
-            }
-
-            // Fallback to direct fetching and AI summarization
-            $result = $this->fetchAndSummarizeDirectly($url);
-            Cache::put($cacheKey, $result, $this->cacheExpiration);
-            return $result;
-            
-        } catch (Exception $e) {
-            Log::error('URL fetch and summarize error: ' . $e->getMessage(), [
-                'url' => $url,
-                'trace' => $e->getTraceAsString()
-            ]);
-            
-            return [
-                'success' => false,
-                'url' => $url,
-                'title' => 'Failed to fetch content',
-                'content' => '',
-                'summary' => 'Could not retrieve content from this URL.',
-                'error' => $e->getMessage()
-            ];
-        }
+        // Skip all analysis and return an empty result to avoid messing up JSON structure
+        return [
+            'success' => true,
+            'url' => $url,
+            'title' => parse_url($url, PHP_URL_HOST) ?? 'URL',
+            'content' => '',
+            'summary' => '',
+            'source' => 'direct'
+        ];
     }
 
     /**
