@@ -21,6 +21,30 @@ use App\Notifications\GeneralNotification;
 class ChannelController extends Controller
 {
     /**
+     * Helper function to parse different boolean formats
+     * 
+     * @param mixed $value
+     * @return bool
+     */
+    private function parseBoolean($value) 
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        
+        if (is_string($value)) {
+            $value = strtolower($value);
+            return $value === 'true' || $value === '1' || $value === 'yes' || $value === 'on';
+        }
+        
+        if (is_numeric($value)) {
+            return (int)$value === 1;
+        }
+        
+        return false;
+    }
+    
+    /**
      * Get all channels the authenticated user is a member of, plus public channels
      */
     public function index()
@@ -149,8 +173,8 @@ class ChannelController extends Controller
             'description' => 'nullable|string|max:1000',
             'picture' => 'nullable|image|max:5120', // 5MB max
             'max_members' => 'integer|min:2|max:20',
-            'requires_approval' => 'boolean',
-            'is_public' => 'boolean'
+            'requires_approval' => 'nullable',
+            'is_public' => 'nullable'
         ]);
         
         // All users can create channels now
@@ -170,8 +194,8 @@ class ChannelController extends Controller
                 'description' => $validated['description'] ?? null,
                 'creator_id' => $user->id,
                 'max_members' => $validated['max_members'] ?? 10,
-                'requires_approval' => $validated['requires_approval'] ?? false,
-                'is_public' => $validated['is_public'] ?? false,
+                'requires_approval' => $this->parseBoolean($validated['requires_approval'] ?? false),
+                'is_public' => $this->parseBoolean($validated['is_public'] ?? false),
                 'join_code' => strtoupper(Str::random(8))
                 // share_link will be generated in the model using the channel's ID
             ];
