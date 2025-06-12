@@ -484,7 +484,7 @@ class OpenLibraryController extends Controller
             if ($existing) {
                 return response()->json([
                     'message' => 'URL already exists in this library',
-                    'url_item' => $existingUrl
+                    'item' => $existingUrl
                 ], 400);
             }
             
@@ -523,7 +523,7 @@ class OpenLibraryController extends Controller
             
             return response()->json([
                 'message' => 'URL added to library successfully',
-                'url_item' => [
+                'item' => [
                     'id' => $existingUrl->id,
                     'url' => $existingUrl->url,
                     'title' => $existingUrl->title,
@@ -533,11 +533,6 @@ class OpenLibraryController extends Controller
                     'created_at' => $existingUrl->created_at,
                     'updated_at' => $existingUrl->updated_at,
                     'type' => 'url'
-                ],
-                'url_data' => [
-                    'title' => $urlData['title'] ?? 'No title',
-                    'summary' => $urlData['summary'] ?? 'No summary available',
-                    'url' => $url
                 ]
             ], 201);
             
