@@ -130,9 +130,9 @@
                     </a>
                     
                     @if($library->approval_status === 'pending')
-                    <form action="{{ route('admin.libraries.approve', $library->id) }}" method="POST" class="inline">
+                    <form action="{{ route('admin.libraries.approve', $library->id) }}" method="POST" class="inline approval-form">
                         @csrf
-                        <button type="submit" class="p-1 text-green-600 hover:text-green-800 rounded-full hover:bg-green-50" title="Approve Library">
+                        <button type="button" onclick="submitApprovalForm(this)" class="p-1 text-green-600 hover:text-green-800 rounded-full hover:bg-green-50" title="Approve Library">
                             <i class="fa-solid fa-check"></i>
                         </button>
                     </form>
@@ -237,6 +237,24 @@
         modal.libraryId = libraryId;
         modal.libraryName = libraryName;
         modal.show = true;
+    }
+    
+    function submitApprovalForm(button) {
+        // Get the parent form element
+        const form = button.closest('form.approval-form');
+        
+        // Explicitly submit the form using POST method
+        if (form) {
+            // Create a hidden input for method (redundant but ensures POST)
+            const methodInput = document.createElement('input');
+            methodInput.type = 'hidden';
+            methodInput.name = '_method';
+            methodInput.value = 'POST';
+            form.appendChild(methodInput);
+            
+            // Submit the form
+            form.submit();
+        }
     }
 </script>
 @endsection
