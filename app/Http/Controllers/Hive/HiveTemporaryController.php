@@ -12,6 +12,29 @@ use Illuminate\Support\Facades\Schema;
 class HiveTemporaryController extends Controller
 {
     /**
+     * Check if a source string indicates a regular channel
+     *
+     * @param string $source
+     * @return bool
+     */
+    private function isRegularChannel($source)
+    {
+        return $source === 'regular';
+    }
+    
+    /**
+     * Check if a string is a UUID
+     *
+     * @param string $str
+     * @return bool
+     */
+    private function isUuid($str) 
+    {
+        if (!is_string($str)) return false;
+        return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $str) === 1;
+    }
+    
+    /**
      * Get user's channels including both hive_channels and regular channels
      *
      * @return \Illuminate\Http\JsonResponse
@@ -195,6 +218,291 @@ class HiveTemporaryController extends Controller
                     'has_more' => false
                 ]
             ]);
+        }
+    }
+    
+    /**
+     * Join a channel - handles both regular channels and hive channels
+     *
+     * @param int|string $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function joinChannel(Request $request, $id)
+    {
+        $user = Auth::user();
+        
+        // Validate the request for join message
+        $validated = $request->validate([
+            'join_message' => 'nullable|string|max:1000'
+        ]);
+        
+        $joinMessage = $validated['join_message'] ?? null;
+        
+        try {
+            // Determine if it's likely a regular channel (UUID) or hive channel (numeric ID)
+            if ($this->isUuid($id) && Schema::hasTable('channels')) {
+                // This is likely a regular channel
+                $channel = DB::table('channels')->where('id', $id)->first();
+                
+                if (!$channel) {
+                    return response()->json(['message' => 'Channel not found'], 404);
+                }
+                
+                // Check if already a member
+                if (Schema::hasTable('channel_members')) {
+                    $existingMembership = DB::table('channel_members')
+                        ->where('channel_id', $channel->id)
+                        ->where('user_id', $user->id)
+                        ->first();
+                    
+                    if ($existingMembership) {
+                        if ($existingMembership->status === 'approved') {
+                            return response()->json([
+                                'message' => 'You are already a member of this channel',
+                                'channel' => [
+                                    'id' => $channel->id,
+                                    'name' => $channel->title,
+                                    'is_joined' => true
+                                ]
+                            ]);
+                        } elseif ($existingMembership->status === 'pending') {
+                            return response()->json([
+                                'message' => 'Your join request is already pending approval'
+                            ], 400);
+                        }
+                    }
+                    
+                    // Always create as pending membership for Hive flow
+                    DB::table('channel_members')->insert([
+                        'channel_id' => $channel->id,
+                        'user_id' => $user->id,
+                        'role' => 'member',
+                        'status' => 'pending',
+                        'is_active' => false,
+                        'join_message' => $joinMessage,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                    
+                    // Notify channel admins - find the creator/owner
+                    $creator = DB::table('users')->where('id', $channel->creator_id)->first();
+                    if ($creator) {
+                        // Create a notification record if we have a notifications table
+                        if (Schema::hasTable('notifications')) {
+                            $notificationData = [
+                                'id' => (string) \Illuminate\Support\Str::uuid(),
+                                'type' => 'App\\Notifications\\GeneralNotification',
+                                'notifiable_type' => 'App\\Models\\User',
+                                'notifiable_id' => $creator->id,
+                                'data' => json_encode([
+                                    'message' => $user->username . ' has requested to join your channel ' . $channel->title,
+                                    'type' => 'channel_join_request',
+                                    'level' => 'info',
+                                    'data' => [
+                                        'channel_id' => $channel->id,
+                                        'channel_title' => $channel->title,
+                                        'user_id' => $user->id,
+                                        'username' => $user->username,
+                                        'join_message' => $joinMessage
+                                    ]
+                                ]),
+                                'created_at' => now(),
+                                'updated_at' => now()
+                            ];
+                            
+                            DB::table('notifications')->insert($notificationData);
+                        }
+                    }
+                    
+                    return response()->json([
+                        'message' => 'Join request submitted successfully',
+                        'channel' => [
+                            'id' => $channel->id,
+                            'name' => $channel->title,
+                            'is_joined' => false,
+                            'has_pending_request' => true
+                        ]
+                    ], 201);
+                }
+            } else if (Schema::hasTable('hive_channels')) {
+                // This is likely a hive channel
+                $channel = DB::table('hive_channels')->where('id', $id)->first();
+                
+                if (!$channel) {
+                    return response()->json(['message' => 'Hive channel not found'], 404);
+                }
+                
+                // Check if already a member
+                if (Schema::hasTable('hive_channel_members')) {
+                    $membership = DB::table('hive_channel_members')
+                        ->where('channel_id', $channel->id)
+                        ->where('user_id', $user->id)
+                        ->first();
+                    
+                    if ($membership) {
+                        return response()->json([
+                            'message' => 'User is already a member of this channel',
+                            'channel' => [
+                                'id' => $channel->id,
+                                'name' => $channel->name,
+                                'is_joined' => true
+                            ]
+                        ]);
+                    }
+                    
+                    // For Hive channels, create as pending with join message
+                    $membershipData = [
+                        'channel_id' => $channel->id,
+                        'user_id' => $user->id,
+                        'role' => 'member',
+                        'notifications_enabled' => true,
+                        'status' => 'pending', // Add status column if doesn't exist
+                        'join_message' => $joinMessage,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ];
+                    
+                    DB::table('hive_channel_members')->insert($membershipData);
+                    
+                    // Notify channel creator
+                    // Find the creator's user ID - assuming creator_id is stored in the channels table
+                    if (Schema::hasTable('notifications')) {
+                        $notificationData = [
+                            'id' => (string) \Illuminate\Support\Str::uuid(),
+                            'type' => 'App\\Notifications\\GeneralNotification',
+                            'notifiable_type' => 'App\\Models\\User',
+                            'notifiable_id' => $channel->creator_id,
+                            'data' => json_encode([
+                                'message' => $user->username . ' has requested to join your hive channel ' . $channel->name,
+                                'type' => 'hive_channel_join_request',
+                                'level' => 'info',
+                                'data' => [
+                                    'channel_id' => $channel->id,
+                                    'channel_name' => $channel->name,
+                                    'user_id' => $user->id,
+                                    'username' => $user->username,
+                                    'join_message' => $joinMessage
+                                ]
+                            ]),
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ];
+                        
+                        DB::table('notifications')->insert($notificationData);
+                    }
+                    
+                    return response()->json([
+                        'message' => 'Join request submitted successfully',
+                        'channel' => [
+                            'id' => $channel->id,
+                            'name' => $channel->name,
+                            'is_joined' => false,
+                            'has_pending_request' => true
+                        ]
+                    ], 201);
+                }
+            }
+            
+            // Fallback if neither table exists
+            return response()->json([
+                'message' => 'Channel system not properly configured'
+            ], 500);
+        } catch (\Exception $e) {
+            Log::error('Failed to join channel: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to join channel',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Leave a channel - handles both regular channels and hive channels
+     *
+     * @param int|string $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function leaveChannel($id)
+    {
+        $user = Auth::user();
+        
+        try {
+            // Determine if it's likely a regular channel (UUID) or hive channel (numeric ID)
+            if ($this->isUuid($id) && Schema::hasTable('channels')) {
+                // This is likely a regular channel
+                $channel = DB::table('channels')->where('id', $id)->first();
+                
+                if (!$channel) {
+                    return response()->json(['message' => 'Channel not found'], 404);
+                }
+                
+                // Check if user is a member
+                if (Schema::hasTable('channel_members')) {
+                    $membership = DB::table('channel_members')
+                        ->where('channel_id', $channel->id)
+                        ->where('user_id', $user->id)
+                        ->first();
+                    
+                    if (!$membership) {
+                        return response()->json(['message' => 'You are not a member of this channel'], 403);
+                    }
+                    
+                    // Check if user is the creator
+                    if ($channel->creator_id === $user->id) {
+                        return response()->json(['message' => 'The channel creator cannot leave the channel. Transfer ownership first or delete the channel.'], 400);
+                    }
+                    
+                    // Remove membership
+                    DB::table('channel_members')
+                        ->where('channel_id', $channel->id)
+                        ->where('user_id', $user->id)
+                        ->delete();
+                    
+                    return response()->json([
+                        'message' => 'Successfully left the channel'
+                    ]);
+                }
+            } else if (Schema::hasTable('hive_channels')) {
+                // This is likely a hive channel
+                $channel = DB::table('hive_channels')->where('id', $id)->first();
+                
+                if (!$channel) {
+                    return response()->json(['message' => 'Hive channel not found'], 404);
+                }
+                
+                // Check if user is a member
+                if (Schema::hasTable('hive_channel_members')) {
+                    $isMember = DB::table('hive_channel_members')
+                        ->where('channel_id', $channel->id)
+                        ->where('user_id', $user->id)
+                        ->exists();
+                    
+                    if (!$isMember) {
+                        return response()->json(['message' => 'User is not a member of this channel'], 403);
+                    }
+                    
+                    // Remove user from channel
+                    DB::table('hive_channel_members')
+                        ->where('channel_id', $channel->id)
+                        ->where('user_id', $user->id)
+                        ->delete();
+                    
+                    return response()->json([
+                        'message' => 'Successfully left channel'
+                    ]);
+                }
+            }
+            
+            // Fallback if neither table exists
+            return response()->json([
+                'message' => 'Channel system not properly configured'
+            ], 500);
+        } catch (\Exception $e) {
+            Log::error('Failed to leave channel: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to leave channel',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 }
