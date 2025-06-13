@@ -857,7 +857,13 @@ class CogniController extends Controller
                 'conversation_id' => $conversationId,
                 'debug_info' => $diagnostics
             ]);
-        } catch (\Exception $e) {
+        }
+        
+        try {
+            // This is a placeholder - we'll never reach this code due to the return above
+            $dummy = true;
+        }
+        catch (\Exception $e) {
             return $this->handleReadlistError($e, $description ?? '', $question, $user, $conversationId);
         }
     }
