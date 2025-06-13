@@ -944,18 +944,26 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Hive routes
     Route::prefix('hive')->middleware('auth:sanctum')->group(function () {
-        // Channels endpoints
-        Route::get('/channels', [\App\Http\Controllers\Hive\HiveController::class, 'getChannels']);
-        Route::post('/channels/{id}/join', [\App\Http\Controllers\Hive\HiveController::class, 'joinChannel']);
-        Route::delete('/channels/{id}/leave', [\App\Http\Controllers\Hive\HiveController::class, 'leaveChannel']);
+        // Channels endpoints - using temporary controller for graceful error handling
+        Route::get('/channels', [\App\Http\Controllers\Hive\HiveTemporaryController::class, 'getChannels']);
+        Route::post('/channels/{id}/join', function() { 
+            return response()->json(['message' => 'Hive feature is coming soon']); 
+        });
+        Route::delete('/channels/{id}/leave', function() { 
+            return response()->json(['message' => 'Hive feature is coming soon']); 
+        });
         
-        // Communities endpoints
-        Route::get('/communities', [\App\Http\Controllers\Hive\HiveController::class, 'getCommunities']);
-        Route::post('/communities/{id}/join', [\App\Http\Controllers\Hive\HiveController::class, 'joinCommunity']);
-        Route::delete('/communities/{id}/leave', [\App\Http\Controllers\Hive\HiveController::class, 'leaveCommunity']);
+        // Communities endpoints - using temporary controller for graceful error handling
+        Route::get('/communities', [\App\Http\Controllers\Hive\HiveTemporaryController::class, 'getCommunities']);
+        Route::post('/communities/{id}/join', function() { 
+            return response()->json(['message' => 'Hive feature is coming soon']); 
+        });
+        Route::delete('/communities/{id}/leave', function() { 
+            return response()->json(['message' => 'Hive feature is coming soon']); 
+        });
         
-        // Activity feed endpoint
-        Route::get('/activity', [\App\Http\Controllers\Hive\HiveController::class, 'getActivity']);
+        // Activity feed endpoint - using temporary controller for graceful error handling
+        Route::get('/activity', [\App\Http\Controllers\Hive\HiveTemporaryController::class, 'getActivity']);
     });
     
     // Additional points route for compatibility
