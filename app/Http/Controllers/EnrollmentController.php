@@ -69,15 +69,20 @@ class EnrollmentController extends Controller
             $reference = 'enroll_' . $course->id . '_' . uniqid();
             
             // Initialize payment
+            // Convert dollar price to naira at 1600 exchange rate
+            $nairaPrice = $course->price * 1600;
+            
             $initResponse = $this->paystackService->initializeTransaction(
                 $user->email,
-                $course->price,
+                $nairaPrice,
                 route('enrollment.verify'),
                 [
                     'enrollment_id' => $enrollment->id,
                     'course_id' => $course->id,
                     'user_id' => $user->id,
-                    'payment_type' => 'course_enrollment'
+                    'payment_type' => 'course_enrollment',
+                    'original_price' => $course->price,
+                    'exchange_rate' => 1600
                 ]
             );
             
@@ -103,9 +108,12 @@ class EnrollmentController extends Controller
                     'transaction_reference' => $paymentData['reference'],
                     'payment_type' => 'course_enrollment',
                     'status' => 'pending',
-                    'amount' => $course->price,
+                    'amount' => $nairaPrice,
                     'course_id' => $course->id,
-                    'response_data' => $initResponse['data']
+                    'response_data' => array_merge($initResponse['data'], [
+                        'original_price_usd' => $course->price,
+                        'exchange_rate' => 1600
+                    ])
                 ]);
             } catch (\Illuminate\Database\QueryException $e) {
                 // Just log the error but don't stop execution if payment_logs table doesn't exist
@@ -168,13 +176,21 @@ class EnrollmentController extends Controller
                 $paymentLog = PaymentLog::where('transaction_reference', $reference)->first();
                 
                 if (!$paymentLog) {
+                    // Calculate naira price
+                    $dollarPrice = $enrollment->course->price;
+                    $nairaPrice = $dollarPrice * 1600;
+                    
                     $paymentLog = PaymentLog::create([
                         'user_id' => $enrollment->user_id,
                         'transaction_reference' => $reference,
                         'payment_type' => 'course_enrollment',
                         'status' => 'pending',
-                        'amount' => $enrollment->course->price,
-                        'course_id' => $enrollment->course_id
+                        'amount' => $nairaPrice,
+                        'course_id' => $enrollment->course_id,
+                        'response_data' => [
+                            'original_price_usd' => $dollarPrice,
+                            'exchange_rate' => 1600
+                        ]
                     ]);
                 }
             } catch (\Illuminate\Database\QueryException $e) {
@@ -343,14 +359,21 @@ class EnrollmentController extends Controller
             $paymentLog = PaymentLog::where('transaction_reference', $reference)->first();
             
             if (!$paymentLog) {
+                // Calculate naira price for record keeping
+                $dollarPrice = $enrollment->course->price;
+                $nairaPrice = $dollarPrice * 1600;
+                
                 $paymentLog = PaymentLog::create([
                     'user_id' => $enrollment->user_id,
                     'transaction_reference' => $reference,
                     'payment_type' => 'course_enrollment',
                     'status' => 'success',
-                    'amount' => $enrollment->course->price,
+                    'amount' => $nairaPrice,
                     'course_id' => $enrollment->course_id,
-                    'response_data' => $paymentData
+                    'response_data' => array_merge($paymentData, [
+                        'original_price_usd' => $dollarPrice,
+                        'exchange_rate' => 1600
+                    ])
                 ]);
             } else {
                 $paymentLog->status = 'success';
@@ -433,7 +456,11 @@ class EnrollmentController extends Controller
                 'status' => 'success',
                 'amount' => 0,
                 'course_id' => $course->id,
-                'metadata' => json_encode(['free_course' => true])
+                'response_data' => [
+                    'free_course' => true,
+                    'original_price_usd' => 0,
+                    'exchange_rate' => 1600
+                ]
             ]);
         } catch (\Illuminate\Database\QueryException $e) {
             // Just log the error but don't stop execution if payment_logs table doesn't exist
