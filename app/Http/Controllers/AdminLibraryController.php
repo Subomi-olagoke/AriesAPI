@@ -354,11 +354,9 @@ class AdminLibraryController extends Controller
         $library = OpenLibrary::findOrFail($id);
         $generateCover = $request->has('generate_cover');
         
-        // Validate minimum content requirement
+        // For admins, we don't enforce a minimum content requirement
+        // Get content count for information purposes only
         $contentCount = $library->contents()->count();
-        if ($contentCount < 5) {
-            return redirect()->back()->with('error', 'Library must have at least 5 content items to be approved.');
-        }
         
         try {
             // Approve via API
