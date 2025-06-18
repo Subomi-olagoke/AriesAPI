@@ -363,6 +363,8 @@ class CogniController extends Controller
                         $allItems[] = [
                             'id' => $item['id'],
                             'type' => $item['type'],
+                            'title' => $item['title'] ?? 'Untitled',
+                            'description' => $item['description'] ?? '',
                             'notes' => 'Internal content: ' . ($item['title'] ?? 'Untitled')
                         ];
                     }
