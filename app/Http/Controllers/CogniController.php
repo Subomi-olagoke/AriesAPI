@@ -1192,7 +1192,9 @@ class CogniController extends Controller
                     'description' => substr($readlistData['description'] ?? 'No description', 0, 100),
                     'failed_items' => $failedItems
                 ]);
-                return null;
+                
+                // Return error response with debugging information
+                throw new \Exception('Failed to save any items to readlist. External items: ' . count($externalItems) . ', Internal items: ' . count($internalItems) . ', Failed items: ' . json_encode($failedItems));
             }
             
             \DB::commit();
