@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Jobs\ProcessCogniQuestion;
 
 class CogniService
 {
@@ -25,13 +26,43 @@ class CogniService
     }
 
     /**
-     * Ask a question to Cogni (OpenAI's ChatGPT)
+     * Ask a question to Cogni (OpenAI's ChatGPT) - Dispatches a job for asynchronous processing
+     *
+     * @param string $question The user's question
+     * @param array $context Additional context or previous messages
+     * @param \App\Models\User|null $user The authenticated user (optional)
+     * @param string|null $conversationId The conversation ID (optional)
+     * @return array Response indicating success of job dispatch
+     */
+    public function askQuestion(string $question, array $context = [], ?\App\Models\User $user = null, ?string $conversationId = null): array
+    {
+        if (empty($this->apiKey)) {
+            Log::error('OpenAI API key is not configured');
+            return [
+                'success' => false,
+                'message' => 'Cogni service is not properly configured',
+                'code' => 500
+            ];
+        }
+
+        // Dispatch the job to handle the actual API call asynchronously
+        ProcessCogniQuestion::dispatch($question, $context, $user, $conversationId);
+
+        return [
+            'success' => true,
+            'message' => 'Your question is being processed. Please wait for the response.',
+            'code' => 202 // Accepted
+        ];
+    }
+
+    /**
+     * Internal method to ask a question to Cogni (OpenAI's ChatGPT) synchronously
      *
      * @param string $question The user's question
      * @param array $context Additional context or previous messages
      * @return array Response with success/error status and answer
      */
-    public function askQuestion(string $question, array $context = []): array
+    public function askQuestionInternal(string $question, array $context = []): array
     {
         if (empty($this->apiKey)) {
             Log::error('OpenAI API key is not configured');
@@ -120,7 +151,7 @@ class CogniService
     {
         $prompt = "Explain the concept of '{$topic}' at a {$level} level. Include key points, examples, and any relevant background information.";
         
-        return $this->askQuestion($prompt);
+        return $this->askQuestionInternal($prompt);
     }
 
     /**
@@ -134,7 +165,7 @@ class CogniService
     {
         $prompt = "Create a quiz with {$questionCount} questions about '{$topic}'. For each question, provide 4 possible answers and indicate the correct one. Format the response as JSON with the following structure: { \"questions\": [ { \"question\": \"Question text\", \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"], \"correctAnswer\": 0 } ] }";
         
-        $result = $this->askQuestion($prompt);
+        $result = $this->askQuestionInternal($prompt);
         
         if (!$result['success']) {
             return $result;
@@ -211,7 +242,7 @@ class CogniService
         $prompt .= "  ]\n";
         $prompt .= "}";
         
-        $result = $this->askQuestion($prompt);
+        $result = $this->askQuestionInternal($prompt);
         
         if (!$result['success']) {
             return $result;
@@ -280,7 +311,7 @@ class CogniService
         $prompt .= "Description: {$description}\n\n";
         $prompt .= "Format your response as a JSON array: [\"topic1\", \"topic2\", \"topic3\"]\n";
         
-        $topicsResult = $this->askQuestion($prompt);
+        $topicsResult = $this->askQuestionInternal($prompt);
         $searchTopics = [];
         
         if ($topicsResult['success'] && isset($topicsResult['answer'])) {
@@ -465,7 +496,7 @@ class CogniService
         $prompt .= "  ]\n";
         $prompt .= "}";
         
-        $result = $this->askQuestion($prompt);
+        $result = $this->askQuestionInternal($prompt);
         
         if (!$result['success']) {
             return $result;
@@ -542,7 +573,7 @@ class CogniService
         $prompt .= "  \"recommendations\": [\"Topic 1\", \"Topic 2\", ...]\n";
         $prompt .= "}";
         
-        return $this->askQuestion($prompt);
+        return $this->askQuestionInternal($prompt);
     }
     
     /**
@@ -573,7 +604,7 @@ class CogniService
         $prompt .= "  ...\n";
         $prompt .= "]\n";
         
-        return $this->askQuestion($prompt);
+        return $this->askQuestionInternal($prompt);
     }
     
     /**
@@ -629,7 +660,7 @@ class CogniService
         $prompt .= "- Focus on educational value and coherence when creating libraries\n";
         $prompt .= "- Use clear, descriptive names that reflect the content\n";
         
-        $result = $this->askQuestion($prompt);
+        $result = $this->askQuestionInternal($prompt);
         
         if (!$result['success']) {
             return $result;

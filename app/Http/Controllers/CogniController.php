@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use App\Jobs\ProcessCogniQuestion; // Import the job
 
 class CogniController extends Controller
 {
@@ -80,46 +81,20 @@ class CogniController extends Controller
             return $this->handleWebSearchRequest($user, $question, $context, $conversationId);
         }
 
-        // Ask the question with context
-        $result = $this->cogniService->askQuestion($question, $context);
+        // Dispatch the job to process the question asynchronously
+        // The job will handle the CogniService call and database storage.
+        ProcessCogniQuestion::dispatch($question, $context, $user, $conversationId, function($result) use ($conversationKey) {
+            // This callback is executed when the job finishes. You can update frontend via websockets/broadcasting here.
+            // For now, we'll just log or potentially broadcast a message.
+            Log::info('Cogni question processed by job', ['conversation_id' => $conversationKey, 'result' => $result]);
+        });
 
-        if ($result['success'] && isset($result['answer'])) {
-            // Add assistant's response to context
-            $context[] = [
-                'role' => 'assistant',
-                'content' => $result['answer']
-            ];
-            
-            // Store updated conversation in session
-            // Keep only the last 10 messages to prevent context size issues
-            if (count($context) > 10) {
-                // Keep system message if present, plus last 9 exchanges
-                if ($context[0]['role'] === 'system') {
-                    $context = array_merge(
-                        [$context[0]],
-                        array_slice($context, -9)
-                    );
-                } else {
-                    $context = array_slice($context, -10);
-                }
-            }
-            Session::put($conversationKey, $context);
-            
-            // Optional: Store in database for persistence beyond session
-            $this->storeConversationInDatabase($user, $conversationId, $question, $result['answer']);
-            
-            return response()->json([
-                'success' => true,
-                'answer' => $result['answer'],
-                'conversation_id' => $conversationId
-            ]);
-        }
-
-        // Return error response
         return response()->json([
-            'success' => false,
-            'message' => $result['message'] ?? 'Failed to get an answer from Cogni'
-        ], $result['code'] ?? 500);
+            'success' => true,
+            'message' => 'Your question is being processed. Please wait for the response.',
+            'conversation_id' => $conversationId,
+            'status' => 'processing'
+        ], 202); // 202 Accepted indicates the request has been accepted for processing
     }
 
     /**
@@ -198,37 +173,8 @@ class CogniController extends Controller
         
         return response()->json([
             'success' => true,
-            'history' => $formattedHistory,
-            'conversation_id' => $conversationId
+            'history' => $formattedHistory
         ]);
-    }
-
-    /**
-     * Store conversation in database for persistence
-     * 
-     * @param User $user
-     * @param string $conversationId
-     * @param string $question
-     * @param string $answer
-     */
-    private function storeConversationInDatabase($user, $conversationId, $question, $answer)
-    {
-        if (!$user) {
-            // Skip storing if no user is authenticated
-            return;
-        }
-        
-        try {
-            \App\Models\CogniConversation::create([
-                'user_id' => $user->id,
-                'conversation_id' => $conversationId,
-                'question' => $question,
-                'answer' => $answer
-            ]);
-        }
-    catch (\Exception $e) {
-            Log::error('Failed to store conversation: ' . $e->getMessage());
-        }
     }
 
     /**
@@ -276,13 +222,8 @@ class CogniController extends Controller
             $moderationResult = $contentModerationService->analyzeText($description);
             
             if (!$moderationResult['isAllowed']) {
-                // Store this interaction in the conversation history
-                $this->storeConversationInDatabase(
-                    $user, 
-                    $conversationId, 
-                    $question, 
-                    "I'm sorry, but I can't create a readlist on this topic as it contains inappropriate content."
-                );
+                // NOTE: The conversation storing is now handled by the job (ProcessCogniQuestion)
+                // For a synchronous response here, we just return the error.
                 
                 return response()->json([
                     'success' => false,
@@ -858,14 +799,6 @@ class CogniController extends Controller
                 'debug_info' => $diagnostics
             ]);
         }
-        
-        try {
-            // This is a placeholder - we'll never reach this code due to the return above
-            $dummy = true;
-        }
-        catch (\Exception $e) {
-            return $this->handleReadlistError($e, $description ?? '', $question, $user, $conversationId);
-        }
     }
 
     /**
@@ -1388,8 +1321,7 @@ class CogniController extends Controller
                     
                     $readlistItem->save();
                     $addedItems++;
-                }
-    catch (\Exception $e) {
+                } catch (\Exception $e) {
                     \Log::error('Failed to add external item to readlist', [
                         'readlist_id' => $readlist->id,
                         'item' => $item,
@@ -1476,8 +1408,7 @@ class CogniController extends Controller
                             'type' => 'internal'
                         ];
                     }
-                }
-    catch (\Exception $e) {
+                } catch (\Exception $e) {
                     \Log::error('Failed to add internal item to readlist', [
                         'readlist_id' => $readlist->id,
                         'item' => $item,
@@ -1521,8 +1452,7 @@ class CogniController extends Controller
             
             return $readlist;
             
-        }
-    catch (\Exception $e) {
+        } catch (\Exception $e) {
             if (isset($readlist) && \DB::transactionLevel() > 0) {
                 \DB::rollBack();
             }
@@ -3462,3 +3392,32 @@ class CogniController extends Controller
         
         return $result;
     }
+
+    /**
+     * Store conversation in database for persistence
+     * 
+     * @param User $user
+     * @param string $conversationId
+     * @param string $question
+     * @param string $answer
+     */
+    private function storeConversationInDatabase($user, $conversationId, $question, $answer)
+    {
+        if (!$user) {
+            // Skip storing if no user is authenticated
+            return;
+        }
+        
+        try {
+            \App\Models\CogniConversation::create([
+                'user_id' => $user->id,
+                'conversation_id' => $conversationId,
+                'question' => $question,
+                'answer' => $answer
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to store conversation: ' . $e->getMessage());
+        }
+    }
+
+}

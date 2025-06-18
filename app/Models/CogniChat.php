@@ -101,6 +101,7 @@ class CogniChat extends Model
     public static function getChatsForUser($userId)
     {
         return static::where('user_id', $userId)
+            ->with('user', 'messages')
             ->orderBy('updated_at', 'desc')
             ->get();
     }
