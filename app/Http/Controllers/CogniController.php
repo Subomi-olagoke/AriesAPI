@@ -1942,17 +1942,17 @@ class CogniController extends Controller
         // Get relevant courses if requested
         if ($includeCourses) {
             $courses = \App\Models\Course::when($topic, function ($query, $topic) {
-                    return $query->where('name', 'like', "%{$topic}%")
+                    return $query->where('title', 'like', "%{$topic}%")
                         ->orWhere('description', 'like', "%{$topic}%");
                 })
                 ->limit(50)
-                ->get(['id', 'name', 'description', 'user_id', 'created_at']);
+                ->get(['id', 'title', 'description', 'user_id', 'created_at']);
             
             foreach ($courses as $course) {
                 $availableContent[] = [
                     'id' => $course->id,
                     'type' => 'course',
-                    'title' => $course->name,
+                    'title' => $course->title,
                     'description' => $course->description,
                     'user_id' => $course->user_id,
                     'created_at' => $course->created_at
@@ -2129,18 +2129,18 @@ class CogniController extends Controller
         
         foreach ($courseKeywords as $keyword) {
             if (strlen($keyword) > 3) {
-                $courseQuery->orWhere('name', 'like', "%{$keyword}%")
+                $courseQuery->orWhere('title', 'like', "%{$keyword}%")
                     ->orWhere('description', 'like', "%{$keyword}%");
             }
         }
         
-        $courses = $courseQuery->limit(30)->get(['id', 'name', 'description', 'user_id', 'created_at']);
+        $courses = $courseQuery->limit(30)->get(['id', 'title', 'description', 'user_id', 'created_at']);
         
         foreach ($courses as $course) {
             $internalContent[] = [
                 'id' => $course->id,
                 'type' => 'course',
-                'title' => $course->name,
+                'title' => $course->title,
                 'description' => $course->description,
                 'user_id' => $course->user_id,
                 'created_at' => $course->created_at
