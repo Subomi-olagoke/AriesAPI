@@ -25,12 +25,12 @@ class ProcessCogniQuestion implements ShouldQueue
     /**
      * Create a new job instance.
      */
-    public function __construct(string $question, array $context, ?User $user, string $conversationId, ?Closure $callback = null)
+    public function __construct(string $question, array $context, ?User $user, ?string $conversationId, ?Closure $callback = null)
     {
         $this->question = $question;
         $this->context = $context;
         $this->user = $user;
-        $this->conversationId = $conversationId;
+        $this->conversationId = $conversationId ?? uniqid('conv_');
         $this->callback = $callback;
     }
 
@@ -105,10 +105,13 @@ class ProcessCogniQuestion implements ShouldQueue
         }
     }
 
-    private function storeConversationInDatabase(?User $user, string $conversationId, string $question, string $answer)
+    private function storeConversationInDatabase(?User $user, ?string $conversationId, string $question, string $answer)
     {
-        if (!$user) {
-            Log::warning('Attempted to store conversation without authenticated user for conversation ID: ' . $conversationId);
+        if (!$user || !$conversationId) {
+            Log::warning('Attempted to store conversation without authenticated user or conversation ID', [
+                'user_id' => $user?->id,
+                'conversation_id' => $conversationId
+            ]);
             return;
         }
 
