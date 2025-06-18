@@ -1031,11 +1031,27 @@ class CogniController extends Controller
             \Log::info('Starting to add items to readlist', [
                 'readlist_id' => $readlist->id,
                 'external_items_to_add' => count($externalItems),
-                'internal_items_to_add' => count($internalItems)
+                'internal_items_to_add' => count($internalItems),
+                'external_items_sample' => array_slice($externalItems, 0, 2), // Log first 2 external items
+                'internal_items_sample' => array_slice($internalItems, 0, 2)  // Log first 2 internal items
             ]);
             
             // Add all external items
-            foreach ($externalItems as $item) {
+            \Log::info('Starting external items processing', [
+                'readlist_id' => $readlist->id,
+                'external_items_count' => count($externalItems),
+                'external_items_empty' => empty($externalItems)
+            ]);
+            
+            foreach ($externalItems as $index => $item) {
+                \Log::info('Processing external item', [
+                    'readlist_id' => $readlist->id,
+                    'item_index' => $index,
+                    'item_title' => $item['title'] ?? 'No title',
+                    'item_url' => $item['url'] ?? 'No URL',
+                    'item_type' => $item['type'] ?? 'No type'
+                ]);
+                
                 try {
                     $readlistItem = new \App\Models\ReadlistItem([
                         'readlist_id' => $readlist->id,
