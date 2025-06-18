@@ -7,6 +7,8 @@ use App\Models\CogniChatMessage;
 use App\Services\CogniService;
 use App\Services\PersonalizedFactsService;
 use App\Services\YouTubeService;
+use App\Services\EnhancedTopicExtractionService;
+use App\Services\AIReadlistImageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -20,15 +22,21 @@ class CogniController extends Controller
     protected $cogniService;
     protected $youtubeService;
     protected $factsService;
+    protected $topicExtractionService;
+    protected $aiImageService;
 
     public function __construct(
         CogniService $cogniService, 
         YouTubeService $youtubeService,
-        PersonalizedFactsService $factsService
+        PersonalizedFactsService $factsService,
+        EnhancedTopicExtractionService $topicExtractionService,
+        AIReadlistImageService $aiImageService
     ) {
         $this->cogniService = $cogniService;
         $this->youtubeService = $youtubeService;
         $this->factsService = $factsService;
+        $this->topicExtractionService = $topicExtractionService;
+        $this->aiImageService = $aiImageService;
     }
 
     /**
@@ -197,16 +205,22 @@ class CogniController extends Controller
         ];
         
         $description = '';
+        $enhancedTopicInfo = [];
         
         try {
-            $debugLogs['process_steps'][] = 'Starting readlist creation process';
+            $debugLogs['process_steps'][] = 'Starting enhanced readlist creation process';
             
-            // Extract the topic from the question
-            // Remove common phrases like "create a readlist about" to get just the topic
-            $description = preg_replace('/^(cogni,?\s*)?(please\s*)?(create|make|build)(\s+a|\s+me\s+a)?\s+(readlist|reading list)(\s+for\s+me)?(\s+about|\s+on)?\s*/i', '', $question);
-            $description = trim($description);
+            // Get user conversation history for context
+            $conversationHistory = $this->getUserConversationHistory($user, $conversationId);
+            $userInterests = $this->topicExtractionService->analyzeUserInterests($conversationHistory);
             
-            $debugLogs['process_steps'][] = 'Extracted description: "' . $description . '"';
+            $debugLogs['process_steps'][] = 'Analyzed user interests: ' . json_encode($userInterests);
+            
+            // Use enhanced topic extraction
+            $enhancedTopicInfo = $this->topicExtractionService->extractAndEnhanceTopic($question, $userInterests);
+            $description = $enhancedTopicInfo['primary_topic'] ?? $question;
+            
+            $debugLogs['process_steps'][] = 'Enhanced topic extraction result: ' . json_encode($enhancedTopicInfo);
             
             if (empty($description)) {
                 $description = $question; // Use the full question if extraction failed
@@ -222,9 +236,6 @@ class CogniController extends Controller
             $moderationResult = $contentModerationService->analyzeText($description);
             
             if (!$moderationResult['isAllowed']) {
-                // NOTE: The conversation storing is now handled by the job (ProcessCogniQuestion)
-                // For a synchronous response here, we just return the error.
-                
                 return response()->json([
                     'success' => false,
                     'message' => 'Your request contains inappropriate content. Please modify and try again.',
@@ -232,8 +243,9 @@ class CogniController extends Controller
                 ], 400);
             }
             
-            // Search for relevant internal content
-            $internalContent = $this->findRelevantContent($description, $debugLogs);
+            // Search for relevant internal content using enhanced keywords
+            $searchKeywords = $enhancedTopicInfo['search_keywords'] ?? [$description];
+            $internalContent = $this->findRelevantContentWithKeywords($description, $searchKeywords, $debugLogs);
             
             // Check if we have enough internal content before proceeding
             $minRequiredContent = 3; // Minimum number of internal items needed
@@ -241,14 +253,15 @@ class CogniController extends Controller
                 // Not enough internal content, try to get some from the web
                 $debugLogs['process_steps'][] = "Not enough internal content (found " . count($internalContent) . ", need " . $minRequiredContent . "), searching web";
                 \Log::info("Not enough internal content for readlist on '{$description}', searching web", [
-                    'found_content_count' => count($internalContent)
+                    'found_content_count' => count($internalContent),
+                    'enhanced_topic_info' => $enhancedTopicInfo
                 ]);
                 
-                // Get web content using GPT search
+                // Get web content using GPT search with enhanced keywords
                 $searchService = app(\App\Services\GPTSearchService::class);
-                // Log that we're attempting a web search
                 \Log::info("Attempting web search for readlist content", [
                     'query' => $description,
+                    'enhanced_keywords' => $searchKeywords,
                     'gpt_configured' => $searchService->isConfigured()
                 ]);
                 
@@ -279,16 +292,15 @@ class CogniController extends Controller
                     'instagram.com', // May contain inappropriate content
                 ];
                 
-                // Define content options for better results
-                $contentsOptions = [
-                    'highlights' => true, // Get relevant snippets
-                    'text' => true,       // Get full text
-                    'summary' => true     // Get AI-generated summaries when available
-                ];
+                // Use enhanced search query with keywords
+                $enhancedSearchQuery = $description;
+                if (!empty($searchKeywords)) {
+                    $enhancedSearchQuery .= ' ' . implode(' ', array_slice($searchKeywords, 0, 3));
+                }
                 
                 // Perform web search with optimized parameters
                 $webSearchResults = $searchService->search(
-                    $description . " " . $queryType['additional_terms'],
+                    $enhancedSearchQuery . " " . $queryType['additional_terms'],
                     10, 
                     $includeDomains, 
                     true, 
@@ -301,7 +313,7 @@ class CogniController extends Controller
                 // If search failed or returned no results, try a more generic approach
                 if (!$webSearchResults['success'] || empty($webSearchResults['results'])) {
                     \Log::info("First search attempt failed, trying with more generic parameters", [
-                        'query' => $description,
+                        'query' => $enhancedSearchQuery,
                         'success' => $webSearchResults['success'] ?? false,
                         'result_count' => count($webSearchResults['results'] ?? [])
                     ]);
@@ -324,7 +336,7 @@ class CogniController extends Controller
                     'success' => $webSearchResults['success'] ?? false,
                     'result_count' => count($webSearchResults['results'] ?? []),
                     'error' => $webSearchResults['message'] ?? 'No error message',
-                    'full_response' => $webSearchResults
+                    'enhanced_query' => $enhancedSearchQuery
                 ]);
                 
                 // Add web search results to debug logs
@@ -334,26 +346,13 @@ class CogniController extends Controller
                     'error' => $webSearchResults['message'] ?? 'No error message',
                     'search_type' => $webSearchResults['search_type'] ?? 'unknown',
                     'used_fallback' => $webSearchResults['used_fallback'] ?? false,
+                    'enhanced_query' => $enhancedSearchQuery,
                     'results' => $webSearchResults['results'] ?? []
                 ];
                 
                 if ($webSearchResults['success'] && !empty($webSearchResults['results'])) {
                     // Process web search results into standardized readlist items
                     $webItems = $this->processWebSearchResultsToItems($webSearchResults, $description);
-                    
-                    // Create a readlist combining internal and external content
-                    // If we have too few internal items, create a mostly external-based readlist
-                    $readlistTitle = 'Readlist: ' . ucfirst($description);
-                    $readlistDescription = 'A collection of resources about ' . $description;
-                    
-                    // Add additional description text based on content sources
-                    if (count($internalContent) < 2 && !empty($webItems)) {
-                        $readlistDescription .= ' curated primarily from the web.';
-                    } elseif (!empty($webItems)) {
-                        $readlistDescription .= ' curated from platform content and supplemented with web resources.';
-                    } else {
-                        $readlistDescription .= ' curated from platform content.';
-                    }
                     
                     // Combine internal and external content
                     $allItems = [];
@@ -372,6 +371,14 @@ class CogniController extends Controller
                         $allItems[] = $item;
                     }
                     
+                    // Generate intelligent title and description
+                    $readlistTitle = $this->generateIntelligentTitle($enhancedTopicInfo, $allItems);
+                    $readlistDescription = $this->topicExtractionService->generateIntelligentDescription(
+                        $description, 
+                        $allItems, 
+                        $userInterests
+                    );
+                    
                     // Create the readlist
                     $readlistData = [
                         'title' => $readlistTitle,
@@ -382,6 +389,9 @@ class CogniController extends Controller
                     $readlist = $this->createReadlistInDatabase($user, $readlistData);
                     
                     if ($readlist) {
+                        // Generate AI image for the readlist
+                        $this->generateReadlistImage($readlist, $description, $enhancedTopicInfo);
+                        
                         // Create appropriate response based on content sources
                         if (count($internalContent) < 2) {
                             $response = "I found limited internal content about " . $description . ", so I've created a readlist with " . 
@@ -399,83 +409,70 @@ class CogniController extends Controller
                             'success' => true,
                             'answer' => $response,
                             'conversation_id' => $conversationId,
-                            'debug_info' => $debugLogs
+                            'readlist' => $readlist->load('items'),
+                            'enhanced_topic_info' => $enhancedTopicInfo
                         ]);
                     }
                 }
             }
             
-            // If we reach here, we either have enough internal content or web search failed
-            // Create a readlist with just internal content
-            if (!empty($internalContent)) {
-                $readlistTitle = 'Readlist: ' . ucfirst($description);
-                $readlistDescription = 'A collection of resources about ' . $description . ' curated from platform content.';
+            // Generate readlist with available content (internal + potentially external)
+            $readlistTitle = $this->generateIntelligentTitle($enhancedTopicInfo, $internalContent);
+            $readlistDescription = $this->topicExtractionService->generateIntelligentDescription(
+                $description, 
+                $internalContent, 
+                $userInterests
+            );
+            
+            $readlistData = [
+                'title' => $readlistTitle,
+                'description' => $readlistDescription,
+                'items' => $internalContent
+            ];
+            
+            $readlist = $this->createReadlistInDatabase($user, $readlistData);
+            
+            if ($readlist) {
+                // Generate AI image for the readlist
+                $this->generateReadlistImage($readlist, $description, $enhancedTopicInfo);
                 
-                $allItems = [];
-                foreach ($internalContent as $item) {
-                    $allItems[] = [
-                        'id' => $item['id'],
-                        'type' => $item['type'],
-                        'notes' => 'Internal content: ' . ($item['title'] ?? 'Untitled')
-                    ];
+                // Get the actual item count
+                $internalItemCount = $readlist->items()->whereNotNull('item_id')->count();
+                $externalItemCount = $readlist->items()->whereNull('item_id')->whereNotNull('url')->count();
+                $totalCount = $internalItemCount + $externalItemCount;
+                
+                $response = "I've created a readlist about " . $description . " with ";
+                
+                if ($internalItemCount > 0) {
+                    $response .= $internalItemCount . " internal resource" . ($internalItemCount != 1 ? "s" : "");
+                    if ($externalItemCount > 0) {
+                        $response .= " and ";
+                    }
                 }
                 
-                $readlistData = [
-                    'title' => $readlistTitle,
-                    'description' => $readlistDescription,
-                    'items' => $allItems
-                ];
-                
-                $readlist = $this->createReadlistInDatabase($user, $readlistData);
-                
-                if ($readlist) {
-                    $response = "I've created a readlist about " . $description . " with " . count($internalContent) . " resources from our platform.";
-                    
-                    $this->storeConversationInDatabase($user, $conversationId, $question, $response);
-                    
-                    return response()->json([
-                        'success' => true,
-                        'answer' => $response,
-                        'conversation_id' => $conversationId,
-                        'debug_info' => $debugLogs
-                    ]);
+                if ($externalItemCount > 0) {
+                    $response .= $externalItemCount . " resource" . ($externalItemCount != 1 ? "s" : "") . " from the web";
                 }
+                
+                $response .= ".";
+                
+                $this->storeConversationInDatabase($user, $conversationId, $question, $response);
+                
+                return response()->json([
+                    'success' => true,
+                    'answer' => $response,
+                    'conversation_id' => $conversationId,
+                    'readlist' => $readlist->load('items'),
+                    'item_count' => $totalCount,
+                    'enhanced_topic_info' => $enhancedTopicInfo
+                ]);
             }
             
-            // If we reach here, we couldn't create a readlist
-            $searchIsConfigured = app(\App\Services\GPTSearchService::class)->isConfigured();
-            
-            $errorMsg = "I couldn't find enough relevant content to create a readlist about " . $description . ". ";
-            
-            if (empty($internalContent)) {
-                $errorMsg .= "I searched our platform but found no content related to this topic. ";
-                
-                if ($searchIsConfigured) {
-                    $errorMsg .= "I also tried searching the web but couldn't find suitable additional resources. ";
-                }
-            } else {
-                $errorMsg .= "I had trouble creating a coherent readlist with the available content. ";
-                
-                if ($searchIsConfigured) {
-                    $errorMsg .= "I also tried supplementing with web content but couldn't find relevant additional resources. ";
-                }
-            }
-            
-            // Suggest alternatives
-            $errorMsg .= "Would you like me to try a different topic? Popular topics include technology, science, history, or business.";
-            
-            $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
-            
-            // Include diagnostics in the response
-            return response()->json([
-                'success' => true,
-                'answer' => $errorMsg,
-                'conversation_id' => $conversationId,
-                'debug_info' => $debugLogs
-            ]);
+            // If we get here, something went wrong
+            throw new \Exception('Failed to create readlist despite having content');
             
         } catch (\Exception $e) {
-            return $this->handleReadlistError($e, $description ?? '', $question, $user, $conversationId);
+            return $this->handleReadlistError($e, $description, $question, $user, $conversationId);
         }
     }
 
@@ -576,112 +573,27 @@ class CogniController extends Controller
     }
 
     /**
-     * Find relevant content for readlist creation
+     * Find relevant content using enhanced keywords
      * 
-     * @param string $description
-     * @param array &$debugLogs Reference to debug logs array
-     * @return array
+     * @param string $description The main description
+     * @param array $keywords Enhanced search keywords
+     * @param array $debugLogs Debug logs array
+     * @return array Found content
      */
-    private function findRelevantContent($description, &$debugLogs = null)
+    private function findRelevantContentWithKeywords(string $description, array $keywords, array &$debugLogs = null)
     {
         $internalContent = [];
         
-        // Log the search description for debugging
-        \Log::info("Searching for relevant content for readlist", [
-            'description' => $description,
-            'length' => strlen($description)
-        ]);
-        
-        // Track timing for performance analysis
-        $startTime = microtime(true);
-        
-        // Extract keywords with more detailed logging
-        $keywords = preg_split('/[\s,]+/', $description);
-        $originalKeywordCount = count($keywords);
-        
-        // Filter keywords with more detailed logging
-        $keywords = array_filter($keywords, function($word) {
-            return strlen($word) > 3; // Only use words longer than 3 characters
-        });
-        $filteredKeywordCount = count($keywords);
-        
-        if ($debugLogs !== null) {
-            $debugLogs['process_steps'][] = 'Searching for internal content with keywords: ' . implode(', ', $keywords);
-            $debugLogs['internal_content']['keyword_analysis'] = [
-                'original_count' => $originalKeywordCount,
-                'filtered_count' => $filteredKeywordCount,
-                'original_keywords' => array_values(preg_split('/[\s,]+/', $description)),
-                'filtered_keywords' => array_values($keywords)
-            ];
-        }
-        
-        // If no good keywords, use the whole description
-        if (empty($keywords)) {
-            $keywords = [$description];
-            if ($debugLogs !== null) {
-                $debugLogs['process_steps'][] = 'No good keywords found, using full description as keyword';
-                $debugLogs['internal_content']['keyword_fallback'] = true;
-            }
-            
-            \Log::warning("No suitable keywords found for content search, using full description", [
-                'description' => $description
-            ]);
-        }
-        
-        // Track exact query used (case sensitive)
-        if ($debugLogs !== null) {
-            $debugLogs['internal_content']['exact_search_terms'] = [
-                'description' => $description,
-                'keywords_case_sensitive' => array_values($keywords)
-            ];
-        }
-        
-        // Search for relevant courses with enhanced logging
+        // Search for relevant courses using enhanced keywords
         $courseQuery = \App\Models\Course::query();
         foreach ($keywords as $keyword) {
-            $courseQuery->orWhere('title', 'like', "%{$keyword}%")
-                ->orWhere('description', 'like', "%{$keyword}%");
-        }
-        
-        // Record exact SQL for debugging
-        $courseQuerySql = $courseQuery->toSql();
-        $courseQueryBindings = $courseQuery->getBindings();
-        
-        \Log::debug("Course search query", [
-            'sql' => $courseQuerySql,
-            'bindings' => $courseQueryBindings
-        ]);
-        
-        $courses = $courseQuery->limit(30)->get(['id', 'title', 'description', 'user_id', 'created_at']);
-        
-        if ($debugLogs !== null) {
-            $debugLogs['internal_content']['courses_found'] = count($courses);
-            $debugLogs['internal_content']['course_query'] = [
-                'keywords' => $keywords,
-                'sql' => $courseQuerySql,
-                'bindings' => $courseQueryBindings
-            ];
-            $debugLogs['internal_content']['course_titles'] = $courses->pluck('title')->toArray();
-            
-            // Add detailed match analysis for each course
-            $courseMatches = [];
-            foreach ($courses as $course) {
-                $matchedKeywords = [];
-                foreach ($keywords as $keyword) {
-                    if (stripos($course->title, $keyword) !== false || stripos($course->description, $keyword) !== false) {
-                        $matchedKeywords[] = $keyword;
-                    }
-                }
-                
-                $courseMatches[] = [
-                    'id' => $course->id,
-                    'title' => $course->title,
-                    'matched_keywords' => $matchedKeywords,
-                    'match_count' => count($matchedKeywords)
-                ];
+            if (strlen($keyword) > 3) {
+                $courseQuery->orWhere('title', 'like', "%{$keyword}%")
+                    ->orWhere('description', 'like', "%{$keyword}%");
             }
-            $debugLogs['internal_content']['course_match_details'] = $courseMatches;
         }
+        
+        $courses = $courseQuery->limit(20)->get(['id', 'title', 'description', 'user_id', 'created_at']);
         
         foreach ($courses as $course) {
             $internalContent[] = [
@@ -694,52 +606,16 @@ class CogniController extends Controller
             ];
         }
         
-        // Search for relevant posts with enhanced logging
+        // Search for relevant posts using enhanced keywords
         $postQuery = \App\Models\Post::query();
         foreach ($keywords as $keyword) {
-            $postQuery->orWhere('title', 'like', "%{$keyword}%")
-                ->orWhere('body', 'like', "%{$keyword}%");
+            if (strlen($keyword) > 3) {
+                $postQuery->orWhere('title', 'like', "%{$keyword}%")
+                    ->orWhere('body', 'like', "%{$keyword}%");
+            }
         }
-        
-        // Record exact SQL for debugging
-        $postQuerySql = $postQuery->toSql();
-        $postQueryBindings = $postQuery->getBindings();
-        
-        \Log::debug("Post search query", [
-            'sql' => $postQuerySql,
-            'bindings' => $postQueryBindings
-        ]);
         
         $posts = $postQuery->limit(30)->get(['id', 'title', 'body', 'user_id', 'created_at']);
-        
-        if ($debugLogs !== null) {
-            $debugLogs['internal_content']['posts_found'] = count($posts);
-            $debugLogs['internal_content']['post_query'] = [
-                'keywords' => $keywords,
-                'sql' => $postQuerySql,
-                'bindings' => $postQueryBindings
-            ];
-            $debugLogs['internal_content']['post_titles'] = $posts->pluck('title')->toArray();
-            
-            // Add detailed match analysis for each post
-            $postMatches = [];
-            foreach ($posts as $post) {
-                $matchedKeywords = [];
-                foreach ($keywords as $keyword) {
-                    if (stripos($post->title, $keyword) !== false || stripos($post->body, $keyword) !== false) {
-                        $matchedKeywords[] = $keyword;
-                    }
-                }
-                
-                $postMatches[] = [
-                    'id' => $post->id,
-                    'title' => $post->title ?? 'Untitled Post',
-                    'matched_keywords' => $matchedKeywords,
-                    'match_count' => count($matchedKeywords)
-                ];
-            }
-            $debugLogs['internal_content']['post_match_details'] = $postMatches;
-        }
         
         foreach ($posts as $post) {
             $internalContent[] = [
@@ -752,37 +628,151 @@ class CogniController extends Controller
             ];
         }
         
-        // Calculate search time
-        $endTime = microtime(true);
-        $searchTime = round(($endTime - $startTime) * 1000, 2); // in milliseconds
-        
         if ($debugLogs !== null) {
-            $debugLogs['internal_content']['total_found'] = count($internalContent);
-            $debugLogs['internal_content']['search_time_ms'] = $searchTime;
-            $debugLogs['process_steps'][] = 'Found ' . count($internalContent) . ' internal content items in ' . $searchTime . 'ms';
-            
-            // Add information about content distribution
-            $types = [];
-            foreach ($internalContent as $item) {
-                $type = $item['type'] ?? 'unknown';
-                if (!isset($types[$type])) {
-                    $types[$type] = 0;
-                }
-                $types[$type]++;
-            }
-            $debugLogs['internal_content']['type_distribution'] = $types;
-        }
-        
-        // Log empty results for debugging
-        if (count($internalContent) == 0) {
-            \Log::warning("No internal content found for readlist query", [
-                'description' => $description,
-                'keywords' => $keywords,
-                'search_time_ms' => $searchTime
-            ]);
+            $debugLogs['internal_content'] = [
+                'courses_found' => count($courses),
+                'posts_found' => count($posts),
+                'total_items' => count($internalContent),
+                'keywords_used' => $keywords
+            ];
         }
         
         return $internalContent;
+    }
+    
+    /**
+     * Generate intelligent title for readlist
+     * 
+     * @param array $enhancedTopicInfo Enhanced topic information
+     * @param array $contentItems Content items
+     * @return string Generated title
+     */
+    private function generateIntelligentTitle(array $enhancedTopicInfo, array $contentItems): string
+    {
+        $primaryTopic = $enhancedTopicInfo['primary_topic'] ?? 'Learning Resources';
+        $category = $enhancedTopicInfo['category'] ?? 'other';
+        $learningLevel = $enhancedTopicInfo['learning_level'] ?? 'beginner';
+        
+        // Create contextual title based on category and level
+        $prefix = '';
+        switch ($category) {
+            case 'technology':
+                $prefix = 'Tech Learning: ';
+                break;
+            case 'science':
+                $prefix = 'Science & Discovery: ';
+                break;
+            case 'art':
+                $prefix = 'Creative Arts: ';
+                break;
+            case 'business':
+                $prefix = 'Business & Strategy: ';
+                break;
+            case 'health':
+                $prefix = 'Health & Wellness: ';
+                break;
+            case 'history':
+                $prefix = 'History & Culture: ';
+                break;
+            default:
+                $prefix = 'Learning Journey: ';
+        }
+        
+        // Add level indicator for advanced topics
+        if ($learningLevel === 'advanced') {
+            $prefix = 'Advanced ' . $prefix;
+        } elseif ($learningLevel === 'intermediate') {
+            $prefix = 'Intermediate ' . $prefix;
+        }
+        
+        return $prefix . ucfirst($primaryTopic);
+    }
+    
+    /**
+     * Generate AI image for readlist
+     * 
+     * @param \App\Models\Readlist $readlist The readlist
+     * @param string $topic The main topic
+     * @param array $enhancedTopicInfo Enhanced topic information
+     * @return void
+     */
+    private function generateReadlistImage(\App\Models\Readlist $readlist, string $topic, array $enhancedTopicInfo): void
+    {
+        try {
+            // Extract keywords from readlist content
+            $keywords = $this->aiImageService->extractKeywordsFromReadlist($readlist);
+            
+            // Add enhanced topic keywords
+            if (!empty($enhancedTopicInfo['search_keywords'])) {
+                $keywords = array_merge($keywords, $enhancedTopicInfo['search_keywords']);
+            }
+            
+            // Remove duplicates and limit
+            $keywords = array_unique($keywords);
+            $keywords = array_slice($keywords, 0, 8);
+            
+            // Generate the image asynchronously to avoid blocking the response
+            \Log::info('Starting AI image generation for readlist', [
+                'readlist_id' => $readlist->id,
+                'topic' => $topic,
+                'keywords' => $keywords
+            ]);
+            
+            // For now, we'll generate synchronously, but in production you might want to queue this
+            $imageUrl = $this->aiImageService->generateReadlistImage($readlist, $topic, $keywords);
+            
+            if ($imageUrl) {
+                \Log::info('Successfully generated AI image for readlist', [
+                    'readlist_id' => $readlist->id,
+                    'image_url' => $imageUrl
+                ]);
+            } else {
+                \Log::warning('Failed to generate AI image for readlist', [
+                    'readlist_id' => $readlist->id,
+                    'topic' => $topic
+                ]);
+            }
+        } catch (\Exception $e) {
+            \Log::error('Error generating AI image for readlist', [
+                'readlist_id' => $readlist->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+    
+    /**
+     * Get user conversation history for context
+     * 
+     * @param \App\Models\User $user The user
+     * @param string $conversationId The conversation ID
+     * @return array Conversation history
+     */
+    private function getUserConversationHistory(\App\Models\User $user, string $conversationId): array
+    {
+        try {
+            // Get recent conversation messages for context
+            $messages = \App\Models\CogniConversation::getConversationHistory($conversationId);
+            
+            if ($messages->isNotEmpty()) {
+                return $messages->map(function($message) {
+                    return [
+                        'content' => $message->message,
+                        'role' => $message->role ?? 'user',
+                        'created_at' => $message->created_at
+                    ];
+                })->toArray();
+            }
+            
+            return [];
+        } catch (\Exception $e) {
+            \Log::warning('Failed to get user conversation history', [
+                'user_id' => $user->id,
+                'conversation_id' => $conversationId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [];
+        }
     }
     
     /**

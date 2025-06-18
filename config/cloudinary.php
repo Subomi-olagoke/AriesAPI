@@ -22,6 +22,7 @@ return [
         'lesson_video' => env('CLOUDINARY_LESSON_VIDEO_PRESET', 'lesson_videos'),
         'lesson_thumbnail' => env('CLOUDINARY_LESSON_THUMBNAIL_PRESET', 'lesson_thumbnails'),
         'message_attachment' => env('CLOUDINARY_MESSAGE_ATTACHMENT_PRESET', 'message_attachments'),
+        'readlist_images' => env('CLOUDINARY_READLIST_IMAGES_PRESET', 'readlist_images'),
     ],
     
     /**
@@ -50,6 +51,12 @@ return [
         'post_thumbnail' => [
             'width' => 500,
             'height' => 300,
+            'crop' => 'fill',
+            'quality' => 'auto'
+        ],
+        'readlist_images' => [
+            'width' => 800,
+            'height' => 450,
             'crop' => 'fill',
             'quality' => 'auto'
         ]

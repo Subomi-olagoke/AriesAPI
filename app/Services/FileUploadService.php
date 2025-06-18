@@ -115,7 +115,8 @@ class FileUploadService
             'media/images' => 'post_image',
             'media/videos' => 'post_video',
             'media/thumbnails' => 'post_thumbnail',
-            'message_attachments' => 'message_attachment'
+            'message_attachments' => 'message_attachment',
+            'readlist_images' => 'readlist_images'
         ];
         
         // Find the best match - look for direct matches first
