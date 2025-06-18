@@ -47,62 +47,85 @@ class CogniController extends Controller
      */
     public function ask(Request $request)
     {
-        $request->validate([
-            'question' => 'required|string|max:1000',
-            'conversation_id' => 'nullable|string',
-            'use_web_search' => 'nullable|boolean'
-        ]);
+        try {
+            $request->validate([
+                'question' => 'required|string|max:1000',
+                'conversation_id' => 'nullable|string|max:255'
+            ]);
 
-        $user = Auth::user();
-        $question = $request->input('question');
-        $conversationId = $request->input('conversation_id');
-        $useWebSearch = $request->input('use_web_search', false);
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json([
+                    'error' => 'Unauthorized',
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
 
-        if (empty($conversationId)) {
-            // Generate a new conversation ID if none provided
-            $conversationId = 'conv_' . uniqid() . '_' . time();
+            $question = $request->input('question');
+            $conversationId = $request->input('conversation_id');
+
+            \Log::info('Cogni question received', [
+                'user_id' => $user->id,
+                'question' => substr($question, 0, 100),
+                'conversation_id' => $conversationId,
+                'timestamp' => now()
+            ]);
+
+            // Check if this is a readlist creation request
+            if ($this->isReadlistRequest($question)) {
+                return $this->handleReadlistCreationRequest($user, $question, $conversationId);
+            }
+
+            // Check if this is a web search request
+            if ($this->isWebSearchRequest($question)) {
+                return $this->handleWebSearchRequest($user, $question, [], $conversationId);
+            }
+
+            // Default to regular Cogni processing
+            $response = $this->cogniService->askQuestion($question, [], $user, $conversationId);
+
+            \Log::info('Cogni question processed successfully', [
+                'user_id' => $user->id,
+                'question_length' => strlen($question),
+                'response_length' => strlen($response),
+                'conversation_id' => $conversationId
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'response' => $response,
+                'conversation_id' => $conversationId
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::warning('Validation error in Cogni ask', [
+                'errors' => $e->errors(),
+                'user_id' => auth()->id()
+            ]);
+            return response()->json([
+                'error' => 'Validation failed',
+                'message' => 'Invalid request data',
+                'details' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Error in Cogni ask endpoint', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'user_id' => auth()->id(),
+                'question' => substr($request->input('question', ''), 0, 100)
+            ]);
+
+            return response()->json([
+                'error' => 'Internal server error',
+                'message' => 'An error occurred while processing your request. Please try again.',
+                'debug_info' => config('app.debug') ? [
+                    'error' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ] : null
+            ], 500);
         }
-
-        // Check if this is a readlist creation request
-        if (preg_match('/create\s+a\s+readlist|make\s+a\s+readlist|create\s+readlist|build\s+a\s+readlist/i', $question)) {
-            // This appears to be a readlist creation request
-            return $this->handleReadlistCreationRequest($user, $question, $conversationId);
-        }
-
-        // Check if this is a search request
-        $isSearchRequest = $useWebSearch || 
-                          preg_match('/search(\s+for|\s+the|\s+about)?\s+|find(\s+information|\s+about|\s+articles)?\s+|look\s+up|research/i', $question) ||
-                          preg_match('/what\'s\s+the\s+latest|what\s+is\s+happening|current\s+news|recent\s+developments/i', $question);
-
-        // Get conversation history from session or initialize new one
-        $conversationKey = 'cogni_conversation_' . $conversationId;
-        $context = Session::get($conversationKey, []);
-
-        // Add the new user question to context
-        $context[] = [
-            'role' => 'user',
-            'content' => $question
-        ];
-
-        // Use web search if requested or detected
-        if ($isSearchRequest) {
-            return $this->handleWebSearchRequest($user, $question, $context, $conversationId);
-        }
-
-        // Dispatch the job to process the question asynchronously
-        // The job will handle the CogniService call and database storage.
-        ProcessCogniQuestion::dispatch($question, $context, $user, $conversationId, function($result) use ($conversationKey) {
-            // This callback is executed when the job finishes. You can update frontend via websockets/broadcasting here.
-            // For now, we'll just log or potentially broadcast a message.
-            Log::info('Cogni question processed by job', ['conversation_id' => $conversationKey, 'result' => $result]);
-        });
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Your question is being processed. Please wait for the response.',
-            'conversation_id' => $conversationId,
-            'status' => 'processing'
-        ], 202); // 202 Accepted indicates the request has been accepted for processing
     }
 
     /**
@@ -843,6 +866,18 @@ class CogniController extends Controller
                             ]);
                         }
                         
+                        // If still not valid, try even more lenient validation
+                        if (!$isValidUrl) {
+                            // Accept URLs that look like they could be valid
+                            $isValidUrl = preg_match('/^[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}/', $item['url']) || 
+                                         preg_match('/^https?:\/\/[^\s]+/', $item['url']) ||
+                                         strpos($item['url'], 'http') === 0;
+                            \Log::debug('URL failed lenient validation, trying very lenient check', [
+                                'url' => $item['url'],
+                                'very_lenient_check_passed' => $isValidUrl
+                            ]);
+                        }
+                        
                         if ($isValidUrl) {
                             $validItemCount++;
                             $externalItems[] = $item;
@@ -862,7 +897,8 @@ class CogniController extends Controller
                                 'url' => $item['url'],
                                 'title' => $item['title'] ?? 'No title',
                                 'strict_validation' => filter_var($item['url'], FILTER_VALIDATE_URL),
-                                'lenient_validation' => preg_match('/^https?:\/\/.+/', $item['url'])
+                                'lenient_validation' => preg_match('/^https?:\/\/.+/', $item['url']),
+                                'very_lenient_validation' => preg_match('/^[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}/', $item['url'])
                             ]);
                         }
                     } else {
@@ -954,41 +990,75 @@ class CogniController extends Controller
                         'search_query' => $searchQuery
                     ]);
                     
-                    // Get fallback items using the generic fallback generator
+                    // Use the new article and video focused search for fallback
                     $searchService = app(\App\Services\GPTSearchService::class);
-                    $fallbackResults = $searchService->generateFallbackResults($searchQuery);
+                    $fallbackResults = $searchService->findLearningArticlesAndVideos($searchQuery, 5, '', ['article', 'video']);
                     
-                    // Add each item as an external item
-                    foreach ($fallbackResults as $result) {
-                        if (!empty($result['url']) && !empty($result['title'])) {
-                            $validItemCount++;
-                            $externalItems[] = [
-                                'title' => $result['title'],
-                                'description' => $result['content'] ?? $result['summary'] ?? 'Resource about ' . $searchQuery,
-                                'url' => $result['url'],
-                                'type' => 'external',
-                                'notes' => 'From curated source: ' . ($result['domain'] ?? 'educational resource')
-                            ];
+                    if ($fallbackResults['success'] && !empty($fallbackResults['results'])) {
+                        // Add each item as an external item
+                        foreach ($fallbackResults['results'] as $result) {
+                            if (!empty($result['url']) && !empty($result['title'])) {
+                                $validItemCount++;
+                                $externalItems[] = [
+                                    'title' => $result['title'],
+                                    'description' => $result['content'] ?? $result['summary'] ?? 'Resource about ' . $searchQuery,
+                                    'url' => $result['url'],
+                                    'type' => 'external',
+                                    'notes' => 'From curated source: ' . ($result['domain'] ?? 'educational resource')
+                                ];
+                            }
                         }
+                        
+                        \Log::info('Added fallback items for readlist using article/video search', [
+                            'added_items' => $validItemCount,
+                            'search_query' => $searchQuery,
+                            'search_type' => 'article_video_focused'
+                        ]);
+                    } else {
+                        // If article/video search fails, try generic fallback
+                        $fallbackResults = $searchService->generateFallbackResults($searchQuery);
+                        
+                        // Add each item as an external item
+                        foreach ($fallbackResults as $result) {
+                            if (!empty($result['url']) && !empty($result['title'])) {
+                                $validItemCount++;
+                                $externalItems[] = [
+                                    'title' => $result['title'],
+                                    'description' => $result['content'] ?? $result['summary'] ?? 'Resource about ' . $searchQuery,
+                                    'url' => $result['url'],
+                                    'type' => 'external',
+                                    'notes' => 'From curated source: ' . ($result['domain'] ?? 'educational resource')
+                                ];
+                            }
+                        }
+                        
+                        \Log::info('Added fallback items for readlist using generic fallback', [
+                            'added_items' => $validItemCount,
+                            'search_query' => $searchQuery,
+                            'search_type' => 'generic_fallback'
+                        ]);
                     }
-                    
-                    \Log::info('Added fallback items for readlist', [
-                        'added_items' => $validItemCount,
-                        'search_query' => $searchQuery
-                    ]);
                 }
                 
-                // If still no valid items, return null
+                // If still no valid items, create a minimal readlist with just the title and description
                 if ($validItemCount === 0) {
-                    \Log::warning('No valid items for readlist creation - all items failed validation', [
+                    \Log::warning('No valid items for readlist creation - creating minimal readlist', [
                         'title' => $readlistData['title'] ?? 'Unknown title',
                         'description' => substr($readlistData['description'] ?? 'No description', 0, 100),
                         'item_count' => count($readlistData['items']),
                         'user_id' => $user->id,
-                        'invalid_items_sample' => array_slice($invalidItems, 0, 5), // Log up to 5 invalid items
-                        'validation_failure_count' => count($invalidItems)
+                        'invalid_items_sample' => array_slice($invalidItems, 0, 5)
                     ]);
-                    return null;
+                    
+                    // Create a minimal readlist with at least one placeholder item
+                    $externalItems[] = [
+                        'title' => 'Learning Resources',
+                        'description' => 'Explore resources about ' . $searchQuery,
+                        'url' => 'https://www.google.com/search?q=' . urlencode($searchQuery),
+                        'type' => 'external',
+                        'notes' => 'Search for more resources about this topic'
+                    ];
+                    $validItemCount = 1;
                 }
             }
             
@@ -3223,6 +3293,57 @@ class CogniController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to store conversation: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Check if the question is a readlist creation request
+     */
+    private function isReadlistRequest(string $question): bool
+    {
+        $readlistPatterns = [
+            '/create\s+a\s+readlist/i',
+            '/make\s+a\s+readlist/i', 
+            '/create\s+readlist/i',
+            '/build\s+a\s+readlist/i',
+            '/generate\s+a\s+readlist/i',
+            '/curate\s+a\s+readlist/i',
+            '/put\s+together\s+a\s+readlist/i'
+        ];
+
+        foreach ($readlistPatterns as $pattern) {
+            if (preg_match($pattern, $question)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if the question is a web search request
+     */
+    private function isWebSearchRequest(string $question): bool
+    {
+        $searchPatterns = [
+            '/search(\s+for|\s+the|\s+about)?\s+/i',
+            '/find(\s+information|\s+about|\s+articles)?\s+/i',
+            '/look\s+up/i',
+            '/research/i',
+            '/what\'s\s+the\s+latest/i',
+            '/what\s+is\s+happening/i',
+            '/current\s+news/i',
+            '/recent\s+developments/i',
+            '/latest\s+information/i',
+            '/current\s+events/i'
+        ];
+
+        foreach ($searchPatterns as $pattern) {
+            if (preg_match($pattern, $question)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 }
