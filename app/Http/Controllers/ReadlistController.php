@@ -211,6 +211,20 @@ class ReadlistController extends Controller
                             ]
                         ];
                     }
+                } elseif ($item->item_type === null && $item->type === 'external') {
+                    // Handle external items
+                    $organizedItems[] = [
+                        'id' => $item->id,
+                        'type' => 'external',
+                        'order' => $item->order,
+                        'notes' => $item->notes,
+                        'item' => [
+                            'title' => $item->title,
+                            'description' => $item->description,
+                            'url' => $item->url,
+                            'type' => $item->type
+                        ]
+                    ];
                 }
             }
             
@@ -302,6 +316,20 @@ class ReadlistController extends Controller
                             ]
                         ];
                     }
+                } elseif ($item->item_type === null && $item->type === 'external') {
+                    // Handle external items
+                    $organizedItems[] = [
+                        'id' => $item->id,
+                        'type' => 'external',
+                        'order' => $item->order,
+                        'notes' => $item->notes,
+                        'item' => [
+                            'title' => $item->title,
+                            'description' => $item->description,
+                            'url' => $item->url,
+                            'type' => $item->type
+                        ]
+                    ];
                 }
             }
             
