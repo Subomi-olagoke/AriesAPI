@@ -830,18 +830,47 @@ class CogniController extends Controller
                 if (isset($item['type']) && $item['type'] === 'external') {
                     // Check that external item has valid URL
                     if (!empty($item['url'])) {
-                        // Validate URL format
-                        if (filter_var($item['url'], FILTER_VALIDATE_URL)) {
+                        // Log the URL being validated
+                        \Log::debug('Validating external item URL', [
+                            'url' => $item['url'],
+                            'url_length' => strlen($item['url']),
+                            'item_title' => $item['title'] ?? 'No title'
+                        ]);
+                        
+                        // More lenient URL validation - check if it looks like a URL
+                        $isValidUrl = filter_var($item['url'], FILTER_VALIDATE_URL);
+                        
+                        // If strict validation fails, try a more lenient approach
+                        if (!$isValidUrl) {
+                            // Check if it starts with http:// or https://
+                            $isValidUrl = preg_match('/^https?:\/\/.+/', $item['url']);
+                            \Log::debug('URL failed strict validation, trying lenient check', [
+                                'url' => $item['url'],
+                                'lenient_check_passed' => $isValidUrl
+                            ]);
+                        }
+                        
+                        if ($isValidUrl) {
                             $validItemCount++;
                             $externalItems[] = $item;
                             $itemValidity['is_valid'] = true;
                             $itemValidity['reason'] = 'Valid external item with URL';
+                            \Log::debug('External item validation passed', [
+                                'url' => $item['url'],
+                                'title' => $item['title'] ?? 'No title'
+                            ]);
                         } else {
                             $itemValidity['reason'] = 'Invalid URL format: ' . ($item['url'] ?? 'empty');
                             $invalidItems[] = [
                                 'item' => $item,
                                 'reason' => 'Invalid URL format'
                             ];
+                            \Log::warning('External item URL validation failed', [
+                                'url' => $item['url'],
+                                'title' => $item['title'] ?? 'No title',
+                                'strict_validation' => filter_var($item['url'], FILTER_VALIDATE_URL),
+                                'lenient_validation' => preg_match('/^https?:\/\/.+/', $item['url'])
+                            ]);
                         }
                     } else {
                         $itemValidity['reason'] = 'External item missing URL';
@@ -849,6 +878,9 @@ class CogniController extends Controller
                             'item' => $item,
                             'reason' => 'Missing URL'
                         ];
+                        \Log::warning('External item missing URL', [
+                            'item' => $item
+                        ]);
                     }
                 } else {
                     // Check if internal item exists
@@ -970,6 +1002,13 @@ class CogniController extends Controller
             // Create the readlist
             \DB::beginTransaction();
             
+            \Log::info('Starting database transaction for readlist creation', [
+                'title' => $readlistData['title'],
+                'valid_items_count' => $validItemCount,
+                'external_items_count' => count($externalItems),
+                'internal_items_count' => count($internalItems)
+            ]);
+            
             $readlist = new \App\Models\Readlist([
                 'user_id' => $user->id,
                 'title' => $readlistData['title'],
@@ -979,10 +1018,21 @@ class CogniController extends Controller
             
             $readlist->save();
             
+            \Log::info('Readlist created successfully', [
+                'readlist_id' => $readlist->id,
+                'title' => $readlist->title
+            ]);
+            
             // Add items to the readlist
             $order = 1;
             $addedItems = 0;
             $failedItems = [];
+            
+            \Log::info('Starting to add items to readlist', [
+                'readlist_id' => $readlist->id,
+                'external_items_to_add' => count($externalItems),
+                'internal_items_to_add' => count($internalItems)
+            ]);
             
             // Add all external items
             foreach ($externalItems as $item) {
@@ -999,6 +1049,15 @@ class CogniController extends Controller
                     
                     $readlistItem->save();
                     $addedItems++;
+                    
+                    \Log::info('Successfully added external item to readlist', [
+                        'readlist_id' => $readlist->id,
+                        'item_id' => $readlistItem->id,
+                        'title' => $readlistItem->title,
+                        'url' => $readlistItem->url,
+                        'order' => $readlistItem->order,
+                        'total_added_so_far' => $addedItems
+                    ]);
                 } catch (\Exception $e) {
                     \Log::error('Failed to add external item to readlist', [
                         'readlist_id' => $readlist->id,
@@ -1112,6 +1171,12 @@ class CogniController extends Controller
             }
             
             \DB::commit();
+            
+            \Log::info('Database transaction committed successfully', [
+                'readlist_id' => $readlist->id,
+                'total_items_added' => $addedItems,
+                'transaction_committed' => true
+            ]);
             
             // Calculate time spent
             $endTime = microtime(true);
