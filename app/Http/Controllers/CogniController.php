@@ -999,7 +999,16 @@ class CogniController extends Controller
                 }
             }
             
-            // Create the readlist
+            // Add debug information about the items processing
+            $debugLogs['items_processing'] = [
+                'external_items_count' => count($externalItems),
+                'internal_items_count' => count($internalItems),
+                'external_items_sample' => array_slice($externalItems, 0, 2),
+                'internal_items_sample' => array_slice($internalItems, 0, 2),
+                'total_items_to_process' => count($externalItems) + count($internalItems)
+            ];
+            
+            // Create the readlist in the database
             \DB::beginTransaction();
             
             \Log::info('Starting database transaction for readlist creation', [
@@ -1208,6 +1217,16 @@ class CogniController extends Controller
                 'failed_items' => count($failedItems),
                 'time_ms' => $createTime
             ]);
+            
+            // Add final results to debug info
+            $debugLogs['final_results'] = [
+                'readlist_id' => $readlist->id,
+                'items_added' => $addedItems,
+                'external_items_processed' => count($externalItems),
+                'internal_items_processed' => count($internalItems),
+                'failed_items_count' => count($failedItems),
+                'failed_items' => $failedItems
+            ];
             
             return $readlist;
             
