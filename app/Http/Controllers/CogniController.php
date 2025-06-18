@@ -494,8 +494,29 @@ class CogniController extends Controller
                 ]);
             }
             
-            // If we get here, something went wrong
-            throw new \Exception('Failed to create readlist despite having content');
+            // If createReadlistInDatabase returned null, handle it gracefully
+            \Log::warning('createReadlistInDatabase returned null - readlist creation failed', [
+                'title' => $readlistData['title'] ?? 'Unknown title',
+                'description' => substr($readlistData['description'] ?? 'No description', 0, 100),
+                'user_id' => $user->id,
+                'conversation_id' => $conversationId
+            ]);
+            
+            $errorMsg = "I'm sorry, I encountered an error while trying to create your readlist. Please try again later.";
+            $this->storeConversationInDatabase($user, $conversationId, $question, $errorMsg);
+            
+            return response()->json([
+                'success' => false,
+                'answer' => $errorMsg,
+                'conversation_id' => $conversationId,
+                'error_details' => [
+                    'error_id' => uniqid('readlist_error_'),
+                    'error_type' => 'DatabaseError',
+                    'error_message' => 'Failed to create readlist in database',
+                    'error_location' => 'createReadlistInDatabase returned null',
+                    'description' => $description ?? 'No description extracted'
+                ]
+            ]);
             
         } catch (\Exception $e) {
             return $this->handleReadlistError($e, $description, $question, $user, $conversationId);
