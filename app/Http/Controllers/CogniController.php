@@ -323,8 +323,19 @@ class CogniController extends Controller
                 \Log::info("Web search results", [
                     'success' => $webSearchResults['success'] ?? false,
                     'result_count' => count($webSearchResults['results'] ?? []),
-                    'error' => $webSearchResults['message'] ?? 'No error message'
+                    'error' => $webSearchResults['message'] ?? 'No error message',
+                    'full_response' => $webSearchResults
                 ]);
+                
+                // Add web search results to debug logs
+                $debugLogs['web_search'] = [
+                    'success' => $webSearchResults['success'] ?? false,
+                    'result_count' => count($webSearchResults['results'] ?? []),
+                    'error' => $webSearchResults['message'] ?? 'No error message',
+                    'search_type' => $webSearchResults['search_type'] ?? 'unknown',
+                    'used_fallback' => $webSearchResults['used_fallback'] ?? false,
+                    'results' => $webSearchResults['results'] ?? []
+                ];
                 
                 if ($webSearchResults['success'] && !empty($webSearchResults['results'])) {
                     // Process web search results into standardized readlist items
