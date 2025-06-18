@@ -306,22 +306,6 @@ class GPTSearchService
                                 'query' => $sanitizedQuery,
                                 'used_fallback' => true
                             ];
-                            }
-                            
-                            return [
-                                'success' => false,
-                                'message' => 'Invalid JSON response from GPT: ' . json_last_error_msg(),
-                                'results' => [],
-                                'request_id' => $requestId,
-                                'query' => $sanitizedQuery,
-                                'debug_info' => [
-                                    'has_content' => !empty($content),
-                                    'content_length' => strlen($content ?? ''),
-                                    'content_sample' => substr($content ?? '', 0, 100),
-                                    'json_error' => json_last_error_msg(),
-                                    'response_keys' => $jsonResponse ? array_keys($jsonResponse) : []
-                                ]
-                            ];
                         }
                     } catch (\Exception $e) {
                         // Detailed logging for parsing errors
@@ -797,10 +781,8 @@ EOT;
                     'content' => 'Leonardo da Vinci conducted extensive studies in anatomy, geology, botany, hydraulics, optics, and mechanics. His scientific investigations were innovative in their reliance on close observation and detailed documentation. Leonardo performed human dissections to understand anatomy, studied water flow to comprehend hydraulics, and examined light and shadow to master the principles of optics. His approach to science, integrating observation with theoretical knowledge, was remarkably modern in its methodology.',
                     'published_date' => '2022-09-14',
                     'summary' => 'Examination of Leonardo da Vinci\'s scientific contributions across multiple disciplines, highlighting his empirical approach, anatomical studies, and methodical documentation that was ahead of his time.'
-                }
-            ],
-            
-            // Add more predefined topics as needed...
+                ]
+            ]
         ];
     }
     
