@@ -388,395 +388,59 @@ class CogniController extends Controller
                             'success' => true,
                             'answer' => $response,
                             'conversation_id' => $conversationId,
-                            'readlist' => $readlist->load('items')
+                            'debug_info' => $debugLogs
                         ]);
                     }
                 }
             }
             
-            // Generate readlist with available content (internal + potentially external)
-            $result = $this->cogniService->generateReadlistFromDescription(
-                $description, 
-                $internalContent, 
-                $itemCount, 
-                $externalCount
-            );
-            
-            if ($result['success'] && isset($result['readlist'])) {
-                // Check if there are any items in the readlist, or if we have web items to add
-                if (empty($result['readlist']['items']) && (empty($webItems) || !isset($webItems))) {
-                    $noItemsMsg = "I tried to create a readlist about \"{$description}\" but couldn't find any relevant content. Would you like me to try a different topic?";
-                    
-                    $debugLogs['process_steps'][] = "Empty items array in readlist data";
-                    $debugLogs['validation']['result_readlist_items_empty'] = true;
-                    $debugLogs['validation']['readlist_data'] = isset($result['readlist']) ? [
-                        'title' => $result['readlist']['title'] ?? 'No title',
-                        'description' => $result['readlist']['description'] ?? 'No description',
-                        'items_count' => 0
-                    ] : 'No readlist data';
-                    
-                    // Add search results if available
-                    if (isset($webSearchResults)) {
-                        $debugLogs['search_results'] = [
-                            'success' => $webSearchResults['success'] ?? false,
-                            'count' => count($webSearchResults['results'] ?? []),
-                            'search_type' => $webSearchResults['search_type'] ?? 'unknown',
-                            'items' => array_map(function($item) {
-                                return [
-                                    'title' => $item['title'] ?? 'Untitled',
-                                    'url' => $item['url'] ?? 'No URL',
-                                    'domain' => $item['domain'] ?? 'Unknown'
-                                ];
-                            }, $webSearchResults['results'] ?? [])
-                        ];
-                    }
-                } else if (empty($result['readlist']['items']) && !empty($webItems)) {
-                    // We have web items but no internal items - use the web items to create the readlist
-                    $debugLogs['process_steps'][] = "Using web items only for readlist";
-                    \Log::info("Using web items as primary content for readlist", [
-                        'web_item_count' => count($webItems),
-                        'description' => $description
-                    ]);
-                    
-                    // Create a new readlist data structure with just web items
-                    $result['readlist']['items'] = $webItems;
-                    
-                    // Update title and description to better reflect web content
-                    if (stripos($description, 'davinci') !== false || stripos($description, 'da vinci') !== false) {
-                        $result['readlist']['title'] = 'Leonardo da Vinci: A Curated Reading List';
-                        $result['readlist']['description'] = 'Explore the life, works, and legacy of Leonardo da Vinci, the remarkable Renaissance polymath known for his paintings, inventions, and scientific studies.';
-                    }
-                }
-                    
-                    // Add specific diagnosis for "the Davinci" and similar queries
-                    if (stripos($description, 'davinci') !== false) {
-                        $debugLogs['special_analysis'] = [
-                            'is_davinci_query' => true,
-                            'exact_match' => strcasecmp($description, 'the davinci') === 0,
-                            'contains_davinci' => true,
-                            'keywords_before_filter' => array_values(preg_split('/[\s,]+/', $description)),
-                            'keywords_matching' => array_filter(preg_split('/[\s,]+/', $description), function($word) {
-                                return stripos($word, 'davinci') !== false;
-                            })
-                        ];
-                        
-                        // Try special case check for Davinci in database
-                        $specialSearch = \App\Models\Course::where('title', 'like', '%davinci%')
-                            ->orWhere('description', 'like', '%davinci%')
-                            ->get(['id', 'title', 'description']);
-                            
-                        $specialSearchPosts = \App\Models\Post::where('title', 'like', '%davinci%')
-                            ->orWhere('body', 'like', '%davinci%')
-                            ->get(['id', 'title', 'body']);
-                            
-                        $debugLogs['special_analysis']['direct_davinci_search'] = [
-                            'course_results' => $specialSearch->count(),
-                            'post_results' => $specialSearchPosts->count(),
-                            'course_titles' => $specialSearch->pluck('title')->toArray(),
-                            'post_titles' => $specialSearchPosts->pluck('title')->toArray(),
-                        ];
-                    }
-                    
-                    // Check for specific web search issues with this query
-                    if (!empty($webSearchResults)) {
-                        $debugLogs['search_analysis'] = [
-                            'search_results_count' => count($webSearchResults['results'] ?? []),
-                            'search_query' => $description . " " . ($queryType['additional_terms'] ?? ''),
-                            'search_type' => $queryType['search_type'] ?? 'unknown',
-                            'success' => $webSearchResults['success'] ?? false,
-                            'error_message' => $webSearchResults['message'] ?? 'No error message',
-                            'included_domains' => $includeDomains,
-                            'excluded_domains' => $excludeDomains
-                        ];
-                    }
-                    
-                    // Log detailed debug information with process timestamp
-                    $debugLogs['timestamp'] = date('Y-m-d H:i:s');
-                    $debugLogs['query_info'] = [
-                        'raw_query' => $question,
-                        'extracted_description' => $description,
-                        'search_terms' => array_values(preg_split('/[\s,]+/', $description))
+            // If we reach here, we either have enough internal content or web search failed
+            // Create a readlist with just internal content
+            if (!empty($internalContent)) {
+                $readlistTitle = 'Readlist: ' . ucfirst($description);
+                $readlistDescription = 'A collection of resources about ' . $description . ' curated from platform content.';
+                
+                $allItems = [];
+                foreach ($internalContent as $item) {
+                    $allItems[] = [
+                        'id' => $item['id'],
+                        'type' => $item['type'],
+                        'notes' => 'Internal content: ' . ($item['title'] ?? 'Untitled')
                     ];
-                    
-                    \Log::warning("Empty readlist items array - Detailed diagnostics", $debugLogs);
-                    
-                    // Store in conversation history
-                    $this->storeConversationInDatabase($user, $conversationId, $question, $noItemsMsg);
-                    
-                    return response()->json([
-                        'success' => false,
-                        'answer' => $noItemsMsg,
-                        'conversation_id' => $conversationId,
-                        'debug_info' => $debugLogs
-                    ]);
                 }
                 
-                // Create readlist in database
-                $readlist = $this->createReadlistInDatabase($user, $result['readlist']);
+                $readlistData = [
+                    'title' => $readlistTitle,
+                    'description' => $readlistDescription,
+                    'items' => $allItems
+                ];
+                
+                $readlist = $this->createReadlistInDatabase($user, $readlistData);
                 
                 if ($readlist) {
-                    // Get the actual item count
-                    $itemCount = $readlist->items()->count();
+                    $response = "I've created a readlist about " . $description . " with " . count($internalContent) . " resources from our platform.";
                     
-                    // Create a user-friendly response
-                    $response = "I've created a readlist titled \"" . $readlist->title . "\" for you. ";
-                    
-                    if ($itemCount > 0) {
-                        $response .= "It contains " . $itemCount . " item" . ($itemCount != 1 ? "s" : "") . " related to " . $description . ".";
-                    } else {
-                        // This shouldn't happen with our updated createReadlistInDatabase, but just in case
-                        $response .= "However, I couldn't add any items to it. Would you like me to try a different topic?";
-                    }
-                    
-                    // Store in conversation history
                     $this->storeConversationInDatabase($user, $conversationId, $question, $response);
                     
                     return response()->json([
                         'success' => true,
                         'answer' => $response,
                         'conversation_id' => $conversationId,
-                        'readlist' => $readlist->load('items.item'),
-                        'item_count' => $itemCount
-                    ]);
-                } else {
-                    // Readlist creation failed
-                    $failureMsg = "I couldn't create a readlist about \"{$description}\" because I couldn't find enough relevant content. Would you like me to try a different topic?";
-                    
-                    // Store in conversation history
-                    $this->storeConversationInDatabase($user, $conversationId, $question, $failureMsg);
-                    
-                    return response()->json([
-                        'success' => false,
-                        'answer' => $failureMsg,
-                        'conversation_id' => $conversationId
+                        'debug_info' => $debugLogs
                     ]);
                 }
             }
             
-            // If we get here, something went wrong with readlist generation
-            // Try one more time with web search if we haven't already used it
-            if (count($internalContent) >= $minRequiredContent) {
-                // We had enough internal content but still failed, try with web search
-                $searchService = app(\App\Services\GPTSearchService::class);
-                // Log that we're attempting a web search as fallback
-                \Log::info("Attempting web search as fallback for readlist generation", [
-                    'query' => $description,
-                    'gpt_configured' => $searchService->isConfigured()
-                ]);
-                
-                // Determine if this is an educational, technical, or general query
-                $queryType = $this->analyzeReadlistQueryType($description);
-                
-                // For fallback, try a broader search with fewer restrictions
-                $includeDomains = []; // No domain restrictions for fallback
-                
-                // Common spam or inappropriate domains to exclude
-                $excludeDomains = [
-                    'pinterest.com',
-                    'quora.com',
-                    'reddit.com',
-                    'twitter.com',
-                    'facebook.com',
-                    'instagram.com',
-                ];
-                
-                // Define content options for better results
-                $contentsOptions = [
-                    'highlights' => true,
-                    'text' => true,
-                    'summary' => true
-                ];
-                
-                // Use a more generic search as fallback
-                $webSearchResults = $searchService->search(
-                    $description . " " . $queryType['additional_terms'],
-                    10, 
-                    $includeDomains, 
-                    true, 
-                    $excludeDomains,
-                    'keyword', // Use keyword parameter for consistent interface
-                    '',        // No category filter for fallback
-                    []         // No date restrictions
-                );
-                
-                // Log search results for debugging
-                \Log::info("Web search fallback results", [
-                    'success' => $webSearchResults['success'] ?? false,
-                    'result_count' => count($webSearchResults['results'] ?? []),
-                    'error' => $webSearchResults['message'] ?? 'No error message'
-                ]);
-                
-                if ($webSearchResults['success'] && !empty($webSearchResults['results'])) {
-                    // Create a readlist with web content
-                    $webItems = [];
-                    foreach ($webSearchResults['results'] as $result) {
-                        // Only add items with valid URLs
-                        if (!empty($result['url'])) {
-                            // Use summary if available, otherwise use text with ellipsis
-                            $description = isset($result['summary']) 
-                                ? $result['summary'] 
-                                : (isset($result['text']) ? substr($result['text'], 0, 250) . '...' : '');
-                                
-                            $webItems[] = [
-                                'title' => $result['title'] ?? 'Educational Resource',
-                                'description' => $description,
-                                'url' => $result['url'],
-                                'type' => 'external',
-                                'notes' => 'From web search: ' . ($result['domain'] ?? parse_url($result['url'], PHP_URL_HOST))
-                            ];
-                        }
-                    }
-                    
-                    // Check if we have any valid web items
-                    if (empty($webItems)) {
-                        $noItemsMsg = "I tried to create a readlist about \"{$description}\" but couldn't find any relevant content, even after searching the web. Would you like me to try a different topic?";
-                        
-                        // Store in conversation history
-                        $this->storeConversationInDatabase($user, $conversationId, $question, $noItemsMsg);
-                        
-                        return response()->json([
-                            'success' => false,
-                            'answer' => $noItemsMsg,
-                            'conversation_id' => $conversationId
-                        ]);
-                    }
-                    
-                    // Create a combined readlist with priority on internal content
-                    $readlistTitle = 'Readlist: ' . ucfirst($description);
-                    $readlistDescription = 'A collection of resources about ' . $description . ' combining platform content with web resources.';
-                    
-                    // Combine all content
-                    $allItems = [];
-                    
-                    // Add internal content first
-                    foreach ($internalContent as $item) {
-                        $allItems[] = [
-                            'id' => $item['id'],
-                            'type' => $item['type'],
-                            'notes' => 'Internal content: ' . ($item['title'] ?? 'Untitled')
-                        ];
-                    }
-                    
-                    // Add external content
-                    foreach ($webItems as $item) {
-                        $allItems[] = $item;
-                    }
-                    
-                    $readlistData = [
-                        'title' => $readlistTitle,
-                        'description' => $readlistDescription,
-                        'items' => $allItems
-                    ];
-                    
-                    $readlist = $this->createReadlistInDatabase($user, $readlistData);
-                    
-                    if ($readlist) {
-                        // Get the actual item count
-                        $internalItemCount = $readlist->items()->whereNotNull('item_id')->count();
-                        $externalItemCount = $readlist->items()->whereNull('item_id')->whereNotNull('url')->count();
-                        $totalCount = $internalItemCount + $externalItemCount;
-                        
-                        $response = "I've created a readlist about " . $description . " with ";
-                        
-                        if ($internalItemCount > 0) {
-                            $response .= $internalItemCount . " internal resource" . ($internalItemCount != 1 ? "s" : "");
-                            if ($externalItemCount > 0) {
-                                $response .= " and ";
-                            }
-                        }
-                        
-                        if ($externalItemCount > 0) {
-                            $response .= $externalItemCount . " resource" . ($externalItemCount != 1 ? "s" : "") . " from the web";
-                        }
-                        
-                        $response .= ".";
-                        
-                        $this->storeConversationInDatabase($user, $conversationId, $question, $response);
-                        
-                        return response()->json([
-                            'success' => true,
-                            'answer' => $response,
-                            'conversation_id' => $conversationId,
-                            'readlist' => $readlist->load('items'),
-                            'item_count' => $totalCount
-                        ]);
-                    } else {
-                        // Readlist creation failed
-                        $failureMsg = "I tried to create a readlist about \"{$description}\" but encountered an issue. Would you like me to try a different topic?";
-                        
-                        // Store in conversation history
-                        $this->storeConversationInDatabase($user, $conversationId, $question, $failureMsg);
-                        
-                        return response()->json([
-                            'success' => false,
-                            'answer' => $failureMsg,
-                            'conversation_id' => $conversationId
-                        ]);
-                    }
-                } else {
-                    // No web results found
-                    $noResultsMsg = "I tried to create a readlist about \"{$description}\" but couldn't find any relevant content on the web. Would you like me to try a different topic?";
-                    
-                    // Store in conversation history
-                    $this->storeConversationInDatabase($user, $conversationId, $question, $noResultsMsg);
-                    
-                    return response()->json([
-                        'success' => false,
-                        'answer' => $noResultsMsg,
-                        'conversation_id' => $conversationId
-                    ]);
-                }
-            }
+            // If we reach here, we couldn't create a readlist
+            $searchIsConfigured = app(\App\Services\GPTSearchService::class)->isConfigured();
             
-            // If all else fails, return a helpful error message with diagnostics
-            $errorMsg = "I tried to create a readlist about \"" . $description . "\" but ";
+            $errorMsg = "I couldn't find enough relevant content to create a readlist about " . $description . ". ";
             
-            // Check if GPT search is properly configured
-            $searchService = app(\App\Services\GPTSearchService::class);
-            $searchIsConfigured = $searchService->isConfigured();
-            
-            // Create diagnostic info about search configuration
-            $diagnostics = [
-                'gpt_search_configured' => $searchIsConfigured,
-                'api_key_set' => !empty(config('services.openai.api_key')),
-                'api_key_length' => !empty(config('services.openai.api_key')) ? strlen(config('services.openai.api_key')) : 0,
-                'api_endpoint' => config('services.openai.endpoint', 'https://api.openai.com/v1'),
-                'model' => config('services.openai.model', 'gpt-3.5-turbo'),
-                'internal_content_count' => count($internalContent)
-            ];
-            
-            // Log diagnostics
-            \Log::warning("Readlist creation failed - GPT search diagnostics", $diagnostics);
-            
-            // Direct error message based on actual issue
-            if (count($internalContent) < 2) {
-                $errorMsg .= "I couldn't find enough relevant content in our platform. ";
+            if (empty($internalContent)) {
+                $errorMsg .= "I searched our platform but found no content related to this topic. ";
                 
-                if (!$searchIsConfigured) {
-                    $errorMsg .= "Additionally, our web search capability isn't available at the moment. ";
-                } else {
-                    // Test if web search is working
-                    $testSearchResult = $searchService->search("test query", 1, []);
-                    $diagnostics['test_search'] = [
-                        'success' => $testSearchResult['success'] ?? false,
-                        'message' => $testSearchResult['message'] ?? 'No message',
-                        'result_count' => count($testSearchResult['results'] ?? []),
-                        'details' => $testSearchResult['details'] ?? null
-                    ];
-                    
-                    // Try another format
-                    $testSearchResult2 = $searchService->search("educational resources", 1, []);
-                    $diagnostics['alternate_test_search'] = [
-                        'success' => $testSearchResult2['success'] ?? false,
-                        'message' => $testSearchResult2['message'] ?? 'No message',
-                        'query' => "educational resources"
-                    ];
-                    
-                    if ($testSearchResult['success'] && !empty($testSearchResult['results'])) {
-                        $errorMsg .= "I tried searching the web, but couldn't find suitable content about this topic. ";
-                    } else {
-                        $errorMsg .= "I tried to search the web, but encountered connectivity issues. ";
-                    }
+                if ($searchIsConfigured) {
+                    $errorMsg .= "I also tried searching the web but couldn't find suitable additional resources. ";
                 }
             } else {
                 $errorMsg .= "I had trouble creating a coherent readlist with the available content. ";
@@ -796,8 +460,11 @@ class CogniController extends Controller
                 'success' => true,
                 'answer' => $errorMsg,
                 'conversation_id' => $conversationId,
-                'debug_info' => $diagnostics
+                'debug_info' => $debugLogs
             ]);
+            
+        } catch (\Exception $e) {
+            return $this->handleReadlistError($e, $description ?? '', $question, $user, $conversationId);
         }
     }
 
