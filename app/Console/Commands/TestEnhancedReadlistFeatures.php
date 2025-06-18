@@ -51,6 +51,9 @@ class TestEnhancedReadlistFeatures extends Command
         // Test AI image generation
         $this->testAIImageGeneration($user);
         
+        // Test the new article and video focused search functionality
+        $this->testArticleVideoSearch();
+        
         $this->info('Enhanced readlist features test completed!');
         return 0;
     }
@@ -138,5 +141,69 @@ class TestEnhancedReadlistFeatures extends Command
         $this->line('Cleaning up test readlist...');
         $readlist->delete();
         $this->info('Test readlist deleted');
+    }
+
+    /**
+     * Test the new article and video focused search functionality
+     */
+    private function testArticleVideoSearch()
+    {
+        $this->info("\n=== Testing Article and Video Focused Search ===");
+        
+        $searchService = app(\App\Services\GPTSearchService::class);
+        
+        if (!$searchService->isConfigured()) {
+            $this->error("GPT Search Service is not configured!");
+            return;
+        }
+        
+        $testTopics = [
+            'machine learning',
+            'web development',
+            'artificial intelligence',
+            'data science'
+        ];
+        
+        foreach ($testTopics as $topic) {
+            $this->info("\n--- Testing: {$topic} ---");
+            
+            // Test the new findLearningArticlesAndVideos method
+            $results = $searchService->findLearningArticlesAndVideos($topic, 3, '', ['article', 'video']);
+            
+            if ($results['success'] && !empty($results['results'])) {
+                $this->info("✓ Found " . count($results['results']) . " results");
+                
+                foreach ($results['results'] as $index => $result) {
+                    $contentType = $result['content_type'] ?? 'unknown';
+                    $this->line("  " . ($index + 1) . ". " . $result['title'] . " ({$contentType})");
+                    $this->line("     URL: " . $result['url']);
+                    $this->line("     Domain: " . $result['domain']);
+                }
+            } else {
+                $this->error("✗ No results found for: {$topic}");
+                $this->line("Error: " . ($results['message'] ?? 'Unknown error'));
+            }
+        }
+        
+        // Test categorized resources with new article/video focus
+        $this->info("\n--- Testing Categorized Resources (Article/Video Focus) ---");
+        $categorizedResults = $searchService->getCategorizedResources('programming', [], 2);
+        
+        if ($categorizedResults['success'] && !empty($categorizedResults['categories'])) {
+            $this->info("✓ Found " . count($categorizedResults['categories']) . " categories");
+            
+            foreach ($categorizedResults['categories'] as $categoryName => $categoryData) {
+                $this->line("  Category: {$categoryName}");
+                $this->line("  Content Types: " . implode(', ', $categoryData['content_types'] ?? ['unknown']));
+                $this->line("  Results: " . count($categoryData['results']));
+                
+                foreach ($categoryData['results'] as $index => $result) {
+                    $contentType = $result['content_type'] ?? 'unknown';
+                    $this->line("    " . ($index + 1) . ". " . $result['title'] . " ({$contentType})");
+                }
+            }
+        } else {
+            $this->error("✗ No categorized results found");
+        }
     }
 } 

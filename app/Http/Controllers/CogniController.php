@@ -298,16 +298,21 @@ class CogniController extends Controller
                     $enhancedSearchQuery .= ' ' . implode(' ', array_slice($searchKeywords, 0, 3));
                 }
                 
-                // Perform web search with optimized parameters
-                $webSearchResults = $searchService->search(
+                // Determine content types to prioritize based on query type
+                $contentTypes = ['article', 'video', 'tutorial'];
+                if (strpos($queryType['category'], 'technical') !== false) {
+                    $contentTypes[] = 'documentation';
+                }
+                if (strpos($queryType['category'], 'research') !== false) {
+                    $contentTypes[] = 'research';
+                }
+                
+                // Perform web search with article and video focus
+                $webSearchResults = $searchService->findLearningArticlesAndVideos(
                     $enhancedSearchQuery . " " . $queryType['additional_terms'],
                     10, 
-                    $includeDomains, 
-                    true, 
-                    $excludeDomains,
-                    $queryType['search_type'],
-                    $queryType['category'],
-                    [] // No date range filter
+                    '', // level
+                    $contentTypes
                 );
                 
                 // If search failed or returned no results, try a more generic approach
@@ -318,16 +323,12 @@ class CogniController extends Controller
                         'result_count' => count($webSearchResults['results'] ?? [])
                     ]);
                     
-                    // Try a more generic search with fewer restrictions
-                    $webSearchResults = $searchService->search(
-                        $description . " information resources",
+                    // Try a more generic search with fewer restrictions but still focused on articles/videos
+                    $webSearchResults = $searchService->findLearningArticlesAndVideos(
+                        $description . " articles and videos",
                         10, 
-                        [], // No domain restrictions 
-                        true, 
-                        $excludeDomains,
-                        'keyword', // Switch to keyword search for better recall
-                        '', // No category restriction
-                        [] // No date range filter
+                        '', // level
+                        ['article', 'video'] // Basic content types
                     );
                 }
                 
@@ -1308,17 +1309,49 @@ class CogniController extends Controller
                 ];
             }
             
-            // Perform web search with GPT
-            $searchResults = $searchService->search(
+            // Determine content types to prioritize based on search parameters
+            $contentTypes = ['article', 'video', 'tutorial'];
+            if (strpos($searchParams['category'], 'technical') !== false) {
+                $contentTypes[] = 'documentation';
+            }
+            if (strpos($searchParams['category'], 'research') !== false) {
+                $contentTypes[] = 'research';
+            }
+            if ($searchParams['recent_events']) {
+                $contentTypes = ['article', 'video']; // For recent events, focus on articles and videos
+            }
+            
+            // Perform web search with article and video focus
+            $searchResults = $searchService->findLearningArticlesAndVideos(
                 $searchParams['query'], 
                 $searchParams['num_results'], 
-                $searchParams['include_domains'], 
-                true, 
-                $excludeDomains,
-                $searchParams['search_type'],
-                $searchParams['category'],
-                $dateRange
+                '', // level
+                $contentTypes
             );
+            
+            if (!$searchResults['success'] || empty($searchResults['results'])) {
+                // Retry with broader parameters if no results
+                $searchResults = $searchService->findLearningArticlesAndVideos(
+                    $searchParams['query'], 
+                    $searchParams['num_results'], 
+                    '', // level
+                    ['article', 'video'] // Basic content types
+                );
+                
+                // If still no results, try the original search method as fallback
+                if (!$searchResults['success'] || empty($searchResults['results'])) {
+                    $searchResults = $searchService->search(
+                        $searchParams['query'], 
+                        $searchParams['num_results'], 
+                        $searchParams['include_domains'], 
+                        true, 
+                        $excludeDomains,
+                        $searchParams['search_type'],
+                        $searchParams['category'],
+                        $dateRange
+                    );
+                }
+            }
             
             if (!$searchResults['success'] || empty($searchResults['results'])) {
                 // Retry with broader parameters if no results

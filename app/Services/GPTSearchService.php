@@ -427,6 +427,15 @@ class GPTSearchService
         // Add instructions for number of results
         $prompt .= "Return exactly {$numResults} search results as a JSON object.\n";
         
+        // PRIORITIZE ARTICLES AND VIDEOS for learning
+        $prompt .= "IMPORTANT: Prioritize articles and videos that are educational and informative. Focus on:\n";
+        $prompt .= "- Educational articles from reputable sources\n";
+        $prompt .= "- Video tutorials and educational videos\n";
+        $prompt .= "- Academic papers and research articles\n";
+        $prompt .= "- How-to guides and tutorials\n";
+        $prompt .= "- Documentation and technical articles\n";
+        $prompt .= "- Avoid social media posts, forums, or low-quality content\n\n";
+        
         // Add domain constraints if provided
         if (!empty($includeDomains) && is_array($includeDomains)) {
             $prompt .= "Prioritize results from these domains: " . implode(", ", $includeDomains) . ".\n";
@@ -467,7 +476,8 @@ Format your response as a JSON object with this structure:
       "domain": "example.com",
       "content": "A snippet of content from the resource, about 2-3 sentences long",
       "published_date": "YYYY-MM-DD",
-      "summary": "A brief summary of what this resource contains"
+      "summary": "A brief summary of what this resource contains",
+      "content_type": "article|video|tutorial|documentation|research"
     }
   ]
 }
@@ -479,11 +489,90 @@ For each result, include:
 4. A realistic content snippet (2-3 sentences)
 5. A plausible publication date when appropriate
 6. A brief summary of the resource
+7. The content type (article, video, tutorial, documentation, research)
 
-Base your results on your knowledge of reliable sources that would likely contain information about this query. Make the results diverse and informative.
+Base your results on your knowledge of reliable sources that would likely contain information about this query. Make the results diverse and informative, with a strong focus on educational articles and videos.
 EOT;
 
         return $prompt;
+    }
+    
+    /**
+     * Find learning-focused articles and videos for a specific topic
+     * This method specifically prioritizes articles and videos for learning
+     *
+     * @param string $topic The topic to find learning resources for
+     * @param int $numResults Number of results to return
+     * @param string $level Optional learning level (beginner, intermediate, advanced)
+     * @param array $contentTypes Optional array of content types to prioritize
+     * @return array Array of learning resources
+     */
+    public function findLearningArticlesAndVideos(string $topic, int $numResults = 5, string $level = '', array $contentTypes = [])
+    {
+        // Create a more specific query for educational content
+        $query = "educational articles and videos about {$topic}";
+        
+        // Add level specification if provided
+        if (!empty($level)) {
+            $query .= " for {$level} level learners";
+        }
+        
+        // Add content type specification if provided
+        if (!empty($contentTypes)) {
+            $query .= " focusing on " . implode(", ", $contentTypes);
+        }
+        
+        // Domains that typically have educational articles and videos
+        $includeDomains = [
+            'edu',
+            'gov',
+            'org',
+            'medium.com',
+            'dev.to',
+            'css-tricks.com',
+            'smashingmagazine.com',
+            'alistapart.com',
+            'sitepoint.com',
+            'tutsplus.com',
+            'youtube.com',
+            'vimeo.com',
+            'ted.com',
+            'khanacademy.org',
+            'coursera.org',
+            'edx.org',
+            'udemy.com',
+            'udacity.com',
+            'mit.edu',
+            'openculture.com',
+            'github.com',
+            'stackoverflow.com',
+            'mozilla.org',
+            'w3schools.com',
+            'mdn.com'
+        ];
+        
+        // Domains to exclude (social media, low-quality content)
+        $excludeDomains = [
+            'pinterest.com',
+            'quora.com',
+            'reddit.com',
+            'twitter.com',
+            'facebook.com',
+            'instagram.com',
+            'tiktok.com',
+            'snapchat.com'
+        ];
+        
+        // Run the search with educational focus
+        return $this->search(
+            $query, 
+            $numResults, 
+            $includeDomains, 
+            true, 
+            $excludeDomains,
+            '',
+            'educational'
+        );
     }
     
     /**
@@ -595,25 +684,35 @@ EOT;
     {
         if (empty($categories)) {
             $categories = [
-                'Beginner Guides' => [
-                    'query' => 'beginner guides and tutorials for ' . $topic,
-                    'category' => 'educational'
-                ],
-                'Advanced Resources' => [
-                    'query' => 'advanced guides and in-depth resources for ' . $topic,
-                    'category' => 'research'
-                ],
-                'Latest Developments' => [
-                    'query' => 'latest developments and updates about ' . $topic,
-                    'category' => 'news'
-                ],
-                'Best Practices' => [
-                    'query' => 'best practices and standards for ' . $topic,
-                    'category' => 'educational'
+                'Beginner Articles' => [
+                    'query' => 'beginner articles and guides for ' . $topic,
+                    'category' => 'educational',
+                    'content_types' => ['article', 'tutorial']
                 ],
                 'Video Tutorials' => [
                     'query' => 'video tutorials and courses about ' . $topic,
-                    'category' => 'educational'
+                    'category' => 'educational',
+                    'content_types' => ['video', 'tutorial']
+                ],
+                'Advanced Resources' => [
+                    'query' => 'advanced articles and in-depth resources for ' . $topic,
+                    'category' => 'research',
+                    'content_types' => ['article', 'research', 'documentation']
+                ],
+                'Latest Developments' => [
+                    'query' => 'latest developments and updates about ' . $topic,
+                    'category' => 'news',
+                    'content_types' => ['article', 'video']
+                ],
+                'Best Practices' => [
+                    'query' => 'best practices and standards for ' . $topic,
+                    'category' => 'educational',
+                    'content_types' => ['article', 'tutorial', 'documentation']
+                ],
+                'Technical Documentation' => [
+                    'query' => 'technical documentation and API guides for ' . $topic,
+                    'category' => 'documentation',
+                    'content_types' => ['documentation', 'article']
                 ]
             ];
         }
@@ -627,7 +726,9 @@ EOT;
             'reddit.com',
             'twitter.com',
             'facebook.com',
-            'instagram.com'
+            'instagram.com',
+            'tiktok.com',
+            'snapchat.com'
         ];
         
         // Educational websites to prioritize
@@ -635,11 +736,26 @@ EOT;
             'edu',
             'gov',
             'org',
-            'coursera.org',
+            'medium.com',
+            'dev.to',
+            'css-tricks.com',
+            'smashingmagazine.com',
+            'alistapart.com',
+            'sitepoint.com',
+            'tutsplus.com',
             'youtube.com',
+            'vimeo.com',
+            'ted.com',
             'khanacademy.org',
+            'coursera.org',
             'edx.org',
-            'udemy.com'
+            'udemy.com',
+            'udacity.com',
+            'github.com',
+            'stackoverflow.com',
+            'mozilla.org',
+            'w3schools.com',
+            'mdn.com'
         ];
 
         // Search for each category
@@ -649,10 +765,12 @@ EOT;
                 // Old format: string of search terms
                 $searchQuery = $topic . ' ' . $categoryConfig;
                 $contentCategory = 'educational';
+                $contentTypes = ['article', 'video'];
             } else {
                 // New format: array with configuration
                 $searchQuery = $categoryConfig['query'] ?? $topic;
                 $contentCategory = $categoryConfig['category'] ?? 'educational';
+                $contentTypes = $categoryConfig['content_types'] ?? ['article', 'video'];
             }
             
             // Set date range based on category
@@ -663,23 +781,20 @@ EOT;
                 ];
             }
             
-            // Use search with appropriate parameters for each category
-            $results = $this->search(
+            // Use the new findLearningArticlesAndVideos method for better results
+            $results = $this->findLearningArticlesAndVideos(
                 $searchQuery, 
                 $resultsPerCategory, 
-                $includeDomains, 
-                true, 
-                $excludeDomains,
-                '',
-                $contentCategory,
-                $dateRange
+                '', // level
+                $contentTypes
             );
             
             if ($results['success'] && !empty($results['results'])) {
                 $categorizedResults[$categoryName] = [
                     'results' => $results['results'],
                     'search_type' => $results['search_type'] ?? 'gpt',
-                    'total_results' => count($results['results'])
+                    'total_results' => count($results['results']),
+                    'content_types' => $contentTypes
                 ];
             }
         }
