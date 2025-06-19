@@ -5,7 +5,7 @@ i want you to run curl requests to test the app, especially creating a readlist 
     "login": "subomi",
      "password": "Muideenid1$"
 }
-
+ 
 */
 
 namespace App\Http\Controllers;
@@ -222,10 +222,14 @@ class CogniController extends Controller
 
     /**
      * Handle readlist creation request from chat interface
+     * 
+     * This method processes natural language requests to create readlists from chat messages.
+     * It extracts the topic, finds relevant content, and creates a readlist with a mix of
+     * internal and external resources.
      *
-     * @param \App\Models\User $user
-     * @param string $question
-     * @param string $conversationId
+     * @param \App\Models\User $user The authenticated user
+     * @param string $question The user's message/query
+     * @param string $conversationId The current conversation ID
      * @return \Illuminate\Http\JsonResponse
      */
     private function handleReadlistCreationRequest($user, $question, $conversationId)
@@ -234,30 +238,58 @@ class CogniController extends Controller
             // Generate a new conversation ID if none provided
             $conversationId = 'conv_' . uniqid() . '_' . time();
         }
+        
         // Create an array to collect debug information throughout the process
         $debugLogs = [
             'process_steps' => [],
             'internal_content' => [],
             'search_results' => [],
             'validation' => [],
-            'error_details' => []
+            'error_details' => [],
+            'user_query' => $question
         ];
         
         $description = '';
         $enhancedTopicInfo = [];
+        $isConversationContext = false;
+        $conversationContext = [];
         
         try {
             $debugLogs['process_steps'][] = 'Starting enhanced readlist creation process';
             
-            // Get user conversation history for context
+            // Get user conversation history for better context understanding
             $conversationHistory = $this->getUserConversationHistory($user, $conversationId);
+            
+            // Check if this is part of an ongoing conversation
+            if (count($conversationHistory) > 1) {
+                $isConversationContext = true;
+                $conversationContext = array_slice($conversationHistory, -5); // Get last 5 messages for context
+                $debugLogs['process_steps'][] = 'Using conversation context with ' . count($conversationContext) . ' previous messages';
+            }
+            
+            // Analyze user interests from conversation history
             $userInterests = $this->topicExtractionService->analyzeUserInterests($conversationHistory);
+            $debugLogs['user_interests'] = $userInterests;
             
-            $debugLogs['process_steps'][] = 'Analyzed user interests: ' . json_encode($userInterests);
+            // Enhanced topic extraction with conversation context
+            $enhancedTopicInfo = $this->topicExtractionService->extractAndEnhanceTopic(
+                $question, 
+                $userInterests,
+                $isConversationContext ? $conversationContext : null
+            );
             
-            // Use enhanced topic extraction
-            $enhancedTopicInfo = $this->topicExtractionService->extractAndEnhanceTopic($question, $userInterests);
+            // Use the enhanced topic or fall back to the original question
             $description = $enhancedTopicInfo['primary_topic'] ?? $question;
+            
+            // If we're in a conversation context, try to extract more specific topic
+            if ($isConversationContext && empty($enhancedTopicInfo['is_explicit_topic'])) {
+                $conversationTopic = $this->extractTopicFromConversation($conversationContext, $question);
+                if ($conversationTopic) {
+                    $description = $conversationTopic;
+                    $enhancedTopicInfo['is_conversation_topic'] = true;
+                    $enhancedTopicInfo['conversation_topic'] = $conversationTopic;
+                }
+            }
             
             $debugLogs['process_steps'][] = 'Enhanced topic extraction result: ' . json_encode($enhancedTopicInfo);
             
@@ -270,25 +302,100 @@ class CogniController extends Controller
             $includeExternal = true;
             $externalCount = 3;
             
-            // Content moderation check
-            $contentModerationService = app(\App\Services\ContentModerationService::class);
-            $moderationResult = $contentModerationService->analyzeText($description);
+            // Try to extract specific instructions from the user's message
+            if (preg_match('/(\d+)\s*(items|resources|articles|videos)/i', $question, $matches)) {
+                $requestedCount = (int)$matches[1];
+                if ($requestedCount > 0 && $requestedCount <= 20) { // Limit to 20 items max for performance
+                    $itemCount = $requestedCount;
+                    $debugLogs['process_steps'][] = "User requested $itemCount items";
+                }
+            }
             
-            if (!$moderationResult['isAllowed']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Your request contains inappropriate content. Please modify and try again.',
-                    'conversation_id' => $conversationId
-                ], 400);
+            // Check if user wants only internal or external content
+            if (preg_match('/(only|just)\s+(internal|our|your)/i', $question)) {
+                $includeExternal = false;
+                $debugLogs['process_steps'][] = 'User requested only internal content';
+            } elseif (preg_match('/(find|search|look up|get).*online|from the web/i', $question)) {
+                $externalCount = min(10, $itemCount); // Allow more external results if specifically requested
+                $debugLogs['process_steps'][] = 'User requested web search for content';
+            }
+            
+            // Content moderation check with more detailed error messages
+            try {
+                $contentModerationService = app(\App\Services\ContentModerationService::class);
+                $moderationResult = $contentModerationService->analyzeText($description);
+                
+                if (!$moderationResult['isAllowed']) {
+                    $errorMessage = 'Your request contains content that cannot be processed. ';
+                    $errorMessage .= $moderationResult['reason'] ?? 'Please modify your request and try again.';
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => $errorMessage,
+                        'conversation_id' => $conversationId,
+                        'error_details' => [
+                            'error_type' => 'ContentModeration',
+                            'reason' => $moderationResult['reason'] ?? 'Content not allowed',
+                            'flagged_terms' => $moderationResult['flagged_terms'] ?? []
+                        ]
+                    ], 400);
+                }
+            } catch (\Exception $e) {
+                // Log the error but continue with readlist creation
+                \Log::error('Content moderation service error: ' . $e->getMessage(), [
+                    'description' => $description,
+                    'trace' => $e->getTraceAsString()
+                ]);
+                
+                // Continue with readlist creation but log the issue
+                $debugLogs['warnings'][] = 'Content moderation check failed: ' . $e->getMessage();
             }
             
             // Search for relevant internal content using enhanced keywords
             $searchKeywords = $enhancedTopicInfo['search_keywords'] ?? [$description];
+            
+            // Add the main topic as a search keyword if not already present
+            if (!in_array(strtolower($description), array_map('strtolower', $searchKeywords))) {
+                array_unshift($searchKeywords, $description);
+            }
+            
+            $debugLogs['search_keywords'] = $searchKeywords;
+            
+            // Find relevant internal content
             $internalContent = $this->findRelevantContentWithKeywords($description, $searchKeywords, $debugLogs);
+            
+            // Log the internal content found for debugging
+            $debugLogs['internal_content_found'] = array_map(function($item) {
+                return [
+                    'id' => $item['id'] ?? null,
+                    'type' => $item['type'] ?? null,
+                    'title' => $item['title'] ?? 'No title',
+                    'relevance_score' => $item['relevance_score'] ?? 0
+                ];
+            }, $internalContent);
             
             // Check if we have enough internal content before proceeding
             $minRequiredContent = 3; // Minimum number of internal items needed
-            if (count($internalContent) < $minRequiredContent) {
+            $hasEnoughContent = count($internalContent) >= $minRequiredContent;
+            
+            // If we don't have enough content, try to find more with broader search
+            if (!$hasEnoughContent) {
+                $debugLogs['process_steps'][] = "Initial search found " . count($internalContent) . " items, trying broader search";
+                
+                // Try with just the main topic if we were using multiple keywords
+                if (count($searchKeywords) > 1) {
+                    $broaderResults = $this->findRelevantContentWithKeywords($description, [$description], $debugLogs, true);
+                    
+                    // Merge results, removing duplicates
+                    $internalContent = $this->mergeContentResults($internalContent, $broaderResults);
+                    $debugLogs['broader_search_results'] = count($broaderResults);
+                    $debugLogs['merged_results_count'] = count($internalContent);
+                }
+                
+                $hasEnoughContent = count($internalContent) >= $minRequiredContent;
+            }
+            
+            if (!$hasEnoughContent) {
                 // Not enough internal content, try to get some from the web
                 $debugLogs['process_steps'][] = "Not enough internal content (found " . count($internalContent) . ", need " . $minRequiredContent . "), searching web";
                 \Log::info("Not enough internal content for readlist on '{$description}', searching web", [
@@ -296,79 +403,91 @@ class CogniController extends Controller
                     'enhanced_topic_info' => $enhancedTopicInfo
                 ]);
                 
-                // Get web content using GPT search with enhanced keywords
+                // Get web content using enhanced search with better query construction
                 $searchService = app(\App\Services\GPTSearchService::class);
+                
+                // Construct a more effective search query
+                $searchQuery = $this->constructSearchQuery($description, $searchKeywords, $enhancedTopicInfo);
+                
                 \Log::info("Attempting web search for readlist content", [
-                    'query' => $description,
+                    'original_query' => $description,
+                    'enhanced_query' => $searchQuery,
                     'enhanced_keywords' => $searchKeywords,
-                    'gpt_configured' => $searchService->isConfigured()
+                    'gpt_configured' => $searchService->isConfigured(),
+                    'topic_info' => $enhancedTopicInfo
                 ]);
                 
-                // Determine if this is an educational, technical, or general query
-                $queryType = $this->analyzeReadlistQueryType($description);
+                // Determine content types and domains based on query context
+                $contentConfig = $this->getContentTypeConfiguration($description, $enhancedTopicInfo);
                 
-                // Educational websites to prioritize
-                $includeDomains = [
-                    'edu', // Educational institutions
-                    'gov', // Government resources
-                    'org', // Non-profit organizations
-                    'coursera.org',
-                    'khanacademy.org',
-                    'edx.org',
-                    'udemy.com',
-                    'medium.com',
-                    'dev.to',
-                    'openculture.com'
+                // Use our enhanced search query construction
+                $enhancedSearchQuery = $searchQuery; // From our earlier construction
+                
+                // Log the search configuration
+                $debugLogs['search_configuration'] = [
+                    'query' => $enhancedSearchQuery,
+                    'content_types' => $contentConfig['content_types'],
+                    'include_domains' => $contentConfig['include_domains'],
+                    'exclude_domains' => $contentConfig['exclude_domains'],
+                    'is_educational' => $contentConfig['is_educational']
                 ];
                 
-                // Common spam or inappropriate domains to exclude
-                $excludeDomains = [
-                    'pinterest.com', // Often contains low-quality content
-                    'quora.com',     // Can contain unverified information
-                    'reddit.com',    // May contain inappropriate content
-                    'twitter.com',   // May contain unverified information
-                    'facebook.com',  // May contain unverified information
-                    'instagram.com', // May contain inappropriate content
+                // Add educational context if relevant
+                if ($contentConfig['is_educational']) {
+                    $enhancedSearchQuery .= ' ' . implode(' ', $contentConfig['educational_terms']);
+                }
+                
+                // Build search parameters with enhanced configuration
+                $searchParams = [
+                    'num' => $externalCount,
+                    'safe' => 'active',
+                    'lr' => 'lang_en',
+                    'cr' => 'US',
+                    'gl' => 'us',
+                    'hl' => 'en',
+                    'tbs' => 'qdr:y' // Limit to past year by default
                 ];
                 
-                // Use enhanced search query with keywords
-                $enhancedSearchQuery = $description;
-                if (!empty($searchKeywords)) {
-                    $enhancedSearchQuery .= ' ' . implode(' ', array_slice($searchKeywords, 0, 3));
+                // Add content type specific parameters
+                $contentTypes = $contentConfig['content_types'];
+                $searchQuery = $enhancedSearchQuery;
+                
+                // Add content type filters to query
+                $typeFilters = array_map(function($type) {
+                    return "intitle:$type OR inurl:$type";
+                }, $contentTypes);
+                
+                if (!empty($typeFilters)) {
+                    $searchQuery .= " (" . implode(' OR ', $typeFilters) . ")";
                 }
                 
-                // Determine content types to prioritize based on query type
-                $contentTypes = ['article', 'video', 'tutorial'];
-                if (strpos($queryType['category'], 'technical') !== false) {
-                    $contentTypes[] = 'documentation';
-                }
-                if (strpos($queryType['category'], 'research') !== false) {
-                    $contentTypes[] = 'research';
-                }
-                
-                // Perform web search with article and video focus
+                // Perform the search
                 $webSearchResults = $searchService->findLearningArticlesAndVideos(
-                    $enhancedSearchQuery . " " . $queryType['additional_terms'],
-                    10, 
+                    $searchQuery,
+                    $externalCount,
                     '', // level
-                    $contentTypes
+                    $contentTypes,
+                    $contentConfig['include_domains'],
+                    $contentConfig['exclude_domains']
                 );
                 
                 // If search failed or returned no results, try a more generic approach
                 if (!$webSearchResults['success'] || empty($webSearchResults['results'])) {
-                    \Log::info("First search attempt failed, trying with more generic parameters", [
-                        'query' => $enhancedSearchQuery,
-                        'success' => $webSearchResults['success'] ?? false,
-                        'result_count' => count($webSearchResults['results'] ?? [])
-                    ]);
+                    $debugLogs['fallback_search'] = 'Initial search returned no results, trying broader search';
                     
-                    // Try a more generic search with fewer restrictions but still focused on articles/videos
+                    // Try a more generic search with fewer restrictions
+                    $fallbackQuery = $description . ' ' . implode(' ', array_slice($contentConfig['educational_terms'] ?? [], 0, 2));
+                    
                     $webSearchResults = $searchService->findLearningArticlesAndVideos(
-                        $description . " articles and videos",
-                        10, 
+                        $fallbackQuery,
+                        $externalCount,
                         '', // level
-                        ['article', 'video'] // Basic content types
+                        ['article', 'video'], // Basic content types
+                        [], // No domain restrictions
+                        $contentConfig['exclude_domains'] // Still exclude spam
                     );
+                    
+                    $debugLogs['fallback_query'] = $fallbackQuery;
                 }
                 
                 // Log search results for debugging
@@ -391,27 +510,86 @@ class CogniController extends Controller
                 ];
                 
                 if ($webSearchResults['success'] && !empty($webSearchResults['results'])) {
-                    // Process web search results into standardized readlist items
-                    $webItems = $this->processWebSearchResultsToItems($webSearchResults, $description);
+                    // Process web search results with enhanced metadata and relevance scoring
+                    $webItems = $this->processWebSearchResultsToItems(
+                        $webSearchResults, 
+                        $description,
+                        $enhancedTopicInfo
+                    );
                     
-                    // Combine internal and external content
+                    // Log the processed web items for debugging
+                    $debugLogs['processed_web_items'] = array_map(function($item) {
+                        return [
+                            'title' => $item['title'] ?? 'No title',
+                            'url' => $item['url'] ?? null,
+                            'type' => $item['type'] ?? 'unknown',
+                            'source' => $item['source'] ?? 'unknown',
+                            'relevance' => $item['relevance_score'] ?? 0
+                        ];
+                    }, $webItems);
+                    
+                    // Combine internal and external content with prioritization
                     $allItems = [];
+                    $usedUrls = [];
                     
-                    // Add internal content first (if any)
+                    // Function to add item if not a duplicate
+                    $addItem = function($item) use (&$allItems, &$usedUrls) {
+                        $url = $item['url'] ?? '';
+                        $urlKey = md5(strtolower(trim($url)));
+                        
+                        // Skip duplicates
+                        if (isset($usedUrls[$urlKey]) || empty($url)) {
+                            return false;
+                        }
+                        
+                        // Add default values if missing
+                        $item['type'] = $item['type'] ?? 'article';
+                        $item['title'] = $item['title'] ?? 'Untitled';
+                        $item['description'] = $item['description'] ?? '';
+                        $item['relevance_score'] = $item['relevance_score'] ?? 0;
+                        
+                        // Add to results and mark URL as used
+                        $allItems[] = $item;
+                        $usedUrls[$urlKey] = true;
+                        return true;
+                    };
+                    
+                    // First add high-relevance internal content
                     foreach ($internalContent as $item) {
-                        $allItems[] = [
-                            'id' => $item['id'],
-                            'type' => $item['type'],
+                        $addItem([
+                            'id' => $item['id'] ?? null,
+                            'type' => $item['type'] ?? 'internal',
                             'title' => $item['title'] ?? 'Untitled',
                             'description' => $item['description'] ?? '',
+                            'url' => $item['url'] ?? null,
+                            'source' => 'internal',
+                            'relevance_score' => $item['relevance_score'] ?? 0.9, // High priority for internal content
                             'notes' => 'Internal content: ' . ($item['title'] ?? 'Untitled')
-                        ];
+                        ]);
                     }
                     
-                    // Add external content
+                    // Add web items with deduplication
                     foreach ($webItems as $item) {
-                        $allItems[] = $item;
+                        $addItem($item);
                     }
+                    
+                    // Sort all items by relevance score (highest first)
+                    usort($allItems, function($a, $b) {
+                        return ($b['relevance_score'] ?? 0) <=> ($a['relevance_score'] ?? 0);
+                    });
+                    
+                    // Limit to the requested number of items
+                    $allItems = array_slice($allItems, 0, $itemCount);
+                    
+                    // Log final item selection
+                    $debugLogs['final_items'] = array_map(function($item) {
+                        return [
+                            'title' => $item['title'] ?? 'No title',
+                            'type' => $item['type'] ?? 'unknown',
+                            'source' => $item['source'] ?? 'unknown',
+                            'relevance' => $item['relevance_score'] ?? 0
+                        ];
+                    }, $allItems);
                     
                     // Generate intelligent title and description
                     $readlistTitle = $this->generateIntelligentTitle($enhancedTopicInfo, $allItems);
@@ -584,52 +762,285 @@ class CogniController extends Controller
     }
     
     /**
-     * Process web search results into readlist items
+     * Process web search results into readlist items with enhanced scoring and metadata
      * 
      * @param array $webSearchResults The search results from GPT/fallback search
      * @param string $description The description/query used for the search
-     * @return array Array of web items formatted for readlist
+     * @param array $topicInfo Enhanced topic information for better scoring
+     * @return array Array of web items formatted for readlist with relevance scores
      */
-    private function processWebSearchResultsToItems($webSearchResults, $description)
+    /**
+     * Determine content type from search result
+     */
+    private function determineContentTypeFromResult(array $result): string
+    {
+        // Check URL for common patterns
+        $url = strtolower($result['url'] ?? '');
+        
+        if (strpos($url, 'youtube.com') !== false || strpos($url, 'youtu.be') !== false) {
+            return 'video';
+        }
+        
+        if (strpos($url, '.pdf') !== false) {
+            return 'document';
+        }
+        
+        // Check type field
+        $type = strtolower($result['type'] ?? 'article');
+        
+        // Map to our standard types
+        $typeMap = [
+            'video' => 'video',
+            'article' => 'article',
+            'tutorial' => 'tutorial',
+            'course' => 'course',
+            'document' => 'document',
+            'pdf' => 'document',
+            'blog' => 'article',
+            'guide' => 'tutorial',
+            'howto' => 'tutorial'
+        ];
+        
+        return $typeMap[$type] ?? 'article';
+    }
+    
+    /**
+     * Determine source from result
+     */
+    private function determineSource(array $result): string
+    {
+        $url = $result['url'] ?? '';
+        $source = $result['source'] ?? '';
+        
+        if (empty($source) && !empty($url)) {
+            $host = parse_url($url, PHP_URL_HOST);
+            $source = $host ? preg_replace('/^www\./', '', $host) : 'web';
+        }
+        
+        return $source ?: 'web';
+    }
+    
+    /**
+     * Calculate relevance score for a search result item
+     */
+    private function calculateRelevanceScore(array &$item, array $queryTerms, array $topicInfo): void
+    {
+        $score = 0.5; // Base score
+        
+        // 1. Title match (most important)
+        $title = strtolower($item['title']);
+        $titleMatches = 0;
+        
+        foreach ($queryTerms as $term) {
+            if (strlen($term) < 3) continue; // Skip very short terms
+            if (strpos($title, strtolower($term)) !== false) {
+                $titleMatches++;
+                $item['matches'][] = "title_contains_$term";
+                $score += 0.1; // Bonus for each matching term in title
+            }
+        }
+        
+        // 2. Description match
+        $description = strtolower($item['description']);
+        $descriptionMatches = 0;
+        
+        foreach ($queryTerms as $term) {
+            if (strlen($term) < 3) continue; // Skip very short terms
+            if (strpos($description, strtolower($term)) !== false) {
+                $descriptionMatches++;
+                $item['matches'][] = "description_contains_$term";
+                $score += 0.05; // Smaller bonus for description matches
+            }
+        }
+        
+        // 3. Content type bonus
+        $contentType = $item['type'] ?? '';
+        if (in_array($contentType, ['tutorial', 'guide', 'course', 'documentation'])) {
+            $score += 0.15;
+            $item['matches'][] = 'high_quality_content_type';
+        }
+        
+        // 4. Source quality
+        $source = strtolower($item['source']);
+        $qualitySources = ['edu', 'gov', 'wikipedia', 'medium', 'dev.to', 'freecodecamp'];
+        foreach ($qualitySources as $qualitySource) {
+            if (strpos($source, $qualitySource) !== false) {
+                $score += 0.1;
+                $item['matches'][] = 'quality_source';
+                break;
+            }
+        }
+        
+        // 5. Recency (if we have publication date)
+        if (!empty($item['published_at'])) {
+            try {
+                $publishedAt = is_numeric($item['published_at']) 
+                    ? \Carbon\Carbon::createFromTimestamp($item['published_at'])
+                    : \Carbon\Carbon::parse($item['published_at']);
+                
+                $daysOld = $publishedAt->diffInDays(now());
+                
+                if ($daysOld < 30) {
+                    $score += 0.15; // Very recent
+                    $item['matches'][] = 'recent_content';
+                } elseif ($daysOld < 365) {
+                    $score += 0.05; // Less than a year old
+                }
+            } catch (\Exception $e) {
+                // Ignore date parsing errors
+            }
+        }
+        
+        // 6. Content length (longer is generally better for articles)
+        $contentLength = strlen($item['description']);
+        if ($contentLength > 500) {
+            $score += 0.1;
+            $item['matches'][] = 'detailed_content';
+        } elseif ($contentLength > 200) {
+            $score += 0.05;
+        }
+        
+        // 7. Topic relevance from enhanced topic info
+        if (!empty($topicInfo['primary_topic'])) {
+            $primaryTopic = strtolower($topicInfo['primary_topic']);
+            if (strpos($title, $primaryTopic) !== false || strpos($description, $primaryTopic) !== false) {
+                $score += 0.1;
+                $item['matches'][] = 'matches_primary_topic';
+            }
+        }
+        
+        // Ensure score is between 0 and 1
+        $item['relevance_score'] = min(1.0, max(0.1, $score));
+        $item['quality_score'] = $this->calculateQualityScore($item);
+    }
+    
+    /**
+     * Calculate a quality score based on various signals
+     */
+    private function calculateQualityScore(array $item): float
+    {
+        $score = 0.5; // Base score
+        
+        // Positive signals
+        if (in_array('quality_source', $item['matches'] ?? [])) $score += 0.2;
+        if (in_array('detailed_content', $item['matches'] ?? [])) $score += 0.1;
+        if (in_array('recent_content', $item['matches'] ?? [])) $score += 0.1;
+        if (in_array('high_quality_content_type', $item['matches'] ?? [])) $score += 0.1;
+        
+        // Negative signals
+        if (strpos(strtolower($item['title'] ?? ''), 'sponsor') !== false) $score -= 0.2;
+        if (strpos(strtolower($item['description'] ?? ''), 'advertisement') !== false) $score -= 0.1;
+        
+        return min(1.0, max(0.1, $score));
+    }
+    
+    /**
+     * Clean text by removing extra whitespace and special characters
+     */
+    private function cleanText(?string $text): string
+    {
+        if (empty($text)) {
+            return '';
+        }
+        
+        // Remove HTML tags
+        $text = strip_tags($text);
+        
+        // Normalize whitespace
+        $text = preg_replace('/\s+/', ' ', $text);
+        
+        // Trim and return
+        return trim($text);
+    }
+    
+    /**
+     * Generate notes for a readlist item
+     */
+    private function generateItemNotes(array $item, array $originalResult): string
+    {
+        $notes = [];
+        
+        // Add source information
+        if (!empty($item['source'])) {
+            $notes[] = 'Source: ' . ucfirst($item['source']);
+        }
+        
+        // Add content type if not article
+        if (($item['type'] ?? '') !== 'article') {
+            $notes[] = 'Type: ' . ucfirst($item['type']);
+        }
+        
+        // Add date if available
+        if (!empty($item['published_at'])) {
+            try {
+                $date = is_numeric($item['published_at']) 
+                    ? \Carbon\Carbon::createFromTimestamp($item['published_at'])->toFormattedDateString()
+                    : \Carbon\Carbon::parse($item['published_at'])->toFormattedDateString();
+                $notes[] = 'Published: ' . $date;
+            } catch (\Exception $e) {
+                // Ignore date parsing errors
+            }
+        }
+        
+        // Add quality indicator
+        if (($item['quality_score'] ?? 0) > 0.7) {
+            $notes[] = 'High Quality';
+        }
+        
+        return implode(' • ', $notes);
+    }
+    
+    private function processWebSearchResultsToItems($webSearchResults, $description, array $topicInfo = [])
     {
         $webItems = [];
+        $queryTerms = array_merge(
+            explode(' ', strtolower($description)),
+            $topicInfo['search_keywords'] ?? [],
+            $topicInfo['related_concepts'] ?? []
+        );
         
         if (!empty($webSearchResults['results'])) {
             foreach ($webSearchResults['results'] as $result) {
-                // Make sure we have the minimum required fields
-                if (!empty($result['url']) && !empty($result['title'])) {
-                    // Handle various content formats
-                    $itemDescription = '';
-                    if (!empty($result['text'])) {
-                        $itemDescription = substr($result['text'], 0, 200) . '...';
-                    } elseif (!empty($result['summary'])) {
-                        $itemDescription = $result['summary'];
-                    } elseif (!empty($result['content'])) {
-                        $itemDescription = substr($result['content'], 0, 200) . '...';
-                    } else {
-                        $itemDescription = 'Resource about ' . $description;
-                    }
-                    
-                    // Get domain from either provided domain or parse from URL
-                    $domain = $result['domain'] ?? parse_url($result['url'], PHP_URL_HOST) ?? 'unknown';
-                    
-                    $webItems[] = [
-                        'title' => $result['title'],
-                        'description' => $itemDescription,
-                        'url' => $result['url'],
-                        'type' => 'external',
-                        'notes' => 'From web search: ' . $domain
-                    ];
+                // Skip if we don't have required fields
+                if (empty($result['url']) || empty($result['title'])) {
+                    continue;
                 }
+                
+                // Initialize item with basic information
+                $item = [
+                    'type' => $this->determineContentTypeFromResult($result),
+                    'title' => $this->cleanText($result['title']),
+                    'description' => $this->cleanText($result['text'] ?? $result['summary'] ?? $result['content'] ?? ''),
+                    'url' => $result['url'],
+                    'source' => $this->determineSource($result),
+                    'published_at' => $result['published_date'] ?? $result['date'] ?? null,
+                    'relevance_score' => 0.5, // Base score
+                    'quality_score' => 0.5,   // Base quality score
+                    'matches' => []           // Track what matched for debugging
+                ];
+                
+                // Calculate relevance score based on various factors
+                $this->calculateRelevanceScore($item, $queryTerms, $topicInfo);
+                
+                // Add additional metadata
+                $item['notes'] = $this->generateItemNotes($item, $result);
+                
+                $webItems[] = $item;
             }
         }
+        
+        // Sort by relevance score (highest first)
+        usort($webItems, function($a, $b) {
+            return $b['relevance_score'] <=> $a['relevance_score'];
+        });
         
         // Log the processing results
         \Log::info("Processed web search results into readlist items", [
             'items_count' => count($webItems),
             'results_count' => count($webSearchResults['results'] ?? []),
             'search_type' => $webSearchResults['search_type'] ?? 'unknown',
-            'used_fallback' => $webSearchResults['used_fallback'] ?? false
+            'used_fallback' => $webSearchResults['used_fallback'] ?? false,
+            'top_items' => array_slice($webItems, 0, 3) // Log top 3 items for debugging
         ]);
         
         return $webItems;
@@ -3335,20 +3746,367 @@ class CogniController extends Controller
     /**
      * Check if the question is a readlist creation request
      */
+    /**
+     * Check if the user wants to create a readlist from their message
+     * 
+     * This method uses multiple strategies to detect readlist creation intent:
+     * 1. Direct patterns (e.g., "create a readlist about...")
+     * 2. Collection intent (e.g., "save these resources")
+     * 3. Request patterns (e.g., "can you make a list of...")
+     * 4. Natural language indicators (e.g., "I want to save this for later")
+     */
+    /**
+     * Extract topic from conversation context
+     * 
+     * Analyzes the conversation history to determine the most relevant topic
+     * when the current message is part of an ongoing discussion.
+     *
+     * @param array $conversationContext Array of previous messages in the conversation
+     * @param string $currentMessage The current user message
+     * @return string|null The extracted topic or null if none found
+     */
+    private function extractTopicFromConversation(array $conversationContext, string $currentMessage): ?string
+    {
+        try {
+            // Prepare conversation text for analysis
+            $conversationText = '';
+            foreach ($conversationContext as $message) {
+                $role = $message['role'] ?? 'user';
+                $content = $message['content'] ?? '';
+                $conversationText .= "$role: $content\n";
+            }
+            
+            // Use the topic extraction service to analyze the conversation
+            $topicInfo = $this->topicExtractionService->extractAndEnhanceTopic(
+                $currentMessage,
+                [], // No user interests needed here
+                $conversationText
+            );
+            
+            // If we have a good confidence score, return the topic
+            $confidence = $topicInfo['confidence'] ?? 0;
+            if (!empty($topicInfo['primary_topic']) && $confidence > 0.6) {
+                return $topicInfo['primary_topic'];
+            }
+            
+            // Fallback: Look for named entities or key phrases in the conversation
+            $namedEntities = $topicInfo['named_entities'] ?? [];
+            if (!empty($namedEntities)) {
+                // Return the most frequently mentioned entity
+                $entityCounts = array_count_values($namedEntities);
+                arsort($entityCounts);
+                return array_key_first($entityCounts);
+            }
+            
+            return null;
+            
+        } catch (\Exception $e) {
+            \Log::error('Error extracting topic from conversation: ' . $e->getMessage(), [
+                'exception' => $e,
+                'conversation_length' => count($conversationContext)
+            ]);
+            return null;
+        }
+    }
+    
+    /**
+     * Check if the question is a readlist creation request
+     */
+    /**
+     * Merge multiple content result arrays while removing duplicates
+     * 
+     * @param array $contentArrays One or more arrays of content items to merge
+     * @return array Merged array of unique content items
+     */
+    /**
+     * Construct an effective search query based on the topic and context
+     * 
+     * @param string $description The main topic/description
+     * @param array $keywords Additional search keywords
+     * @param array $topicInfo Enhanced topic information
+     * @return string The constructed search query
+     */
+    private function constructSearchQuery(string $description, array $keywords, array $topicInfo): string
+    {
+        // Start with the main topic
+        $queryParts = [trim($description)];
+        
+        // Add entity types if available (e.g., person, place, concept)
+        if (!empty($topicInfo['entity_type'])) {
+            $queryParts[] = $topicInfo['entity_type'];
+        }
+        
+        // Add related concepts if available
+        if (!empty($topicInfo['related_concepts']) && is_array($topicInfo['related_concepts'])) {
+            // Take up to 2 related concepts to avoid query bloat
+            $queryParts = array_merge($queryParts, array_slice($topicInfo['related_concepts'], 0, 2));
+        }
+        
+        // Add any specific content type indicators
+        $contentType = $this->determineContentType($description, $topicInfo);
+        if ($contentType) {
+            $queryParts[] = $contentType;
+        }
+        
+        // Add high-quality keywords, avoiding duplicates
+        $uniqueKeywords = array_unique(array_merge(
+            array_slice($keywords, 0, 3), // Take top 3 keywords
+            $queryParts // Include existing query parts to dedupe against
+        ));
+        
+        // Construct the final query, removing any empty parts
+        $query = implode(' ', array_filter($uniqueKeywords));
+        
+        // Add quality indicators if this is an educational/informational query
+        if ($this->isEducationalQuery($description, $topicInfo)) {
+            $query .= ' guide tutorial overview introduction';
+        }
+        
+        return trim($query);
+    }
+    
+    /**
+     * Determine the most appropriate content type for the query
+     */
+    private function determineContentType(string $description, array $topicInfo): string
+    {
+        // Check for specific content type indicators in the topic info
+        if (!empty($topicInfo['content_types'])) {
+            $types = is_array($topicInfo['content_types']) 
+                ? $topicInfo['content_types'] 
+                : [$topicInfo['content_types']];
+                
+            // Prefer more specific content types
+            foreach ($types as $type) {
+                if (in_array(strtolower($type), ['tutorial', 'guide', 'course', 'documentation'])) {
+                    return $type;
+                }
+            }
+            return $types[0];
+        }
+        
+        // Default to article for general topics
+        return 'article';
+    }
+    
+    /**
+     * Check if this is an educational/informational query
+     */
+    /**
+     * Get content type configuration for web searches
+     * 
+     * @param string $description The search query/topic
+     * @param array $topicInfo Enhanced topic information
+     * @return array Configuration for content type filtering
+     */
+    private function getContentTypeConfiguration(string $description, array $topicInfo): array
+    {
+        $isEducational = $this->isEducationalQuery($description, $topicInfo);
+        
+        // Default content types
+        $contentTypes = ['article', 'video'];
+        $includeDomains = [
+            'edu', 'gov', 'org', // General TLDs
+            'wikipedia.org', 'britannica.com', // Encyclopedias
+            'khanacademy.org', 'coursera.org', 'edx.org', 'udemy.com', // Learning platforms
+            'youtube.com', 'ted.com', // Video content
+            'medium.com', 'dev.to', 'freecodecamp.org', // Developer/tech content
+            'openculture.com' // Open educational resources
+        ];
+        
+        // Common spam or low-quality domains to exclude
+        $excludeDomains = [
+            'pinterest.com', 'quora.com', 'reddit.com',
+            'twitter.com', 'facebook.com', 'instagram.com',
+            'tiktok.com', 'youtube.com/shorts', 't.co'
+        ];
+        
+        // Adjust for educational queries
+        $educationalTerms = [];
+        if ($isEducational) {
+            $contentTypes = array_merge($contentTypes, ['tutorial', 'guide', 'course', 'documentation']);
+            $educationalTerms = ['guide', 'tutorial', 'learn', 'introduction', 'overview'];
+            
+            // Add more educational domains
+            $includeDomains = array_merge($includeDomains, [
+                'academic.oup.com', 'jstor.org', 'springer.com',
+                'sciencedirect.com', 'ieeexplore.ieee.org', 'arxiv.org'
+            ]);
+        }
+        
+        // Add topic-specific domains if available
+        if (!empty($topicInfo['recommended_domains']) && is_array($topicInfo['recommended_domains'])) {
+            $includeDomains = array_merge($includeDomains, $topicInfo['recommended_domains']);
+        }
+        
+        // Remove any duplicates
+        $includeDomains = array_unique($includeDomains);
+        $contentTypes = array_unique($contentTypes);
+        
+        return [
+            'content_types' => $contentTypes,
+            'include_domains' => $includeDomains,
+            'exclude_domains' => $excludeDomains,
+            'is_educational' => $isEducational,
+            'educational_terms' => $educationalTerms
+        ];
+    }
+    
+    /**
+     * Check if this is an educational/informational query
+     */
+    private function isEducationalQuery(string $description, array $topicInfo): bool
+    {
+        // Check if the topic is explicitly educational
+        if (!empty($topicInfo['is_educational'])) {
+            return true;
+        }
+        
+        // Common educational query patterns
+        $patterns = [
+            '/how to/i',
+            '/what is/i',
+            '/guide to/i',
+            '/tutorial/i',
+            '/learn/i',
+            '/introduction to/i',
+            '/overview of/i'
+        ];
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $description)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Merge multiple content result arrays while removing duplicates
+     */
+    private function mergeContentResults(array ...$contentArrays): array
+    {
+        $merged = [];
+        $seenIds = [];
+        
+        foreach ($contentArrays as $contentArray) {
+            if (!is_array($contentArray)) continue;
+            
+            foreach ($contentArray as $item) {
+                // Use ID if available, otherwise create a unique key from title and type
+                $itemId = $item['id'] ?? null;
+                $itemKey = $itemId ?: md5(($item['title'] ?? '') . '|' . ($item['type'] ?? ''));
+                
+                // Skip if we've already seen this item
+                if (isset($seenIds[$itemKey])) {
+                    // Keep the item with the higher relevance score
+                    if (($item['relevance_score'] ?? 0) > ($seenIds[$itemKey]['relevance_score'] ?? 0)) {
+                        $index = $seenIds[$itemKey]['index'];
+                        $merged[$index] = $item;
+                    }
+                    continue;
+                }
+                
+                // Add to merged results and mark as seen
+                $seenIds[$itemKey] = [
+                    'index' => count($merged),
+                    'relevance_score' => $item['relevance_score'] ?? 0
+                ];
+                $merged[] = $item;
+            }
+        }
+        
+        // Sort by relevance score (highest first)
+        usort($merged, function($a, $b) {
+            $scoreA = $a['relevance_score'] ?? 0;
+            $scoreB = $b['relevance_score'] ?? 0;
+            return $scoreB <=> $scoreA; // Descending order
+        });
+        
+        return $merged;
+    }
+    
+    /**
+     * Check if the question is a readlist creation request
+     */
     private function isReadlistRequest(string $question): bool
     {
-        $readlistPatterns = [
-            '/create\s+a\s+readlist/i',
-            '/make\s+a\s+readlist/i', 
+        // Convert to lowercase once for case-insensitive matching
+        $lowerQuestion = strtolower(trim($question));
+        
+        // Direct patterns for readlist creation
+        $directPatterns = [
+            '/create\s+(?:a\s+)?(?:reading\s+)?list(?:\s+of|\s+about|\s+for|\s+on)?/i',
+            '/make\s+(?:me\s+)?(?:a\s+)?(?:reading\s+)?list(?:\s+of|\s+about|\s+for|\s+on)?/i',
+            '/build\s+(?:me\s+)?(?:a\s+)?(?:reading\s+)?list(?:\s+of|\s+about|\s+for|\s+on)?/i',
+            '/generate\s+(?:me\s+)?(?:a\s+)?(?:reading\s+)?list(?:\s+of|\s+about|\s+for|\s+on)?/i',
+            '/curate\s+(?:me\s+)?(?:a\s+)?(?:reading\s+)?list(?:\s+of|\s+about|\s+for|\s+on)?/i',
+            '/put\s+together\s+(?:a\s+)?(?:reading\s+)?list(?:\s+of|\s+about|\s+for|\s+on)?/i',
+            '/save\s+(?:this|these|that|those)\s+(?:as\s+)?(?:a\s+)?(?:reading\s+)?list/i',
             '/create\s+readlist/i',
-            '/build\s+a\s+readlist/i',
-            '/generate\s+a\s+readlist/i',
-            '/curate\s+a\s+readlist/i',
-            '/put\s+together\s+a\s+readlist/i'
         ];
 
-        foreach ($readlistPatterns as $pattern) {
-            if (preg_match($pattern, $question)) {
+        // Collection/save intent patterns
+        $collectionPatterns = [
+            '/save\s+(?:this|these|that|those)\s+(?:resources?|links?|articles?|videos?|posts?)/i',
+            '/collect\s+(?:these|those|this|that)\s+(?:resources?|links?|articles?|videos?|posts?)/i',
+            '/can you save (?:these|those|this|that) (?:resources?|links?|articles?)/i',
+            '/i want to save (?:these|those|this|that) (?:resources?|links?|articles?)/i',
+            '/add (?:these|those|this|that) to my (?:reading )?list/i',
+        ];
+
+        // Request patterns
+        $requestPatterns = [
+            '/can you make (?:me )?a (?:reading )?list (?:of|about|for|on)/i',
+            '/could you create (?:me )?a (?:reading )?list (?:of|about|for|on)/i',
+            '/i need (?:a|an) (?:reading )?list (?:of|about|for|on)/i',
+            '/suggest (?:me )?(?:a|some) (?:reading )?list (?:of|about|for|on)/i',
+        ];
+
+        // Natural language indicators
+        $nlPatterns = [
+            '/i want to save this (?:for later|to read later)/i',
+            '/i\'d like to save this (?:for later|to read later)/i',
+            '/save (?:this|that) for (?:later|future reference)/i',
+            '/make a collection (?:of|about|for|on)/i',
+            '/create a collection (?:of|about|for|on)/i',
+            '/i want to create a collection (?:of|about|for|on)/i',
+        ];
+
+        // Check direct patterns
+        foreach ($directPatterns as $pattern) {
+            if (preg_match($pattern, $lowerQuestion)) {
+                return true;
+            }
+        }
+
+        // If message is short, check for collection/request patterns
+        if (str_word_count($lowerQuestion) < 15) {
+            $allPatterns = array_merge($collectionPatterns, $requestPatterns, $nlPatterns);
+            foreach ($allPatterns as $pattern) {
+                if (preg_match($pattern, $lowerQuestion)) {
+                    return true;
+                }
+            }
+        } else {
+            // For longer messages, be more strict to avoid false positives
+            $strictPatterns = array_merge($collectionPatterns, $requestPatterns);
+            foreach ($strictPatterns as $pattern) {
+                if (preg_match($pattern, $lowerQuestion)) {
+                    return true;
+                }
+            }
+        }
+
+        // Check for explicit readlist keywords in the message
+        $readlistKeywords = [
+            'readlist', 'reading list', 'save these', 'save this', 'collect these',
+            'resource list', 'learning resources', 'study materials', 'reference list'
+        ];
+
+        foreach ($readlistKeywords as $keyword) {
+            if (stripos($lowerQuestion, $keyword) !== false) {
                 return true;
             }
         }
