@@ -265,6 +265,11 @@ class CogniController extends Controller
         $conversationContext = [];
         
         try {
+            \Log::info('[Cogni] Starting enhanced readlist creation', [
+                'user_id' => $user->id,
+                'conversation_id' => $conversationId,
+                'question' => $question
+            ]);
             $debugLogs['process_steps'][] = 'Starting enhanced readlist creation process';
             
             // Get user conversation history for better context understanding
@@ -275,11 +280,18 @@ class CogniController extends Controller
                 $isConversationContext = true;
                 $conversationContext = array_slice($conversationHistory, -5); // Get last 5 messages for context
                 $debugLogs['process_steps'][] = 'Using conversation context with ' . count($conversationContext) . ' previous messages';
+                \Log::info('[Cogni] Using conversation context', [
+                    'context' => $conversationContext
+                ]);
             }
             
             // Analyze user interests from conversation history
             $userInterests = $this->topicExtractionService->analyzeUserInterests($conversationHistory);
             $debugLogs['user_interests'] = $userInterests;
+            \Log::info('[Cogni] User interests extracted', [
+                'user_id' => $user->id,
+                'user_interests' => $userInterests
+            ]);
             
             // Always pass recent conversation context for topic extraction
             $recentContext = $conversationContext;
@@ -294,6 +306,9 @@ class CogniController extends Controller
                 $userInterests,
                 $recentContext
             );
+            \Log::info('[Cogni] Enhanced topic extraction', [
+                'enhanced_topic_info' => $enhancedTopicInfo
+            ]);
             
             // Use the enhanced topic or fall back to the original question
             $description = $enhancedTopicInfo['primary_topic'] ?? $question;
@@ -305,6 +320,9 @@ class CogniController extends Controller
                     $description = $conversationTopic;
                     $enhancedTopicInfo['is_conversation_topic'] = true;
                     $enhancedTopicInfo['conversation_topic'] = $conversationTopic;
+                    \Log::info('[Cogni] Topic extracted from conversation context', [
+                        'conversation_topic' => $conversationTopic
+                    ]);
                 }
             }
             
@@ -332,9 +350,11 @@ class CogniController extends Controller
             if (preg_match('/(only|just)\s+(internal|our|your)/i', $question)) {
                 $includeExternal = false;
                 $debugLogs['process_steps'][] = 'User requested only internal content';
+                \Log::info('[Cogni] User requested only internal content');
             } elseif (preg_match('/(find|search|look up|get).*online|from the web/i', $question)) {
                 $externalCount = min(10, $itemCount); // Allow more external results if specifically requested
                 $debugLogs['process_steps'][] = 'User requested web search for content';
+                \Log::info('[Cogni] User requested web search for content');
             }
             
             // Content moderation check with more detailed error messages
@@ -343,6 +363,10 @@ class CogniController extends Controller
                 $moderationResult = $contentModerationService->analyzeText($description);
                 
                 if (!$moderationResult['isAllowed']) {
+                    \Log::warning('[Cogni] Content moderation blocked request', [
+                        'description' => $description,
+                        'moderation_result' => $moderationResult
+                    ]);
                     $errorMessage = 'Your request contains content that cannot be processed. ';
                     $errorMessage .= $moderationResult['reason'] ?? 'Please modify your request and try again.';
                     
@@ -358,13 +382,11 @@ class CogniController extends Controller
                     ], 400);
                 }
             } catch (\Exception $e) {
-                // Log the error but continue with readlist creation
-                \Log::error('Content moderation service error: ' . $e->getMessage(), [
+                \Log::error('[Cogni] Content moderation service error', [
                     'description' => $description,
+                    'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString()
                 ]);
-                
-                // Continue with readlist creation but log the issue
                 $debugLogs['warnings'][] = 'Content moderation check failed: ' . $e->getMessage();
             }
             
@@ -377,9 +399,16 @@ class CogniController extends Controller
             }
             
             $debugLogs['search_keywords'] = $searchKeywords;
+            \Log::info('[Cogni] Search keywords for content', [
+                'search_keywords' => $searchKeywords
+            ]);
             
             // Find relevant internal content
             $internalContent = $this->findRelevantContentWithKeywords($description, $searchKeywords, $debugLogs);
+            \Log::info('[Cogni] Internal content search results', [
+                'count' => count($internalContent),
+                'items' => array_slice($internalContent, 0, 5) // log only first 5 for brevity
+            ]);
             
             // Log the internal content found for debugging
             $debugLogs['internal_content_found'] = array_map(function($item) {
@@ -415,7 +444,7 @@ class CogniController extends Controller
             if (!$hasEnoughContent) {
                 // Not enough internal content, try to get some from the web
                 $debugLogs['process_steps'][] = "Not enough internal content (found " . count($internalContent) . ", need " . $minRequiredContent . "), searching web";
-                \Log::info("Not enough internal content for readlist on '{$description}', searching web", [
+                \Log::info("[Cogni] Not enough internal content, searching web", [
                     'found_content_count' => count($internalContent),
                     'enhanced_topic_info' => $enhancedTopicInfo
                 ]);
@@ -426,7 +455,7 @@ class CogniController extends Controller
                 // Construct a more effective search query
                 $searchQuery = $this->constructSearchQuery($description, $searchKeywords, $enhancedTopicInfo);
                 
-                \Log::info("Attempting web search for readlist content", [
+                \Log::info("[Cogni] Attempting web search for readlist content", [
                     'original_query' => $description,
                     'enhanced_query' => $searchQuery,
                     'enhanced_keywords' => $searchKeywords,
