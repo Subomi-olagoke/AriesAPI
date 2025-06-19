@@ -655,9 +655,6 @@ class CogniController extends Controller
                     $readlist = $this->createReadlistInDatabase($user, $readlistData);
                     
                     if ($readlist) {
-                        // Dispatch job to generate AI image for the readlist asynchronously
-                        \App\Jobs\GenerateReadlistImage::dispatch($readlist->id, $description, $enhancedTopicInfo);
-                        
                         // Create appropriate response based on content sources
                         if (count($internalContent) < 2) {
                             $response = "I found limited internal content about " . $description . ", so I've created a readlist with " . 
@@ -700,9 +697,6 @@ class CogniController extends Controller
             $readlist = $this->createReadlistInDatabase($user, $readlistData);
             
             if ($readlist) {
-                // Dispatch job to generate AI image for the readlist asynchronously
-                \App\Jobs\GenerateReadlistImage::dispatch($readlist->id, $description, $enhancedTopicInfo);
-                
                 // Get the actual item count
                 $internalItemCount = $readlist->items()->whereNotNull('item_id')->count();
                 $externalItemCount = $readlist->items()->whereNull('item_id')->whereNotNull('url')->count();
