@@ -281,11 +281,18 @@ class CogniController extends Controller
             $userInterests = $this->topicExtractionService->analyzeUserInterests($conversationHistory);
             $debugLogs['user_interests'] = $userInterests;
             
-            // Enhanced topic extraction with conversation context
+            // Always pass recent conversation context for topic extraction
+            $recentContext = $conversationContext;
+            if (!$isConversationContext) {
+                // If not enough context, just use the current question
+                $recentContext = [
+                    ['role' => 'user', 'content' => $question]
+                ];
+            }
             $enhancedTopicInfo = $this->topicExtractionService->extractAndEnhanceTopic(
-                $question, 
+                $question,
                 $userInterests,
-                $isConversationContext ? $conversationContext : null
+                $recentContext
             );
             
             // Use the enhanced topic or fall back to the original question

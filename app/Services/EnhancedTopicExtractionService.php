@@ -18,22 +18,18 @@ class EnhancedTopicExtractionService
     }
     
     /**
-     * Extract and enhance topic from user input with intelligent understanding
-     * 
+     * Extract and enhance topic from user input, using conversation context to resolve vague references.
+     *
      * @param string $userInput The raw user input
      * @param array $userInterests Optional user interests for context
+     * @param array|null $conversationContext Recent conversation messages for context (optional)
      * @return array Enhanced topic information
      */
-    public function extractAndEnhanceTopic(string $userInput, array $userInterests = []): array
+    public function extractAndEnhanceTopic(string $userInput, array $userInterests = [], ?array $conversationContext = null): array
     {
         try {
-            // Clean the input first
             $cleanedInput = $this->cleanUserInput($userInput);
-            
-            // Create context-aware prompt for topic extraction
-            $prompt = $this->createTopicExtractionPrompt($cleanedInput, $userInterests);
-            
-            // Call OpenAI for intelligent topic extraction
+            $prompt = $this->createContextAwareTopicExtractionPrompt($cleanedInput, $userInterests, $conversationContext);
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $this->apiKey,
                 'Content-Type' => 'application/json',
@@ -52,26 +48,20 @@ class EnhancedTopicExtractionService
                 'temperature' => 0.7,
                 'max_tokens' => 1000,
             ]);
-            
             if ($response->successful()) {
                 $data = $response->json();
                 $result = $data['choices'][0]['message']['content'] ?? null;
-                
                 if ($result) {
                     return $this->parseTopicExtractionResult($result, $cleanedInput);
                 }
             }
-            
-            // Fallback to basic extraction
             return $this->fallbackTopicExtraction($cleanedInput);
-            
         } catch (\Exception $e) {
-            Log::error('Error in enhanced topic extraction', [
+            Log::error('Error in enhanced topic extraction (context-aware)', [
                 'message' => $e->getMessage(),
                 'user_input' => $userInput
             ]);
-            
-            return $this->fallbackTopicExtraction($cleanedInput);
+            return $this->fallbackTopicExtraction($cleanedInput ?? $userInput);
         }
     }
     
@@ -155,21 +145,30 @@ class EnhancedTopicExtractionService
     }
     
     /**
-     * Create intelligent prompt for topic extraction
-     * 
+     * Create a context-aware prompt for topic extraction, instructing GPT to resolve vague references using conversation history.
+     *
      * @param string $cleanedInput Cleaned user input
      * @param array $userInterests User interests for context
+     * @param array|null $conversationContext Recent conversation messages
      * @return string The prompt
      */
-    private function createTopicExtractionPrompt(string $cleanedInput, array $userInterests = []): string
+    private function createContextAwareTopicExtractionPrompt(string $cleanedInput, array $userInterests = [], ?array $conversationContext = null): string
     {
-        $prompt = "Analyze this user request and extract the educational topic they're interested in learning about.\n\n";
+        $prompt = "Analyze the following user request and extract the educational topic they're interested in learning about.\n";
+        if (!empty($conversationContext)) {
+            $prompt .= "Here is the recent conversation history (most recent last):\n";
+            foreach ($conversationContext as $msg) {
+                $role = $msg['role'] ?? 'user';
+                $content = $msg['content'] ?? '';
+                $prompt .= ucfirst($role) . ": " . $content . "\n";
+            }
+            $prompt .= "\n";
+            $prompt .= "If the user's request uses vague words like 'this', 'that', or pronouns, use the conversation context to infer what they mean.\n";
+        }
         $prompt .= "User request: \"{$cleanedInput}\"\n\n";
-        
         if (!empty($userInterests)) {
             $prompt .= "User's known interests: " . implode(', ', $userInterests) . "\n\n";
         }
-        
         $prompt .= "Please provide a JSON response with the following structure:\n";
         $prompt .= "{\n";
         $prompt .= "  \"primary_topic\": \"The main educational topic\",\n";
@@ -180,7 +179,6 @@ class EnhancedTopicExtractionService
         $prompt .= "  \"category\": \"technology|science|art|business|health|history|other\"\n";
         $prompt .= "}\n\n";
         $prompt .= "Focus on educational value and make the topic specific enough for creating a meaningful learning experience.";
-        
         return $prompt;
     }
     
