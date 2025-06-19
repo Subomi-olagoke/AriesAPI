@@ -96,10 +96,20 @@ class CogniController extends Controller
             // Default to regular Cogni processing
             $response = $this->cogniService->askQuestion($question, [], $user, $conversationId);
 
+            // Ensure $response is a string for logging/length
+            $responseStr = $response;
+            if (is_array($response)) {
+                if (isset($response['answer'])) {
+                    $responseStr = $response['answer'];
+                } else {
+                    $responseStr = json_encode($response);
+                }
+            }
+
             \Log::info('Cogni question processed successfully', [
                 'user_id' => $user->id,
                 'question_length' => strlen($question),
-                'response_length' => strlen($response),
+                'response_length' => strlen($responseStr),
                 'conversation_id' => $conversationId
             ]);
 
