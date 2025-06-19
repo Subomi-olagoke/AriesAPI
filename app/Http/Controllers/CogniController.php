@@ -671,6 +671,7 @@ class CogniController extends Controller
                         
                         $this->storeConversationInDatabase($user, $conversationId, $question, $response);
                         
+                        // EARLY RETURN: respond immediately after readlist creation and job dispatch
                         return response()->json([
                             'success' => true,
                             'answer' => $response,
@@ -724,6 +725,7 @@ class CogniController extends Controller
                 
                 $this->storeConversationInDatabase($user, $conversationId, $question, $response);
                 
+                // EARLY RETURN: respond immediately after readlist creation and job dispatch
                 return response()->json([
                     'success' => true,
                     'answer' => $response,
