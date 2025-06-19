@@ -129,21 +129,30 @@ class ReadlistController extends Controller
         $user = auth()->user();
         
         try {
-            $readlists = Readlist::where('user_id', $user->id)
+            // Fetch regular readlists (excluding system ones)
+            $readlists = \App\Models\Readlist::where('user_id', $user->id)
+                ->where(function($q) {
+                    $q->whereNull('is_system')->orWhere('is_system', false);
+                })
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function($readlist) {
-                    // Add item count for each readlist
                     $readlist->items_count = $readlist->items()->count();
                     return $readlist;
                 });
-            
+
+            // Fetch the personalized Cognition readlist
+            $cognitionService = app(\App\Services\CognitionService::class);
+            $cognitionReadlist = $cognitionService->getCognitionReadlist($user);
+            $cognitionReadlist->load('items');
+
             return response()->json([
                 'message' => 'User readlists retrieved successfully',
-                'readlists' => $readlists
+                'readlists' => $readlists,
+                'cognition_readlist' => $cognitionReadlist
             ]);
         } catch (\Exception $e) {
-            Log::error('Error retrieving user readlists: ' . $e->getMessage());
+            \Log::error('Error retrieving user readlists: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Failed to retrieve readlists: ' . $e->getMessage()
             ], 500);
