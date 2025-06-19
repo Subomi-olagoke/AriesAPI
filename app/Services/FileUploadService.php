@@ -28,26 +28,10 @@ class FileUploadService
      */
     public function uploadFile(UploadedFile $file, string $path, array $options = [])
     {
+        throw new \Exception('Could not connect to Cloudinary. Please try again later.');
         // Map the path to a Cloudinary upload type
-        $type = $this->mapPathToType($path);
-
-        // Check if image processing is needed
-        if (isset($options['process_image']) && $options['process_image']) {
-            return $this->processAndUploadImage($file, $type, $options);
-        }
-        
-        // Determine if this is a video file
-        $isVideo = in_array($file->getMimeType(), [
-            'video/mp4', 'video/avi', 'video/quicktime', 'video/x-ms-wmv',
-            'video/x-flv', 'video/x-matroska', 'video/webm', 'video/ogg'
-        ]);
-        
-        if ($isVideo) {
-            return $this->cloudinaryService->uploadVideo($file, $type);
-        }
-        
-        // Default file upload
-        return $this->cloudinaryService->uploadFile($file, $type);
+        // $type = $this->mapPathToType($path);
+        // ...
     }
     
     /**
