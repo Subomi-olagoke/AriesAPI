@@ -1,5 +1,13 @@
 <?php
 
+/*
+i want you to run curl requests to test the app, especially creating a readlist from cogni, the server is hosted at @https://ariesmvp-9903a26b3095.herokuapp.com/  and you'd need to login, the details for that is: {
+    "login": "subomi",
+     "password": "Muideenid1$"
+}
+
+*/
+
 namespace App\Http\Controllers;
 
 use App\Models\CogniChat;
@@ -63,6 +71,10 @@ class CogniController extends Controller
 
             $question = $request->input('question');
             $conversationId = $request->input('conversation_id');
+            if (empty($conversationId)) {
+                // Generate a new conversation ID if none provided
+                $conversationId = 'conv_' . uniqid() . '_' . time();
+            }
 
             \Log::info('Cogni question received', [
                 'user_id' => $user->id,
@@ -218,6 +230,10 @@ class CogniController extends Controller
      */
     private function handleReadlistCreationRequest($user, $question, $conversationId)
     {
+        if (empty($conversationId)) {
+            // Generate a new conversation ID if none provided
+            $conversationId = 'conv_' . uniqid() . '_' . time();
+        }
         // Create an array to collect debug information throughout the process
         $debugLogs = [
             'process_steps' => [],
