@@ -626,8 +626,8 @@ class CogniController extends Controller
                     $readlist = $this->createReadlistInDatabase($user, $readlistData);
                     
                     if ($readlist) {
-                        // Generate AI image for the readlist
-                        $this->generateReadlistImage($readlist, $description, $enhancedTopicInfo);
+                        // Dispatch job to generate AI image for the readlist asynchronously
+                        \App\Jobs\GenerateReadlistImage::dispatch($readlist->id, $description, $enhancedTopicInfo);
                         
                         // Create appropriate response based on content sources
                         if (count($internalContent) < 2) {
@@ -670,8 +670,8 @@ class CogniController extends Controller
             $readlist = $this->createReadlistInDatabase($user, $readlistData);
             
             if ($readlist) {
-                // Generate AI image for the readlist
-                $this->generateReadlistImage($readlist, $description, $enhancedTopicInfo);
+                // Dispatch job to generate AI image for the readlist asynchronously
+                \App\Jobs\GenerateReadlistImage::dispatch($readlist->id, $description, $enhancedTopicInfo);
                 
                 // Get the actual item count
                 $internalItemCount = $readlist->items()->whereNotNull('item_id')->count();
@@ -1177,58 +1177,6 @@ class CogniController extends Controller
         }
         
         return $prefix . ucfirst($primaryTopic);
-    }
-    
-    /**
-     * Generate AI image for readlist
-     * 
-     * @param \App\Models\Readlist $readlist The readlist
-     * @param string $topic The main topic
-     * @param array $enhancedTopicInfo Enhanced topic information
-     * @return void
-     */
-    private function generateReadlistImage(\App\Models\Readlist $readlist, string $topic, array $enhancedTopicInfo): void
-    {
-        try {
-            // Extract keywords from readlist content
-            $keywords = $this->aiImageService->extractKeywordsFromReadlist($readlist);
-            
-            // Add enhanced topic keywords
-            if (!empty($enhancedTopicInfo['search_keywords'])) {
-                $keywords = array_merge($keywords, $enhancedTopicInfo['search_keywords']);
-            }
-            
-            // Remove duplicates and limit
-            $keywords = array_unique($keywords);
-            $keywords = array_slice($keywords, 0, 8);
-            
-            // Generate the image asynchronously to avoid blocking the response
-            \Log::info('Starting AI image generation for readlist', [
-                'readlist_id' => $readlist->id,
-                'topic' => $topic,
-                'keywords' => $keywords
-            ]);
-            
-            // For now, we'll generate synchronously, but in production you might want to queue this
-            $imageUrl = $this->aiImageService->generateReadlistImage($readlist, $topic, $keywords);
-            
-            if ($imageUrl) {
-                \Log::info('Successfully generated AI image for readlist', [
-                    'readlist_id' => $readlist->id,
-                    'image_url' => $imageUrl
-                ]);
-            } else {
-                \Log::warning('Failed to generate AI image for readlist', [
-                    'readlist_id' => $readlist->id,
-                    'topic' => $topic
-                ]);
-            }
-        } catch (\Exception $e) {
-            \Log::error('Error generating AI image for readlist', [
-                'readlist_id' => $readlist->id,
-                'error' => $e->getMessage()
-            ]);
-        }
     }
     
     /**
