@@ -108,11 +108,10 @@ class CognitionService
         ];
         
         // Get user's selected topics
-        $userTopics = $user->topic()->with('category')->get();
+        $userTopics = $user->topic()->get();
         foreach ($userTopics as $topic) {
             $data['selected_topics'][] = [
                 'name' => $topic->name,
-                'category' => $topic->category->name ?? 'Unknown',
             ];
         }
         
