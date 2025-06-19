@@ -94,7 +94,7 @@ class CogniController extends Controller
             }
 
             // Default to regular Cogni processing
-            $response = $this->cogniService->askQuestion($question, [], $user, $conversationId);
+            $response = $this->cogniService->askQuestionInternal($question, []);
 
             // Ensure $response is a string for logging/length
             $responseStr = $response;
