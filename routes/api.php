@@ -37,6 +37,7 @@ use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\WaitlistController;
+use App\Http\Controllers\AvailableController;
 
 /*
 |--------------------------------------------------------------------------
@@ -640,6 +641,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/admin/waitlist', [WaitlistController::class, 'index']);
         Route::post('/admin/waitlist/send-email', [WaitlistController::class, 'sendEmail']);
     });
+
+    // Available resources endpoint
+    Route::get('/available', [\App\Http\Controllers\AvailableController::class, 'index']);
 });
 
 // Webhook routes (no authentication required)
