@@ -991,3 +991,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/profile', [\App\Http\Controllers\CognitionController::class, 'viewInterestProfile']);
     });
 });
+
+// Cogni post analysis endpoint
+Route::get('/cogni/analyze-post/{postId}', [\App\Http\Controllers\CogniController::class, 'analyzePost']);
