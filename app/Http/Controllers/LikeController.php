@@ -7,18 +7,20 @@ use App\Models\Post;
 use App\Models\User;
 use App\Models\Course;
 use App\Models\Comment;
+use App\Models\OpenLibrary;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use App\Notifications\LikeNotification;
 
 class LikeController {
 
-    public function createLike(Request $request, Post $post = null, Comment $comment = null, Course $course = null) {
+    public function createLike(Request $request, Post $post = null, Comment $comment = null, Course $course = null, OpenLibrary $openLibrary = null) {
         $user = $request->user();
 
         $postId = $post?->id;
         $commentId = $comment?->id;
         $courseId = $course?->id;
+        $openLibraryId = $openLibrary?->id;
         
         // Determine the likeable object
         $likeable = null;
@@ -37,6 +39,10 @@ class LikeController {
             $likeable = $course;
             $likeableType = Course::class;
             $likeableId = $courseId;
+        } elseif ($openLibrary) {
+            $likeable = $openLibrary;
+            $likeableType = OpenLibrary::class;
+            $likeableId = $openLibraryId;
         }
 
         // Check if we should use polymorphic relationships
@@ -90,8 +96,11 @@ class LikeController {
             if ($course) {
                 $course->load('user');
             }
+            if ($openLibrary) {
+                // Optionally, load approver or other relationships if needed
+            }
 
-            $notifiable = $post?->user ?? $comment?->user ?? $course?->user;
+            $notifiable = $post?->user ?? $comment?->user ?? $course?->user; // OpenLibrary may not have a user
 
             if ($notifiable) {
                 $notifiable->notify(new LikeNotification($post, $user, $comment, $course));
@@ -155,6 +164,24 @@ class LikeController {
         return response()->json([
             'success' => true,
             'course_id' => $courseId,
+            'like_count' => $count
+        ]);
+    }
+
+    public function openlibrary_like_count($openLibraryId) {
+        $usePolymorphic = Schema::hasColumn('likes', 'likeable_type');
+        
+        if ($usePolymorphic) {
+            $count = Like::where('likeable_type', OpenLibrary::class)
+                         ->where('likeable_id', $openLibraryId)
+                         ->count();
+        } else {
+            $count = 0; // Not supported in non-polymorphic mode
+        }
+        
+        return response()->json([
+            'success' => true,
+            'open_library_id' => $openLibraryId,
             'like_count' => $count
         ]);
     }

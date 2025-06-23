@@ -125,4 +125,12 @@ class OpenLibrary extends Model
     {
         return $this->hasMany(Bookmark::class, 'open_library_id');
     }
+
+    /**
+     * Get all likes for this OpenLibrary
+     */
+    public function likes()
+    {
+        return $this->morphMany(\App\Models\Like::class, 'likeable');
+    }
 }

@@ -130,10 +130,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/posts/user/{userId?}', [PostController::class, 'getUserPosts']);
     Route::get('/post/{postId}/stats', [PostController::class, 'getPostStats']); // Additional singular route
     Route::get('/posts/{postId}/stats', [PostController::class, 'getPostStats']);
-    Route::get('/post/{postId}/selections', [PostController::class, 'getSelectionCount']); // Additional singular route
+    Route::get('/post/{postId}/selections', [PostController::class, 'getSelectionCount']); // New route for readlist count
     Route::get('/posts/{postId}/selections', [PostController::class, 'getSelectionCount']);
-    Route::get('/post/{postId}/readlist-count', [PostController::class, 'getSelectionCount']); // New route for readlist count
-    Route::get('/posts/{postId}/readlist-count', [PostController::class, 'getSelectionCount']); // New plural route for readlist count
+    Route::get('/post/{postId}/readlist-count', [PostController::class, 'getSelectionCount']); // New plural route for readlist count
+    Route::get('/posts/{postId}/readlist-count', [PostController::class, 'getSelectionCount']);
 
     // Comment routes
     Route::post('/add-comment/{post_id}', [CommentController::class, 'postComment']);
@@ -152,9 +152,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/like/{post}', [LikeController::class, 'createLike']);
     Route::post('/like/comment/{comment}', [LikeController::class, 'createLike']);
     Route::post('/like/course/{course}', [LikeController::class, 'createLike']);
+    Route::post('/like/openlibrary/{openLibrary}', [LikeController::class, 'createLike']);
     Route::get('/like/{postId}/count', [LikeController::class, 'post_like_count']);
     Route::get('/like/comment/{commentId}/count', [LikeController::class, 'comment_like_count']);
     Route::get('/like/course/{courseId}/count', [LikeController::class, 'course_like_count']);
+    Route::get('/like/openlibrary/{openLibraryId}/count', [LikeController::class, 'openlibrary_like_count']);
 
     // Follow routes
     Route::post('/follow/{username}', [FollowController::class, 'createFollow']);
