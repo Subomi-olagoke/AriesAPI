@@ -15,6 +15,7 @@ return [
         'post_image' => env('CLOUDINARY_POST_IMAGE_PRESET', 'post_images'),
         'post_video' => env('CLOUDINARY_POST_VIDEO_PRESET', 'post_videos'),
         'post_thumbnail' => env('CLOUDINARY_POST_THUMBNAIL_PRESET', 'post_thumbnails'),
+        'channel_picture' => env('CLOUDINARY_CHANNEL_PICTURE_PRESET', 'channel_pictures'),
         'course_image' => env('CLOUDINARY_COURSE_IMAGE_PRESET', 'course_images'),
         'course_video' => env('CLOUDINARY_COURSE_VIDEO_PRESET', 'course_videos'),
         'course_thumbnail' => env('CLOUDINARY_COURSE_THUMBNAIL_PRESET', 'course_thumbnails'),
@@ -23,6 +24,7 @@ return [
         'lesson_thumbnail' => env('CLOUDINARY_LESSON_THUMBNAIL_PRESET', 'lesson_thumbnails'),
         'message_attachment' => env('CLOUDINARY_MESSAGE_ATTACHMENT_PRESET', 'message_attachments'),
         'readlist_images' => env('CLOUDINARY_READLIST_IMAGES_PRESET', 'readlist_images'),
+        'image' => env('CLOUDINARY_IMAGE_PRESET', 'images'), // Default fallback
     ],
     
     /**

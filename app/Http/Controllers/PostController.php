@@ -46,14 +46,9 @@ class PostController extends Controller
     public function store(Request $request)
     {
         // Validate the incoming request parameters
-        // Get user's subscription limits
-        $user = auth()->user();
-        $maxVideoSizeKb = $user->getMaxVideoSizeKb();
-        $maxImageSizeKb = $user->getMaxImageSizeKb();
-        
-        // Convert KB to bytes for validation
-        $maxVideoSize = $maxVideoSizeKb * 1024;
-        $maxImageSize = $maxImageSizeKb * 1024;
+        // Remove subscription-based limits - allow all users to upload media
+        $maxVideoSize = 500 * 1024 * 1024; // 500MB for all users
+        $maxImageSize = 50 * 1024 * 1024;  // 50MB for all users
         
         // Validate the incoming request parameters
         $request->validate([
@@ -69,40 +64,37 @@ class PostController extends Controller
                     
                     if (Str::startsWith($mime, 'video/')) {
                         if ($size > $maxVideoSize) {
-                            $fail('Video file size exceeds your plan limit of ' . 
-                                  round($maxVideoSize / (1024 * 1024), 1) . 'MB. ' .
-                                  'Upgrade to Premium for larger uploads.');
+                            $fail('Video file size exceeds limit of ' . 
+                                  round($maxVideoSize / (1024 * 1024), 1) . 'MB.');
                         }
                     } elseif (Str::startsWith($mime, 'image/')) {
                         if ($size > $maxImageSize) {
-                            $fail('Image file size exceeds your plan limit of ' . 
-                                  round($maxImageSize / (1024 * 1024), 1) . 'MB. ' .
-                                  'Upgrade to Premium for larger uploads.');
+                            $fail('Image file size exceeds limit of ' . 
+                                  round($maxImageSize / (1024 * 1024), 1) . 'MB.');
                         }
                     } else {
                         // For other file types, use the lower of the two limits
                         $maxSize = min($maxVideoSize, $maxImageSize);
                         if ($size > $maxSize) {
-                            $fail('File size exceeds your plan limit of ' . 
-                                  round($maxSize / (1024 * 1024), 1) . 'MB. ' .
-                                  'Upgrade to Premium for larger uploads.');
+                            $fail('File size exceeds limit of ' . 
+                                  round($maxSize / (1024 * 1024), 1) . 'MB.');
                         }
                     }
                 }
             ],
             'visibility'   => 'nullable|in:public,private,followers',
             'title'        => 'nullable|string|max:255',
-            // Optional AI analysis request
+            // Optional AI analysis request - remove premium restriction
             'analyze_with_ai' => 'nullable|boolean'
         ]);
 
-        // Check if AI analysis is requested by a non-premium user
-        if ($request->has('analyze_with_ai') && $request->analyze_with_ai && !$user->canAnalyzePosts()) {
-            return response()->json([
-                'message' => 'AI post analysis is a premium feature. Please upgrade your subscription to use this feature.',
-                'premium_required' => true
-            ], 403);
-        }
+        // Remove AI analysis premium check - allow all users to analyze posts
+        // if ($request->has('analyze_with_ai') && $request->analyze_with_ai && !$user->canAnalyzePosts()) {
+        //     return response()->json([
+        //         'message' => 'AI post analysis is a premium feature. Please upgrade your subscription to use this feature.',
+        //         'premium_required' => true
+        //     ], 403);
+        // }
         
         try {
             DB::beginTransaction();
@@ -209,49 +201,29 @@ class PostController extends Controller
             // Load the media relationship for the response
             $newPost->load('media');
             
-            // If AI analysis was requested and user has premium access
+            // If AI analysis was requested - allow all users now
             $aiAnalysis = null;
-            if ($request->has('analyze_with_ai') && $request->analyze_with_ai && $user->canAnalyzePosts()) {
+            if ($request->has('analyze_with_ai') && $request->analyze_with_ai) {
                 try {
-                    $cogniService = app(\App\Services\CogniService::class);
-                    $content = $newPost->title . "\n\n" . $newPost->body;
-                    
-                    // Request analysis from Cogni
-                    $prompt = "Analyze this post and provide insights. Include: " .
-                              "1) Main topics and keywords, " .
-                              "2) Writing style assessment, " . 
-                              "3) Potential audience, " .
-                              "4) Suggestions for improvements or engagement. " .
-                              "Format as JSON with fields: topics (array), style (string), audience (string), suggestions (array)";
-                    
-                    $result = $cogniService->askQuestion($prompt . "\n\nHere's the content:\n" . $content);
-                    
-                    if ($result['success']) {
-                        $aiAnalysis = $result['answer'];
-                    }
+                    $aiAnalysis = $this->analyzePostWithAI($newPost);
                 } catch (\Exception $e) {
-                    // Log error but don't fail the post creation
-                    Log::error('AI analysis failed: ' . $e->getMessage());
+                    Log::error('AI analysis failed for post ' . $newPost->id . ': ' . $e->getMessage());
+                    // Don't fail the post creation if AI analysis fails
                 }
             }
-
+            
             return response()->json([
                 'message' => 'Post created successfully',
                 'post' => $newPost,
-                'share_url' => route('shared.post', ['shareKey' => $newPost->share_key]),
                 'ai_analysis' => $aiAnalysis
             ], 201);
-
+            
         } catch (\Exception $e) {
-            // Comprehensive error logging
-            Log::error('Post creation failed', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request_data' => $request->all()
-            ]);
+            DB::rollBack();
+            Log::error('Post creation failed: ' . $e->getMessage());
             
             return response()->json([
-                'message' => 'Post creation failed: ' . $e->getMessage()
+                'message' => 'Failed to create post: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -327,14 +299,9 @@ class PostController extends Controller
             ], 403);
         }
         
-        // Get user's subscription limits
-        $user = auth()->user();
-        $maxVideoSizeKb = $user->getMaxVideoSizeKb();
-        $maxImageSizeKb = $user->getMaxImageSizeKb();
-        
-        // Convert KB to bytes for validation
-        $maxVideoSize = $maxVideoSizeKb * 1024;
-        $maxImageSize = $maxImageSizeKb * 1024;
+        // Remove subscription-based limits - allow all users to upload media
+        $maxVideoSize = 500 * 1024 * 1024; // 500MB for all users
+        $maxImageSize = 50 * 1024 * 1024;  // 50MB for all users
         
         $request->validate([
             'title' => 'sometimes|required|string|max:255',
@@ -351,23 +318,20 @@ class PostController extends Controller
                     
                     if (Str::startsWith($mime, 'video/')) {
                         if ($size > $maxVideoSize) {
-                            $fail('Video file size exceeds your plan limit of ' . 
-                                  round($maxVideoSize / (1024 * 1024), 1) . 'MB. ' .
-                                  'Upgrade to Premium for larger uploads.');
+                            $fail('Video file size exceeds limit of ' . 
+                                  round($maxVideoSize / (1024 * 1024), 1) . 'MB.');
                         }
                     } elseif (Str::startsWith($mime, 'image/')) {
                         if ($size > $maxImageSize) {
-                            $fail('Image file size exceeds your plan limit of ' . 
-                                  round($maxImageSize / (1024 * 1024), 1) . 'MB. ' .
-                                  'Upgrade to Premium for larger uploads.');
+                            $fail('Image file size exceeds limit of ' . 
+                                  round($maxImageSize / (1024 * 1024), 1) . 'MB.');
                         }
                     } else {
                         // For other file types, use the lower of the two limits
                         $maxSize = min($maxVideoSize, $maxImageSize);
                         if ($size > $maxSize) {
-                            $fail('File size exceeds your plan limit of ' . 
-                                  round($maxSize / (1024 * 1024), 1) . 'MB. ' .
-                                  'Upgrade to Premium for larger uploads.');
+                            $fail('File size exceeds limit of ' . 
+                                  round($maxSize / (1024 * 1024), 1) . 'MB.');
                         }
                     }
                 }
@@ -381,23 +345,20 @@ class PostController extends Controller
                     
                     if (Str::startsWith($mime, 'video/')) {
                         if ($size > $maxVideoSize) {
-                            $fail('Video file size exceeds your plan limit of ' . 
-                                  round($maxVideoSize / (1024 * 1024), 1) . 'MB. ' .
-                                  'Upgrade to Premium for larger uploads.');
+                            $fail('Video file size exceeds limit of ' . 
+                                  round($maxVideoSize / (1024 * 1024), 1) . 'MB.');
                         }
                     } elseif (Str::startsWith($mime, 'image/')) {
                         if ($size > $maxImageSize) {
-                            $fail('Image file size exceeds your plan limit of ' . 
-                                  round($maxImageSize / (1024 * 1024), 1) . 'MB. ' .
-                                  'Upgrade to Premium for larger uploads.');
+                            $fail('Image file size exceeds limit of ' . 
+                                  round($maxImageSize / (1024 * 1024), 1) . 'MB.');
                         }
                     } else {
                         // For other file types, use the lower of the two limits
                         $maxSize = min($maxVideoSize, $maxImageSize);
                         if ($size > $maxSize) {
-                            $fail('File size exceeds your plan limit of ' . 
-                                  round($maxSize / (1024 * 1024), 1) . 'MB. ' .
-                                  'Upgrade to Premium for larger uploads.');
+                            $fail('File size exceeds limit of ' . 
+                                  round($maxSize / (1024 * 1024), 1) . 'MB.');
                         }
                     }
                 }

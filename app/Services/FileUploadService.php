@@ -28,10 +28,20 @@ class FileUploadService
      */
     public function uploadFile(UploadedFile $file, string $path, array $options = [])
     {
-        throw new \Exception('Could not connect to Cloudinary. Please try again later.');
         // Map the path to a Cloudinary upload type
-        // $type = $this->mapPathToType($path);
-        // ...
+        $type = $this->mapPathToType($path);
+        
+        // Determine if this is a video file
+        $mimeType = $file->getMimeType();
+        $isVideo = strpos($mimeType, 'video/') === 0;
+        
+        if ($isVideo) {
+            // Use video upload for video files
+            return $this->cloudinaryService->uploadVideo($file, $type);
+        } else {
+            // Use image upload for images and other files
+            return $this->cloudinaryService->uploadFile($file, $type, $options);
+        }
     }
     
     /**
@@ -96,6 +106,7 @@ class FileUploadService
             'lesson_thumbnails' => 'lesson_thumbnail',
             'lesson_videos' => 'lesson_video',
             'lesson_files' => 'lesson_image',
+            'media/singles' => 'post_image',
             'media/images' => 'post_image',
             'media/videos' => 'post_video',
             'media/thumbnails' => 'post_thumbnail',
