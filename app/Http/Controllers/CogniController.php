@@ -17,6 +17,7 @@ use App\Services\PersonalizedFactsService;
 use App\Services\YouTubeService;
 use App\Services\EnhancedTopicExtractionService;
 use App\Services\AIReadlistImageService;
+use App\Services\ExaSearchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -32,19 +33,22 @@ class CogniController extends Controller
     protected $factsService;
     protected $topicExtractionService;
     protected $aiImageService;
+    protected $exaSearchService;
 
     public function __construct(
         CogniService $cogniService, 
         YouTubeService $youtubeService,
         PersonalizedFactsService $factsService,
         EnhancedTopicExtractionService $topicExtractionService,
-        AIReadlistImageService $aiImageService
+        AIReadlistImageService $aiImageService,
+        ExaSearchService $exaSearchService
     ) {
         $this->cogniService = $cogniService;
         $this->youtubeService = $youtubeService;
         $this->factsService = $factsService;
         $this->topicExtractionService = $topicExtractionService;
         $this->aiImageService = $aiImageService;
+        $this->exaSearchService = $exaSearchService;
     }
 
     /**
@@ -4139,59 +4143,78 @@ class CogniController extends Controller
      */
     public function analyzePost($postId)
     {
-        $post = \App\Models\Post::with('media')->findOrFail($postId);
-        $content = $post->title . "\n\n" . $post->body;
-        $postContext = $content;
-        $topicsPrompt = "Analyze this post and identify the 3-5 main educational topics or concepts it covers. Be specific, academic, and educational in your identification. Return only a comma-separated list of key educational topics with no explanations.";
-        $topicsResult = $this->cogniService->askQuestion($topicsPrompt . "\n\nHere's the content:\n" . $content);
-        $topics = $topicsResult['success'] ? $topicsResult['answer'] : '';
-        $relatedResources = [];
-        if (!empty($topics) && $this->exaSearchService->isConfigured()) {
-            $searchResult = $this->exaSearchService->findRelatedContent($topics, 5);
-            if ($searchResult['success'] && !empty($searchResult['results'])) {
-                $relatedResources = $searchResult['results'];
+        try {
+            $post = \App\Models\Post::with('media')->findOrFail($postId);
+            $content = $post->title . "\n\n" . $post->body;
+            $postContext = $content;
+            $topicsPrompt = "Analyze this post and identify the 3-5 main educational topics or concepts it covers. Be specific, academic, and educational in your identification. Return only a comma-separated list of key educational topics with no explanations.";
+            $topicsResult = $this->cogniService->askQuestion($topicsPrompt . "\n\nHere's the content:\n" . $content);
+            $topics = $topicsResult['success'] ? $topicsResult['answer'] : '';
+            $relatedResources = [];
+            if (!empty($topics) && $this->exaSearchService->isConfigured()) {
+                $searchResult = $this->exaSearchService->findRelatedContent($topics, 5);
+                if ($searchResult['success'] && !empty($searchResult['results'])) {
+                    $relatedResources = $searchResult['results'];
+                }
             }
-        }
-        $mediaAnalyses = [];
-        $hasMediaToAnalyze = $post->media && $post->media->count() > 0;
-        if ($hasMediaToAnalyze) {
-            foreach ($post->media as $media) {
-                $mediaType = $media->media_type ?? 'file';
-                $mediaUrl = $media->media_link ?? 'Not available';
-                $mediaName = $media->original_filename ?? 'Unnamed';
-                $mediaMimeType = $media->mime_type ?? '';
-                $mediaId = $media->id;
-                $mediaAnalyses[$mediaId] = [
-                    'media_id' => $mediaId,
-                    'media_type' => $mediaType,
-                    'media_name' => $mediaName,
-                    'media_url' => $mediaUrl,
-                    'analysis' => null
-                ];
-                if (strpos($mediaType, 'image') !== false || strpos($mediaMimeType, 'image/') !== false) {
-                    $prompt = "Analyze this image in the context of an educational post. First, describe what's shown in the image clearly. Then, explain its educational significance and how it relates to the post topic. If the image contains any diagrams, charts, or educational elements, explain them in detail. Focus on making your analysis educational and informative.";
-                    $imageResult = $this->cogniService->analyzeImage($mediaUrl, $prompt, $postContext);
-                    if ($imageResult['success']) {
-                        $mediaAnalyses[$mediaId]['analysis'] = $imageResult['answer'];
-                    }
-                } else if (strpos($mediaType, 'video') !== false || strpos($mediaMimeType, 'video/') !== false) {
-                    $videoPrompt = "Perform a professional, detailed analysis of this video in the context of the post. In a system-like tone, provide: 1. Likely content based on post context and video title/name 2. Educational concepts that may be covered 3. Potential learning outcomes from watching this video 4. How it complements the post's educational value. Format as a concise, factual analysis using professional language. If the video appears to be a demonstration, tutorial, lecture, or educational content, analyze what skills or knowledge viewers would gain.";
-                    $videoResult = $this->cogniService->analyzeVideo($mediaUrl, $videoPrompt, $postContext);
-                    if ($videoResult['success']) {
-                        $mediaAnalyses[$mediaId]['analysis'] = $videoResult['answer'];
+            $mediaAnalyses = [];
+            $hasMediaToAnalyze = $post->media && $post->media->count() > 0;
+            if ($hasMediaToAnalyze) {
+                foreach ($post->media as $media) {
+                    $mediaType = $media->media_type ?? 'file';
+                    $mediaUrl = $media->media_link ?? 'Not available';
+                    $mediaName = $media->original_filename ?? 'Unnamed';
+                    $mediaMimeType = $media->mime_type ?? '';
+                    $mediaId = $media->id;
+                    $mediaAnalyses[$mediaId] = [
+                        'media_id' => $mediaId,
+                        'media_type' => $mediaType,
+                        'media_name' => $mediaName,
+                        'media_url' => $mediaUrl,
+                        'analysis' => null
+                    ];
+                    if (strpos($mediaType, 'image') !== false || strpos($mediaMimeType, 'image/') !== false) {
+                        $prompt = "Analyze this image in the context of an educational post. First, describe what's shown in the image clearly. Then, explain its educational significance and how it relates to the post topic. If the image contains any diagrams, charts, or educational elements, explain them in detail. Focus on making your analysis educational and informative.";
+                        $imageResult = $this->cogniService->analyzeImage($mediaUrl, $prompt, $postContext);
+                        if ($imageResult['success']) {
+                            $mediaAnalyses[$mediaId]['analysis'] = $imageResult['answer'];
+                        }
+                    } else if (strpos($mediaType, 'video') !== false || strpos($mediaMimeType, 'video/') !== false) {
+                        $videoPrompt = "Perform a professional, detailed analysis of this video in the context of the post. In a system-like tone, provide: 1. Likely content based on post context and video title/name 2. Educational concepts that may be covered 3. Potential learning outcomes from watching this video 4. How it complements the post's educational value. Format as a concise, factual analysis using professional language. If the video appears to be a demonstration, tutorial, lecture, or educational content, analyze what skills or knowledge viewers would gain.";
+                        $videoResult = $this->cogniService->askQuestion($videoPrompt . "\n\nPost context:\n" . $postContext . "\n\nVideo file: " . $mediaName);
+                        if ($videoResult['success']) {
+                            $mediaAnalyses[$mediaId]['analysis'] = $videoResult['answer'];
+                        }
                     }
                 }
             }
+            $postAnalysisPrompt = "Provide a detailed educational analysis of the following post, considering both the text and any associated media. Summarize the main points, highlight key educational concepts, and suggest what a learner might gain from this post.";
+            $postAnalysisResult = $this->cogniService->askQuestion($postAnalysisPrompt . "\n\nHere's the content:\n" . $content);
+            $postAnalysis = $postAnalysisResult['success'] ? $postAnalysisResult['answer'] : '';
+            return response()->json([
+                'post_id' => $post->id,
+                'analysis' => $postAnalysis,
+                'media_analyses' => array_values($mediaAnalyses),
+                'learning_resources' => $relatedResources
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'error' => 'Post not found',
+                'message' => 'The specified post could not be found'
+            ], 404);
+        } catch (\Exception $e) {
+            \Log::error('Error in analyzePost endpoint', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'post_id' => $postId
+            ]);
+            
+            return response()->json([
+                'error' => 'Internal server error',
+                'message' => 'An error occurred while analyzing the post'
+            ], 500);
         }
-        $postAnalysisPrompt = "Provide a detailed educational analysis of the following post, considering both the text and any associated media. Summarize the main points, highlight key educational concepts, and suggest what a learner might gain from this post.";
-        $postAnalysisResult = $this->cogniService->askQuestion($postAnalysisPrompt . "\n\nHere's the content:\n" . $content);
-        $postAnalysis = $postAnalysisResult['success'] ? $postAnalysisResult['answer'] : '';
-        return response()->json([
-            'post_id' => $post->id,
-            'analysis' => $postAnalysis,
-            'media_analyses' => array_values($mediaAnalyses),
-            'learning_resources' => $relatedResources
-        ]);
     }
 
 }
