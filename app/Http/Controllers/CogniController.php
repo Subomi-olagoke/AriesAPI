@@ -4148,7 +4148,7 @@ class CogniController extends Controller
             $content = $post->title . "\n\n" . $post->body;
             $postContext = $content;
             $topicsPrompt = "Analyze this post and identify the 3-5 main educational topics or concepts it covers. Be specific, academic, and educational in your identification. Return only a comma-separated list of key educational topics with no explanations.";
-            $topicsResult = $this->cogniService->askQuestion($topicsPrompt . "\n\nHere's the content:\n" . $content);
+            $topicsResult = $this->cogniService->askQuestionInternal($topicsPrompt . "\n\nHere's the content:\n" . $content);
             $topics = $topicsResult['success'] ? $topicsResult['answer'] : '';
             $relatedResources = [];
             if (!empty($topics) && $this->exaSearchService->isConfigured()) {
@@ -4181,7 +4181,7 @@ class CogniController extends Controller
                         }
                     } else if (strpos($mediaType, 'video') !== false || strpos($mediaMimeType, 'video/') !== false) {
                         $videoPrompt = "Perform a professional, detailed analysis of this video in the context of the post. In a system-like tone, provide: 1. Likely content based on post context and video title/name 2. Educational concepts that may be covered 3. Potential learning outcomes from watching this video 4. How it complements the post's educational value. Format as a concise, factual analysis using professional language. If the video appears to be a demonstration, tutorial, lecture, or educational content, analyze what skills or knowledge viewers would gain.";
-                        $videoResult = $this->cogniService->askQuestion($videoPrompt . "\n\nPost context:\n" . $postContext . "\n\nVideo file: " . $mediaName);
+                        $videoResult = $this->cogniService->askQuestionInternal($videoPrompt . "\n\nPost context:\n" . $postContext . "\n\nVideo file: " . $mediaName);
                         if ($videoResult['success']) {
                             $mediaAnalyses[$mediaId]['analysis'] = $videoResult['answer'];
                         }
@@ -4189,7 +4189,7 @@ class CogniController extends Controller
                 }
             }
             $postAnalysisPrompt = "Provide a detailed educational analysis of the following post, considering both the text and any associated media. Summarize the main points, highlight key educational concepts, and suggest what a learner might gain from this post.";
-            $postAnalysisResult = $this->cogniService->askQuestion($postAnalysisPrompt . "\n\nHere's the content:\n" . $content);
+            $postAnalysisResult = $this->cogniService->askQuestionInternal($postAnalysisPrompt . "\n\nHere's the content:\n" . $content);
             $postAnalysis = $postAnalysisResult['success'] ? $postAnalysisResult['answer'] : '';
             return response()->json([
                 'post_id' => $post->id,
