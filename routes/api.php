@@ -85,13 +85,16 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::post('/register', [AuthManager::class, 'register']);
-Route::post('/login', [AuthManager::class, 'login']);
-Route::post('/forgot-password', [ForgotPasswordManager::class, 'forgotPassword']);
-Route::post('/reset-password', [ForgotPasswordManager::class, 'resetPassword']);
-Route::post('/reset-password/token', [ResetPasswordController::class, 'generateResetToken']);
-Route::post('/reset-password/reset', [ResetPasswordController::class, 'resetPassword']);
-Route::post('/auth/google', [\App\Http\Controllers\GoogleController::class, 'authenticateWithGoogle']);
+// Authentication routes - use stateless middleware to avoid CSRF issues
+Route::middleware(['api.stateless'])->group(function () {
+    Route::post('/register', [AuthManager::class, 'register']);
+    Route::post('/login', [AuthManager::class, 'login']);
+    Route::post('/forgot-password', [ForgotPasswordManager::class, 'forgotPassword']);
+    Route::post('/reset-password', [ForgotPasswordManager::class, 'resetPassword']);
+    Route::post('/reset-password/token', [ResetPasswordController::class, 'generateResetToken']);
+    Route::post('/reset-password/reset', [ResetPasswordController::class, 'resetPassword']);
+    Route::post('/auth/google', [\App\Http\Controllers\GoogleController::class, 'authenticateWithGoogle']);
+});
 
 // Public profile access routes
 Route::get('/profile/user/{userId}', [ProfileController::class, 'showByUserId']);
