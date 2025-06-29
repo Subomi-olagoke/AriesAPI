@@ -136,7 +136,7 @@ class User extends Authenticatable {
     }
 
     /**
-     * Check if user is enrolled in a course.
+     * Check if user is enrolled in a course (active or completed only).
      */
     public function isEnrolledIn(Course $course)
     {
@@ -144,6 +144,27 @@ class User extends Authenticatable {
                 ->where('course_id', $course->id)
                 ->whereIn('status', ['active', 'completed'])
                 ->exists();
+    }
+
+    /**
+     * Check if user has any enrollment in a course (including pending).
+     */
+    public function hasAnyEnrollment(Course $course)
+    {
+        return $this->enrollments()
+                ->where('course_id', $course->id)
+                ->exists();
+    }
+
+    /**
+     * Get pending enrollment for a course.
+     */
+    public function getPendingEnrollment(Course $course)
+    {
+        return $this->enrollments()
+                ->where('course_id', $course->id)
+                ->where('status', 'pending')
+                ->first();
     }
 
     /**

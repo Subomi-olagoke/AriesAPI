@@ -30,12 +30,15 @@ class EnrollmentController extends Controller
         $course = Course::findOrFail($courseId);
         $user = auth()->user();
         
-        // Check if user is already enrolled
+        // Check if user is already enrolled (active or completed)
         if ($user->isEnrolledIn($course)) {
             return response()->json([
                 'message' => 'You are already enrolled in this course'
             ], 400);
         }
+
+        // Check for existing pending enrollment
+        $existingPendingEnrollment = $user->getPendingEnrollment($course);
 
         try {
             DB::beginTransaction();
@@ -56,14 +59,42 @@ class EnrollmentController extends Controller
                 ]);
             }
 
-            // For paid courses, initiate payment with Paystack
-            // Create a pending enrollment
-            $enrollment = new CourseEnrollment([
-                'user_id' => $user->id,
-                'course_id' => $course->id,
-                'status' => 'pending'
-            ]);
-            $enrollment->save();
+            // For paid courses, handle existing pending enrollment or create new one
+            if ($existingPendingEnrollment) {
+                // Use existing pending enrollment
+                $enrollment = $existingPendingEnrollment;
+                
+                // Check if it already has a transaction reference
+                if ($enrollment->transaction_reference) {
+                    // Try to verify the existing payment
+                    $verification = $this->paystackService->verifyTransaction($enrollment->transaction_reference);
+                    
+                    if ($verification['success'] && $verification['data']['data']['status'] === 'success') {
+                        // Payment was successful, activate enrollment
+                        $enrollment->status = 'active';
+                        $enrollment->save();
+                        
+                        // Notify the educator
+                        $educator = User::find($course->user_id);
+                        $educator->notify(new CourseEnrollmentNotification($enrollment));
+                        
+                        DB::commit();
+                        
+                        return response()->json([
+                            'message' => 'Payment verified and enrollment activated',
+                            'enrollment' => $enrollment
+                        ]);
+                    }
+                }
+            } else {
+                // Create a new pending enrollment
+                $enrollment = new CourseEnrollment([
+                    'user_id' => $user->id,
+                    'course_id' => $course->id,
+                    'status' => 'pending'
+                ]);
+                $enrollment->save();
+            }
             
             // Generate payment reference
             $reference = 'enroll_' . $course->id . '_' . uniqid();
