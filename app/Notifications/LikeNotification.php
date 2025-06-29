@@ -2,15 +2,10 @@
 
 namespace App\Notifications;
 
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Notifications\Notification;
 
-class LikeNotification extends Notification
+class LikeNotification extends BaseNotification
 {
-    use Queueable;
-
     protected $post;
     protected $comment;
     protected $course;
@@ -25,16 +20,6 @@ class LikeNotification extends Notification
         $this->user = $user;
         $this->comment = $comment;
         $this->course = $course;
-    }
-
-    /**
-     * Get the notification's delivery channels.
-     *
-     * @return array<int, string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['database'];
     }
 
     public function toDatabase() {
@@ -70,19 +55,15 @@ class LikeNotification extends Notification
                 'liked_by' => $this->user->id,
                 'liked_by_username' => $this->user->username,
             ];
-
-           // \Log::info('Notification Data:', $data);
-
-            //return $data;
         }
      }
 
     /**
      * Get the mail representation of the notification.
      */
-    public function toMail(object $notifiable): MailMessage
+    public function toMail(object $notifiable): \Illuminate\Notifications\Messages\MailMessage
     {
-        return (new MailMessage)
+        return (new \Illuminate\Notifications\Messages\MailMessage)
                     ->line('The introduction to the notification.')
                     ->action('Notification Action', url('/'))
                     ->line('Thank you for using our application!');
@@ -95,8 +76,48 @@ class LikeNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        $post_id = $this->post?->id;
+        $comment_id = $this->comment?->id;
+        $course_id = $this->course?->id;
+
+        if($post_id) {
+            return [
+                'title' => 'New Like',
+                'message' => "{$this->user->username} liked your post.",
+                'avatar' => $this->user->avatar,
+                'post_id' => $post_id,
+                'liked_by' => $this->user->id,
+                'liked_by_username' => $this->user->username,
+                'notification_type' => 'like'
+            ];
+        }
+        if($comment_id) {
+            return [
+                'title' => 'New Like',
+                'message' => "{$this->user->username} liked your comment.",
+                'avatar' => $this->user->avatar,
+                'comment_id' => $comment_id,
+                'liked_by' => $this->user->id,
+                'liked_by_username' => $this->user->username,
+                'notification_type' => 'like'
+            ];
+        }
+        if($course_id) {
+            return [
+                'title' => 'New Like',
+                'message' => "{$this->user->username} liked your course.",
+                'avatar' => $this->user->avatar,
+                'course_id' => $course_id,
+                'liked_by' => $this->user->id,
+                'liked_by_username' => $this->user->username,
+                'notification_type' => 'like'
+            ];
+        }
+        
         return [
-            //
+            'title' => 'New Like',
+            'message' => "{$this->user->username} liked your content.",
+            'notification_type' => 'like'
         ];
     }
 }

@@ -3,15 +3,10 @@
 namespace App\Notifications;
 
 use App\Models\CourseEnrollment;
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Notifications\Notification;
 
-class CourseEnrollmentNotification extends Notification implements ShouldQueue
+class CourseEnrollmentNotification extends BaseNotification implements ShouldQueue
 {
-    use Queueable;
-
     protected $enrollment;
 
     /**
@@ -23,22 +18,14 @@ class CourseEnrollmentNotification extends Notification implements ShouldQueue
     }
 
     /**
-     * Get the notification's delivery channels.
-     */
-    public function via(object $notifiable): array
-    {
-        return ['database', 'mail'];
-    }
-
-    /**
      * Get the mail representation of the notification.
      */
-    public function toMail(object $notifiable): MailMessage
+    public function toMail(object $notifiable): \Illuminate\Notifications\Messages\MailMessage
     {
         $user = $this->enrollment->user;
         $course = $this->enrollment->course;
         
-        return (new MailMessage)
+        return (new \Illuminate\Notifications\Messages\MailMessage)
             ->subject('New Enrollment in Your Course')
             ->greeting('Hello ' . $notifiable->first_name . ',')
             ->line($user->first_name . ' ' . $user->last_name . ' has enrolled in your course.')
@@ -56,12 +43,14 @@ class CourseEnrollmentNotification extends Notification implements ShouldQueue
         $course = $this->enrollment->course;
         
         return [
+            'title' => 'New Course Enrollment',
             'message' => $user->first_name . ' ' . $user->last_name . ' enrolled in your course ' . $course->title,
             'enrollment_id' => $this->enrollment->id,
             'course_id' => $course->id,
             'user_id' => $user->id,
             'user_name' => $user->first_name . ' ' . $user->last_name,
-            'course_title' => $course->title
+            'course_title' => $course->title,
+            'notification_type' => 'course_enrollment'
         ];
     }
 }

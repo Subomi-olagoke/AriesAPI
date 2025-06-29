@@ -3,14 +3,10 @@
 namespace App\Notifications;
 
 use App\Models\Mention;
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Notification;
 
-class MentionNotification extends Notification implements ShouldQueue
+class MentionNotification extends BaseNotification implements ShouldQueue
 {
-    use Queueable;
-
     protected $mention;
 
     /**
@@ -22,14 +18,6 @@ class MentionNotification extends Notification implements ShouldQueue
     }
 
     /**
-     * Get the notification's delivery channels.
-     */
-    public function via(object $notifiable): array
-    {
-        return ['database'];
-    }
-
-    /**
      * Get the array representation of the notification.
      */
     public function toArray(object $notifiable): array
@@ -38,6 +26,8 @@ class MentionNotification extends Notification implements ShouldQueue
         $contentType = strtolower($mentionableType);
         
         return [
+            'title' => 'You were mentioned',
+            'message' => "{$this->mention->mentionedByUser->username} mentioned you in a {$contentType}.",
             'mention_id' => $this->mention->id,
             'mentionable_id' => $this->mention->mentionable_id,
             'mentionable_type' => $contentType,
@@ -46,7 +36,7 @@ class MentionNotification extends Notification implements ShouldQueue
                 'username' => $this->mention->mentionedByUser->username,
                 'avatar' => $this->mention->mentionedByUser->avatar,
             ],
-            'message' => "{$this->mention->mentionedByUser->username} mentioned you in a {$contentType}.",
+            'notification_type' => 'mention'
         ];
     }
 }
