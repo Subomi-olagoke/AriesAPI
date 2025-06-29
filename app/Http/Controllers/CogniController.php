@@ -4136,7 +4136,7 @@ class CogniController extends Controller
     }
 
     /**
-     * Analyze a post (text + media) and return learning resources
+     * Analyze a post and return educational information
      *
      * @param int $postId
      * @return \Illuminate\Http\JsonResponse
@@ -4146,57 +4146,24 @@ class CogniController extends Controller
         try {
             $post = \App\Models\Post::with('media')->findOrFail($postId);
             $content = $post->title . "\n\n" . $post->body;
-            $postContext = $content;
-            $topicsPrompt = "Analyze this post and identify the 3-5 main educational topics or concepts it covers. Be specific, academic, and educational in your identification. Return only a comma-separated list of key educational topics with no explanations.";
-            $topicsResult = $this->cogniService->askQuestionInternal($topicsPrompt . "\n\nHere's the content:\n" . $content);
-            $topics = $topicsResult['success'] ? $topicsResult['answer'] : '';
-            $relatedResources = [];
-            if (!empty($topics) && $this->exaSearchService->isConfigured()) {
-                $searchResult = $this->exaSearchService->findRelatedContent($topics, 5);
-                if ($searchResult['success'] && !empty($searchResult['results'])) {
-                    $relatedResources = $searchResult['results'];
-                }
+            
+            // Simple educational analysis prompt
+            $analysisPrompt = "Provide an educational analysis of this post. Explain what educational concepts or topics it covers, what someone can learn from it, and any key insights or takeaways. Keep it informative and educational in tone.";
+            
+            $analysisResult = $this->cogniService->askQuestionInternal($analysisPrompt . "\n\nPost content:\n" . $content);
+            
+            if (!$analysisResult['success']) {
+                return response()->json([
+                    'error' => 'Analysis failed',
+                    'message' => 'Unable to analyze the post at this time'
+                ], 500);
             }
-            $mediaAnalyses = [];
-            $hasMediaToAnalyze = $post->media && $post->media->count() > 0;
-            if ($hasMediaToAnalyze) {
-                foreach ($post->media as $media) {
-                    $mediaType = $media->media_type ?? 'file';
-                    $mediaUrl = $media->media_link ?? 'Not available';
-                    $mediaName = $media->original_filename ?? 'Unnamed';
-                    $mediaMimeType = $media->mime_type ?? '';
-                    $mediaId = $media->id;
-                    $mediaAnalyses[$mediaId] = [
-                        'media_id' => $mediaId,
-                        'media_type' => $mediaType,
-                        'media_name' => $mediaName,
-                        'media_url' => $mediaUrl,
-                        'analysis' => null
-                    ];
-                    if (strpos($mediaType, 'image') !== false || strpos($mediaMimeType, 'image/') !== false) {
-                        $prompt = "Analyze this image in the context of an educational post. First, describe what's shown in the image clearly. Then, explain its educational significance and how it relates to the post topic. If the image contains any diagrams, charts, or educational elements, explain them in detail. Focus on making your analysis educational and informative.";
-                        $imageResult = $this->cogniService->analyzeImage($mediaUrl, $prompt, $postContext);
-                        if ($imageResult['success']) {
-                            $mediaAnalyses[$mediaId]['analysis'] = $imageResult['answer'];
-                        }
-                    } else if (strpos($mediaType, 'video') !== false || strpos($mediaMimeType, 'video/') !== false) {
-                        $videoPrompt = "Perform a professional, detailed analysis of this video in the context of the post. In a system-like tone, provide: 1. Likely content based on post context and video title/name 2. Educational concepts that may be covered 3. Potential learning outcomes from watching this video 4. How it complements the post's educational value. Format as a concise, factual analysis using professional language. If the video appears to be a demonstration, tutorial, lecture, or educational content, analyze what skills or knowledge viewers would gain.";
-                        $videoResult = $this->cogniService->askQuestionInternal($videoPrompt . "\n\nPost context:\n" . $postContext . "\n\nVideo file: " . $mediaName);
-                        if ($videoResult['success']) {
-                            $mediaAnalyses[$mediaId]['analysis'] = $videoResult['answer'];
-                        }
-                    }
-                }
-            }
-            $postAnalysisPrompt = "Provide a detailed educational analysis of the following post, considering both the text and any associated media. Summarize the main points, highlight key educational concepts, and suggest what a learner might gain from this post.";
-            $postAnalysisResult = $this->cogniService->askQuestionInternal($postAnalysisPrompt . "\n\nHere's the content:\n" . $content);
-            $postAnalysis = $postAnalysisResult['success'] ? $postAnalysisResult['answer'] : '';
+            
             return response()->json([
                 'post_id' => $post->id,
-                'analysis' => $postAnalysis,
-                'media_analyses' => array_values($mediaAnalyses),
-                'learning_resources' => $relatedResources
+                'educational_analysis' => $analysisResult['answer']
             ]);
+            
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'error' => 'Post not found',
