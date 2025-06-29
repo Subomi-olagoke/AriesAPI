@@ -4136,7 +4136,7 @@ class CogniController extends Controller
     }
 
     /**
-     * Analyze a post and return educational information
+     * Analyze a post and return educational information including image analysis
      *
      * @param int $postId
      * @return \Illuminate\Http\JsonResponse
@@ -4147,21 +4147,57 @@ class CogniController extends Controller
             $post = \App\Models\Post::with('media')->findOrFail($postId);
             $content = $post->title . "\n\n" . $post->body;
             
-            // Simple educational analysis prompt
-            $analysisPrompt = "Provide an educational analysis of this post. Explain what educational concepts or topics it covers, what someone can learn from it, and any key insights or takeaways. Keep it informative and educational in tone.";
+            // Start with text analysis
+            $textAnalysisPrompt = "Provide an educational analysis of this post text. Explain what educational concepts or topics it covers, what someone can learn from it, and any key insights or takeaways.";
             
-            $analysisResult = $this->cogniService->askQuestionInternal($analysisPrompt . "\n\nPost content:\n" . $content);
+            $textAnalysisResult = $this->cogniService->askQuestionInternal($textAnalysisPrompt . "\n\nPost content:\n" . $content);
+            $textAnalysis = $textAnalysisResult['success'] ? $textAnalysisResult['answer'] : '';
             
-            if (!$analysisResult['success']) {
-                return response()->json([
-                    'error' => 'Analysis failed',
-                    'message' => 'Unable to analyze the post at this time'
-                ], 500);
+            // Analyze images if any exist
+            $imageAnalysis = '';
+            if ($post->media && $post->media->count() > 0) {
+                $imageDescriptions = [];
+                
+                foreach ($post->media as $media) {
+                    $mediaType = $media->media_type ?? '';
+                    $mediaMimeType = $media->mime_type ?? '';
+                    $mediaUrl = $media->media_link ?? '';
+                    $mediaName = $media->original_filename ?? 'Unnamed';
+                    
+                    // Only analyze images
+                    if (strpos($mediaType, 'image') !== false || strpos($mediaMimeType, 'image/') !== false) {
+                        $imagePrompt = "Analyze this image in the context of an educational post. Describe what you see in the image and explain its educational significance. How does it relate to learning or educational concepts? What can someone learn from this image?";
+                        
+                        $imageResult = $this->cogniService->analyzeImage($mediaUrl, $imagePrompt, $content);
+                        
+                        if ($imageResult['success']) {
+                            $imageDescriptions[] = "Image '{$mediaName}': " . $imageResult['answer'];
+                        }
+                    }
+                }
+                
+                if (!empty($imageDescriptions)) {
+                    $imageAnalysis = "\n\n**Image Analysis:**\n" . implode("\n\n", $imageDescriptions);
+                }
+            }
+            
+            // Combine text and image analysis
+            $combinedAnalysis = $textAnalysis . $imageAnalysis;
+            
+            // If we have both text and images, create a comprehensive summary
+            if (!empty($textAnalysis) && !empty($imageAnalysis)) {
+                $summaryPrompt = "Based on the text analysis and image analysis provided, create a comprehensive educational summary that combines insights from both the text content and the visual elements. Explain how the images complement or enhance the educational value of the text.";
+                
+                $summaryResult = $this->cogniService->askQuestionInternal($summaryPrompt . "\n\nText Analysis:\n" . $textAnalysis . "\n\nImage Analysis:\n" . $imageAnalysis);
+                
+                if ($summaryResult['success']) {
+                    $combinedAnalysis = $summaryResult['answer'];
+                }
             }
             
             return response()->json([
                 'post_id' => $post->id,
-                'educational_analysis' => $analysisResult['answer']
+                'educational_analysis' => $combinedAnalysis
             ]);
             
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
