@@ -25,6 +25,9 @@ class Kernel extends ConsoleKernel {
 		// Clean up overdue live classes every hour (more frequent for better user experience)
 		$schedule->command('live-classes:cleanup --days=999 --hours=1')->hourly();
 		
+		// Clean up expired pending enrollments every 5 minutes
+		$schedule->command('enrollments:cleanup --minutes=3')->everyFiveMinutes();
+		
 		// Refresh trending topics data every 6 hours
 		$schedule->command('trends:refresh')->everySixHours();
 	}
@@ -41,6 +44,7 @@ class Kernel extends ConsoleKernel {
 		\App\Console\Commands\EnsureAllUsersHaveCognitionReadlist::class,
 		\App\Console\Commands\CreateTestReadlist::class,
 		\App\Console\Commands\RefreshTrendsCommand::class,
+		\App\Console\Commands\CleanupExpiredEnrollments::class,
 	];
 
 	/**
