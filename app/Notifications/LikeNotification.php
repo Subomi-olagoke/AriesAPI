@@ -74,7 +74,7 @@ class LikeNotification extends BaseNotification
      *
      * @return array<string, mixed>
      */
-    public function toArray(object $notifiable): array
+    public function toArray($notifiable): array
     {
         $post_id = $this->post?->id;
         $comment_id = $this->comment?->id;

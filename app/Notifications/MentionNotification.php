@@ -20,7 +20,7 @@ class MentionNotification extends BaseNotification implements ShouldQueue
     /**
      * Get the array representation of the notification.
      */
-    public function toArray(object $notifiable): array
+    public function toArray($notifiable): array
     {
         $mentionableType = class_basename($this->mention->mentionable_type);
         $contentType = strtolower($mentionableType);

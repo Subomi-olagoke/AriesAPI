@@ -20,7 +20,7 @@ class NewMessage extends BaseNotification implements ShouldQueue
     /**
      * Get the array representation of the notification.
      */
-    public function toArray(object $notifiable): array
+    public function toArray($notifiable): array
     {
         $sender = $this->message->sender;
         

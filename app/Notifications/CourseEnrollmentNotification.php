@@ -37,7 +37,7 @@ class CourseEnrollmentNotification extends BaseNotification implements ShouldQue
     /**
      * Get the array representation of the notification.
      */
-    public function toArray(object $notifiable): array
+    public function toArray($notifiable): array
     {
         $user = $this->enrollment->user;
         $course = $this->enrollment->course;
