@@ -59,12 +59,16 @@ class AwardPointsListener implements ShouldQueue
      */
     public function handleMessageSent(MessageSent $event)
     {
-        $this->pointsService->awardPointsForAction(
-            $event->message->user,
-            'send_message',
-            'message',
-            $event->message->id
-        );
+        $user = $event->message->sender;
+        
+        if ($user) {
+            $this->pointsService->awardPointsForAction(
+                $user,
+                'send_message',
+                'message',
+                $event->message->id
+            );
+        }
     }
 
     /**
