@@ -676,8 +676,7 @@ class CogniController extends Controller
                         return response()->json([
                             'success' => true,
                             'response' => $response,
-                            'conversation_id' => $conversationId,
-                            'enhanced_topic_info' => $enhancedTopicInfo
+                            'conversation_id' => $conversationId
                         ]);
                     }
                 }
@@ -727,8 +726,7 @@ class CogniController extends Controller
                     'success' => true,
                     'response' => $response,
                     'conversation_id' => $conversationId,
-                    'item_count' => $totalCount,
-                    'enhanced_topic_info' => $enhancedTopicInfo
+                    'item_count' => $totalCount
                 ]);
             }
             
