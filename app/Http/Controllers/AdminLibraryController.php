@@ -289,6 +289,31 @@ class AdminLibraryController extends Controller
                 continue;
             }
             
+            // Content moderation check
+            $contentModerationService = app(\App\Services\ContentModerationService::class);
+            
+            // Check content title
+            $titleCheck = $contentModerationService->analyzeText($contentItem->title ?? '');
+            if (!$titleCheck['isAllowed']) {
+                \Log::warning('Skipping inappropriate content during library creation', [
+                    'content_id' => $content['id'],
+                    'content_type' => $content['type'],
+                    'reason' => $titleCheck['reason']
+                ]);
+                continue;
+            }
+            
+            // Check content body/description
+            $bodyCheck = $contentModerationService->analyzeText($contentItem->body ?? $contentItem->description ?? '');
+            if (!$bodyCheck['isAllowed']) {
+                \Log::warning('Skipping inappropriate content during library creation', [
+                    'content_id' => $content['id'],
+                    'content_type' => $content['type'],
+                    'reason' => $bodyCheck['reason']
+                ]);
+                continue;
+            }
+            
             // Check for duplicates
             $existingContent = LibraryContent::where('library_id', $library->id)
                 ->where('content_type', $contentType)
@@ -655,6 +680,21 @@ class AdminLibraryController extends Controller
                     return redirect()->back()->with('error', 'Content not found');
                 }
                 
+                // Content moderation check
+                $contentModerationService = app(\App\Services\ContentModerationService::class);
+                
+                // Check content title
+                $titleCheck = $contentModerationService->analyzeText($content->title ?? '');
+                if (!$titleCheck['isAllowed']) {
+                    return redirect()->back()->with('error', 'Content contains inappropriate material and cannot be added to the library: ' . $titleCheck['reason']);
+                }
+                
+                // Check content body/description
+                $bodyCheck = $contentModerationService->analyzeText($content->body ?? $content->description ?? '');
+                if (!$bodyCheck['isAllowed']) {
+                    return redirect()->back()->with('error', 'Content contains inappropriate material and cannot be added to the library: ' . $bodyCheck['reason']);
+                }
+                
                 // Check if content is already in the library
                 $exists = $library->contents()
                     ->where('content_type', $contentType)
@@ -696,6 +736,21 @@ class AdminLibraryController extends Controller
             $content = $contentType::find($request->content_id);
             if (!$content) {
                 return redirect()->back()->with('error', 'Content not found');
+            }
+            
+            // Content moderation check
+            $contentModerationService = app(\App\Services\ContentModerationService::class);
+            
+            // Check content title
+            $titleCheck = $contentModerationService->analyzeText($content->title ?? '');
+            if (!$titleCheck['isAllowed']) {
+                return redirect()->back()->with('error', 'Content contains inappropriate material and cannot be added to the library: ' . $titleCheck['reason']);
+            }
+            
+            // Check content body/description
+            $bodyCheck = $contentModerationService->analyzeText($content->body ?? $content->description ?? '');
+            if (!$bodyCheck['isAllowed']) {
+                return redirect()->back()->with('error', 'Content contains inappropriate material and cannot be added to the library: ' . $bodyCheck['reason']);
             }
             
             // Check if content is already in the library

@@ -394,6 +394,27 @@ class OpenLibraryController extends Controller
             // Check if content exists
             $content = $contentType::findOrFail($contentId);
             
+            // Content moderation check
+            $contentModerationService = app(\App\Services\ContentModerationService::class);
+            
+            // Check content title
+            $titleCheck = $contentModerationService->analyzeText($content->title ?? '');
+            if (!$titleCheck['isAllowed']) {
+                return response()->json([
+                    'message' => 'Content contains inappropriate material and cannot be added to the library',
+                    'reason' => $titleCheck['reason']
+                ], 400);
+            }
+            
+            // Check content body/description
+            $bodyCheck = $contentModerationService->analyzeText($content->body ?? $content->description ?? '');
+            if (!$bodyCheck['isAllowed']) {
+                return response()->json([
+                    'message' => 'Content contains inappropriate material and cannot be added to the library',
+                    'reason' => $bodyCheck['reason']
+                ], 400);
+            }
+            
             // Check if content is already in library
             $existing = DB::table('library_content')
                 ->where('library_id', $library->id)
@@ -458,6 +479,36 @@ class OpenLibraryController extends Controller
             
             if (!$urlData['success']) {
                 throw new \Exception('Failed to fetch URL content: ' . ($urlData['error'] ?? 'Unknown error'));
+            }
+            
+            // Content moderation check for URL content
+            $contentModerationService = app(\App\Services\ContentModerationService::class);
+            
+            // Check URL itself for inappropriate content
+            $urlCheck = $contentModerationService->analyzeText($url);
+            if (!$urlCheck['isAllowed']) {
+                return response()->json([
+                    'message' => 'URL contains inappropriate content and cannot be added to the library',
+                    'reason' => $urlCheck['reason']
+                ], 400);
+            }
+            
+            // Check fetched title
+            $titleCheck = $contentModerationService->analyzeText($urlData['title'] ?? '');
+            if (!$titleCheck['isAllowed']) {
+                return response()->json([
+                    'message' => 'URL content contains inappropriate material and cannot be added to the library',
+                    'reason' => $titleCheck['reason']
+                ], 400);
+            }
+            
+            // Check fetched summary
+            $summaryCheck = $contentModerationService->analyzeText($urlData['summary'] ?? '');
+            if (!$summaryCheck['isAllowed']) {
+                return response()->json([
+                    'message' => 'URL content contains inappropriate material and cannot be added to the library',
+                    'reason' => $summaryCheck['reason']
+                ], 400);
             }
             
             // First, check if this URL already exists in our database

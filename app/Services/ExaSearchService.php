@@ -216,9 +216,46 @@ class ExaSearchService
      */
     private function moderateResults(array $results)
     {
-        // Return all results without moderation for now
-        // Removed content moderation filters to get more comprehensive results
-        return $results;
+        // Get content moderation service
+        $contentModerationService = app(\App\Services\ContentModerationService::class);
+        
+        // Filter out results that don't pass content moderation
+        return array_filter($results, function($result) use ($contentModerationService) {
+            // Check title and text for inappropriate content
+            $titleCheck = $contentModerationService->analyzeText($result['title'] ?? '');
+            if (!$titleCheck['isAllowed']) {
+                return false;
+            }
+            
+            $textCheck = $contentModerationService->analyzeText($result['text'] ?? '');
+            if (!$textCheck['isAllowed']) {
+                return false;
+            }
+            
+            // Check URL for allowed domains
+            $url = $result['url'] ?? '';
+            try {
+                if (!empty($url)) {
+                    $parsedUrl = parse_url($url);
+                    if (isset($parsedUrl['host'])) {
+                        $domain = $parsedUrl['host'];
+                        $allowedDomains = config('content_moderation.allowed_domains', []);
+                        
+                        // Special case: For external search, we don't want to strictly enforce the domain whitelist
+                        // Instead, we'll check if the domain contains any inappropriate words
+                        $domainCheck = $contentModerationService->analyzeText($domain);
+                        if (!$domainCheck['isAllowed']) {
+                            return false;
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                // If we can't parse the URL, exclude it to be safe
+                return false;
+            }
+            
+            return true;
+        });
         
         /* Original moderation code (commented out)
         // Get content moderation service

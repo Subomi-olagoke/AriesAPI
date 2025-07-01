@@ -70,6 +70,14 @@ return [
         // Adult content
         "porn", "xxx", "nude", "naked", "sex", "adult content", "explicit", "18+",
         "nsfw", "pornography", "erotic", "x-rated", "mature content", "fetish",
+        "adult", "mature", "adult site", "adult website", "adult content",
+        
+        // Gambling and betting
+        "bet", "betting", "gambling", "casino", "poker", "slot", "roulette",
+        "blackjack", "baccarat", "sports betting", "online casino", "gambling site",
+        "betting site", "casino online", "poker online", "slot machine",
+        "lottery", "scratch card", "bingo", "keno", "sportsbook", "bookmaker",
+        "odds", "wager", "stake", "betting odds", "gambling odds",
         
         // Hate speech and discrimination
         "racist", "sexist", "homophobic", "bigot", "supremacist", "hate speech",
