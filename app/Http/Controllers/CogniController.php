@@ -675,7 +675,7 @@ class CogniController extends Controller
                         // EARLY RETURN: respond immediately after readlist creation and job dispatch
                         return response()->json([
                             'success' => true,
-                            'answer' => $response,
+                            'response' => $response,
                             'conversation_id' => $conversationId,
                             'readlist' => $readlist->load('items'),
                             'enhanced_topic_info' => $enhancedTopicInfo
@@ -726,7 +726,7 @@ class CogniController extends Controller
                 // EARLY RETURN: respond immediately after readlist creation and job dispatch
                 return response()->json([
                     'success' => true,
-                    'answer' => $response,
+                    'response' => $response,
                     'conversation_id' => $conversationId,
                     'readlist' => $readlist->load('items'),
                     'item_count' => $totalCount,
@@ -747,7 +747,7 @@ class CogniController extends Controller
             
             return response()->json([
                 'success' => false,
-                'answer' => $errorMsg,
+                'response' => $errorMsg,
                 'conversation_id' => $conversationId,
                 'error_details' => [
                     'error_id' => uniqid('readlist_error_'),
@@ -795,7 +795,7 @@ class CogniController extends Controller
         // Return more detailed information for debugging
         return response()->json([
             'success' => false,
-            'answer' => $errorMsg,
+            'response' => $errorMsg,
             'conversation_id' => $conversationId,
             'error_details' => [
                 'error_id' => $errorId,
@@ -1790,7 +1790,7 @@ class CogniController extends Controller
                 
                 return response()->json([
                     'success' => false,
-                    'answer' => $errorMsg,
+                    'response' => $errorMsg,
                     'conversation_id' => $conversationId
                 ], 400);
             }
@@ -1902,7 +1902,7 @@ class CogniController extends Controller
                     
                     return response()->json([
                         'success' => true,
-                        'answer' => $noResultsMsg,
+                        'response' => $noResultsMsg,
                         'conversation_id' => $conversationId
                     ]);
                 }
@@ -1980,7 +1980,7 @@ class CogniController extends Controller
                 
                 return response()->json([
                     'success' => true,
-                    'answer' => $result['answer'],
+                    'response' => $result['answer'],
                     'conversation_id' => $conversationId,
                     'has_web_results' => true,
                     'web_results' => $enrichedWebResults,
@@ -2026,7 +2026,7 @@ class CogniController extends Controller
             
             return response()->json([
                 'success' => true,
-                'answer' => $fallbackMsg,
+                'response' => $fallbackMsg,
                 'conversation_id' => $conversationId,
                 'has_web_results' => true,
                 'web_results' => $searchResults['results']
@@ -2043,7 +2043,7 @@ class CogniController extends Controller
             
             return response()->json([
                 'success' => true,
-                'answer' => $errorMsg,
+                'response' => $errorMsg,
                 'conversation_id' => $conversationId
             ]);
         }
@@ -2247,7 +2247,7 @@ class CogniController extends Controller
             } else {
                 return response()->json([
                     'success' => true,
-                    'answer' => $result['answer'],
+                    'response' => $result['answer'],
                     'conversation_id' => $conversationId
                 ]);
             }
