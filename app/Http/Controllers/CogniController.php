@@ -677,7 +677,6 @@ class CogniController extends Controller
                             'success' => true,
                             'response' => $response,
                             'conversation_id' => $conversationId,
-                            'readlist' => $readlist->load('items'),
                             'enhanced_topic_info' => $enhancedTopicInfo
                         ]);
                     }
@@ -728,7 +727,6 @@ class CogniController extends Controller
                     'success' => true,
                     'response' => $response,
                     'conversation_id' => $conversationId,
-                    'readlist' => $readlist->load('items'),
                     'item_count' => $totalCount,
                     'enhanced_topic_info' => $enhancedTopicInfo
                 ]);
