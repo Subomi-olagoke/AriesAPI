@@ -228,6 +228,7 @@ class ReadlistController extends Controller
                         'order' => $item->order,
                         'notes' => $item->notes,
                         'item' => [
+                            'id' => $item->id,
                             'title' => $item->title,
                             'description' => $item->description,
                             'url' => $item->url,
@@ -333,6 +334,7 @@ class ReadlistController extends Controller
                         'order' => $item->order,
                         'notes' => $item->notes,
                         'item' => [
+                            'id' => $item->id,
                             'title' => $item->title,
                             'description' => $item->description,
                             'url' => $item->url,
