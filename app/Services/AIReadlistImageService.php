@@ -200,10 +200,8 @@ class AIReadlistImageService
                 ]
             );
             
-            // Clean up temp file
-            if (file_exists($tempPath)) {
-                unlink($tempPath);
-            }
+            // Delete the temp file
+            @unlink($tempPath);
             
             return $cloudinaryUrl;
         } catch (\Exception $e) {
@@ -212,7 +210,6 @@ class AIReadlistImageService
                 'readlist_id' => $readlistId,
                 'image_url' => $imageUrl
             ]);
-            
             return null;
         }
     }

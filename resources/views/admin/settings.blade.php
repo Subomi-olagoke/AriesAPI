@@ -191,11 +191,8 @@
                             {{ $services['cloudinary']['enabled'] ? 'Configured' : 'Not Configured' }}
                         </span>
                     </div>
-                    <p class="text-sm text-gray-600">Media storage and transformation service for images and videos.</p>
                     @if($services['cloudinary']['enabled'])
-                    <div class="mt-3 text-xs text-gray-500">
                         <p>Cloud Name: {{ $services['cloudinary']['cloud_name'] }}</p>
-                    </div>
                     @endif
                 </div>
 

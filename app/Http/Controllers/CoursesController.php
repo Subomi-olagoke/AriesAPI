@@ -71,9 +71,6 @@ class CoursesController extends Controller {
     }
     
     /**
-     * Create a new course with both local and S3 storage options.
-     */
-    /**
      * Create a new course with Cloudinary for media management.
      */
     public function createCourse(Request $request) {

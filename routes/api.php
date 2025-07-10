@@ -50,10 +50,6 @@ use App\Http\Controllers\AvailableController;
 |
 */
 // Public routes
-Route::post('/cloudinary/notification', function (Request $request) {
-    Log::info('Cloudinary notification received', ['data' => $request->all()]);
-    return response()->json(['status' => 'success']);
-});
 Route::get('/posts/shared/{shareKey}', [PostController::class, 'viewSharedPost'])
      ->name('shared.post');
 
@@ -997,3 +993,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Cogni post analysis endpoint
 Route::get('/cogni/analyze-post/{postId}', [\App\Http\Controllers\CogniController::class, 'analyzePost']);
+
+Route::post('/cloudinary/notification', function (Request $request) {
+    Log::info('Cloudinary notification received', ['data' => $request->all()]);
+    return response()->json(['status' => 'success']);
+});
