@@ -12,6 +12,7 @@ class CommentController extends Controller {
 	public function postComment(Request $request, $post_id) {
         $request->validate([
             'content' => 'required|string|max:255',
+            'parent_id' => 'nullable|integer|exists:comments,id',
         ]);
 
         $user = auth()->user();
@@ -20,6 +21,7 @@ class CommentController extends Controller {
         $comment->post_id = $post_id;
         $comment->user_id = $user->id;
         $comment->content = $request->content;
+        $comment->parent_id = $request->parent_id ?? null;
         
         // Check if this is the first comment on the post
         $isFirstComment = Comment::where('post_id', $post_id)->count() === 0;
@@ -88,6 +90,9 @@ class CommentController extends Controller {
         $comments = Comment::where('post_id', $post->id)
             ->orderBy('created_at', 'desc')
             ->get();
+        $comments = $comments->map(function($comment) {
+            return $comment->toArray() + ['parent_id' => $comment->parent_id];
+        });
             
         if($comments->isEmpty()) {
             return response()->json([
