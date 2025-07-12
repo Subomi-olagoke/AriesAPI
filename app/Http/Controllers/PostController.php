@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Services\FileUploadService;
 
 class PostController extends Controller
@@ -40,6 +41,29 @@ class PostController extends Controller
             $post->like_count = \App\Models\Like::where('post_id', $post->id)->count();
             $post->comment_count = \App\Models\Comment::where('post_id', $post->id)->count();
             $post->selection_count = $post->readlistItems()->count();
+            
+            // Add user-specific fields (is_liked, is_in_readlist)
+            if (auth()->check()) {
+                $userId = auth()->id();
+                
+                // Check if user has liked this post
+                if (Schema::hasColumn('likes', 'likeable_type')) {
+                    $post->is_liked = $post->likes()->where('user_id', $userId)->exists();
+                } else {
+                    $post->is_liked = $post->likes()->where('user_id', $userId)->exists();
+                }
+                
+                // Check if user has added this post to any readlist
+                $post->is_in_readlist = $post->readlistItems()
+                    ->whereHas('readlist', function ($query) use ($userId) {
+                        $query->where('user_id', $userId);
+                    })
+                    ->exists();
+            } else {
+                $post->is_liked = false;
+                $post->is_in_readlist = false;
+            }
+            
             return $post;
         });
 

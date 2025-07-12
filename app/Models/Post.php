@@ -26,7 +26,7 @@ class Post extends Model {
         'has_multiple_media',
     ];
 
-    protected $appends = ['file_extension', 'share_url', 'like_count', 'comment_count', 'selection_count'];
+    protected $appends = ['file_extension', 'share_url', 'like_count', 'comment_count', 'selection_count', 'is_liked', 'is_in_readlist'];
 
     // Allow visibility to be added to JSON serialization
     protected $casts = [
@@ -156,6 +156,44 @@ class Post extends Model {
     public function getSelectionCountAttribute()
     {
         return $this->attributes['selection_count'] ?? $this->readlistItems()->count();
+    }
+
+    /**
+     * Check if the current user has liked this post
+     */
+    public function getIsLikedAttribute()
+    {
+        if (!auth()->check()) {
+            return false;
+        }
+        
+        $userId = auth()->id();
+        
+        // For backward compatibility, check if the likeable_type column exists
+        if (Schema::hasColumn('likes', 'likeable_type')) {
+            return $this->likes()->where('user_id', $userId)->exists();
+        } else {
+            return $this->likes()->where('user_id', $userId)->exists();
+        }
+    }
+
+    /**
+     * Check if the current user has added this post to any readlist
+     */
+    public function getIsInReadlistAttribute()
+    {
+        if (!auth()->check()) {
+            return false;
+        }
+        
+        $userId = auth()->id();
+        
+        // Check if the user has added this post to any of their readlists
+        return $this->readlistItems()
+            ->whereHas('readlist', function ($query) use ($userId) {
+                $query->where('user_id', $userId);
+            })
+            ->exists();
     }
 
     /**
