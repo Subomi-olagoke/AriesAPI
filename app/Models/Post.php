@@ -26,7 +26,7 @@ class Post extends Model {
         'has_multiple_media',
     ];
 
-    protected $appends = ['file_extension', 'share_url'];
+    protected $appends = ['file_extension', 'share_url', 'like_count', 'comment_count', 'selection_count'];
 
     // Allow visibility to be added to JSON serialization
     protected $casts = [
@@ -132,6 +132,30 @@ class Post extends Model {
             return route('posts.shared', ['shareKey' => $this->share_key]);
         }
         return null;
+    }
+
+    /**
+     * Get the like count for this post
+     */
+    public function getLikeCountAttribute()
+    {
+        return $this->attributes['like_count'] ?? $this->likes()->count();
+    }
+
+    /**
+     * Get the comment count for this post
+     */
+    public function getCommentCountAttribute()
+    {
+        return $this->attributes['comment_count'] ?? $this->comments()->count();
+    }
+
+    /**
+     * Get the selection count (readlist count) for this post
+     */
+    public function getSelectionCountAttribute()
+    {
+        return $this->attributes['selection_count'] ?? $this->readlistItems()->count();
     }
 
     /**

@@ -35,6 +35,14 @@ class PostController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(20);
 
+        // Add statistics to each post
+        $posts->getCollection()->transform(function ($post) {
+            $post->like_count = \App\Models\Like::where('post_id', $post->id)->count();
+            $post->comment_count = \App\Models\Comment::where('post_id', $post->id)->count();
+            $post->selection_count = $post->readlistItems()->count();
+            return $post;
+        });
+
         return response()->json([
             'posts' => $posts
         ]);
