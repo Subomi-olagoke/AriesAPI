@@ -505,4 +505,201 @@ class HiveTemporaryController extends Controller
             ], 500);
         }
     }
+    
+    /**
+     * Get hives that the user has joined
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getJoinedHives()
+    {
+        $user = Auth::user();
+        $joinedHives = collect([]);
+        
+        try {
+            // Get joined hive channels
+            if (Schema::hasTable('hive_channels') && Schema::hasTable('hive_channel_members')) {
+                $hiveChannels = DB::table('hive_channels')
+                    ->join('hive_channel_members', 'hive_channels.id', '=', 'hive_channel_members.channel_id')
+                    ->where('hive_channel_members.user_id', $user->id)
+                    ->where('hive_channels.status', 'active')
+                    ->select('hive_channels.*')
+                    ->get()
+                    ->map(function ($channel) use ($user) {
+                        $memberCount = 0;
+                        if (Schema::hasTable('hive_channel_members')) {
+                            $memberCount = DB::table('hive_channel_members')
+                                ->where('channel_id', $channel->id)
+                                ->count();
+                        }
+                        
+                        return [
+                            'id' => $channel->id,
+                            'name' => $channel->name,
+                            'description' => $channel->description,
+                            'color' => $channel->color,
+                            'member_count' => $memberCount,
+                            'is_joined' => true,
+                            'created_at' => $channel->created_at,
+                            'updated_at' => $channel->updated_at,
+                            'source' => 'hive'
+                        ];
+                    });
+                
+                $joinedHives = $joinedHives->concat($hiveChannels);
+            }
+            
+            // Get joined regular channels
+            if (Schema::hasTable('channels') && Schema::hasTable('channel_members')) {
+                $regularChannels = DB::table('channels')
+                    ->join('channel_members', 'channels.id', '=', 'channel_members.channel_id')
+                    ->where('channel_members.user_id', $user->id)
+                    ->where('channel_members.status', 'approved')
+                    ->where('channels.is_active', true)
+                    ->select('channels.*')
+                    ->get()
+                    ->map(function ($channel) use ($user) {
+                        $memberCount = 0;
+                        if (Schema::hasTable('channel_members')) {
+                            $memberCount = DB::table('channel_members')
+                                ->where('channel_id', $channel->id)
+                                ->where('status', 'approved')
+                                ->count();
+                        }
+                        
+                        return [
+                            'id' => $channel->id,
+                            'name' => $channel->title,
+                            'description' => $channel->description,
+                            'color' => '#007AFF',
+                            'member_count' => $memberCount,
+                            'is_joined' => true,
+                            'created_at' => $channel->created_at,
+                            'updated_at' => $channel->updated_at,
+                            'source' => 'regular',
+                            'picture' => $channel->picture
+                        ];
+                    });
+                
+                $joinedHives = $joinedHives->concat($regularChannels);
+            }
+            
+            // Sort by creation date
+            $joinedHives = $joinedHives->sortByDesc('created_at')->values();
+            
+            return response()->json([
+                'message' => 'Joined hives retrieved successfully',
+                'hives' => $joinedHives
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to retrieve joined hives: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Error retrieving joined hives: ' . $e->getMessage(),
+                'hives' => []
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get hives that the user has not joined
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getUnjoinedHives()
+    {
+        $user = Auth::user();
+        $unjoinedHives = collect([]);
+        
+        try {
+            // Get unjoined hive channels
+            if (Schema::hasTable('hive_channels') && Schema::hasTable('hive_channel_members')) {
+                $joinedHiveIds = DB::table('hive_channel_members')
+                    ->where('user_id', $user->id)
+                    ->pluck('channel_id')
+                    ->toArray();
+                
+                $hiveChannels = DB::table('hive_channels')
+                    ->where('status', 'active')
+                    ->whereNotIn('id', $joinedHiveIds)
+                    ->get()
+                    ->map(function ($channel) use ($user) {
+                        $memberCount = 0;
+                        if (Schema::hasTable('hive_channel_members')) {
+                            $memberCount = DB::table('hive_channel_members')
+                                ->where('channel_id', $channel->id)
+                                ->count();
+                        }
+                        
+                        return [
+                            'id' => $channel->id,
+                            'name' => $channel->name,
+                            'description' => $channel->description,
+                            'color' => $channel->color,
+                            'member_count' => $memberCount,
+                            'is_joined' => false,
+                            'created_at' => $channel->created_at,
+                            'updated_at' => $channel->updated_at,
+                            'source' => 'hive'
+                        ];
+                    });
+                
+                $unjoinedHives = $unjoinedHives->concat($hiveChannels);
+            }
+            
+            // Get unjoined regular channels
+            if (Schema::hasTable('channels') && Schema::hasTable('channel_members')) {
+                $joinedRegularIds = DB::table('channel_members')
+                    ->where('user_id', $user->id)
+                    ->where('status', 'approved')
+                    ->pluck('channel_id')
+                    ->toArray();
+                
+                $regularChannels = DB::table('channels')
+                    ->where('is_active', true)
+                    ->where('is_public', true) // Only show public channels
+                    ->whereNotIn('id', $joinedRegularIds)
+                    ->get()
+                    ->map(function ($channel) use ($user) {
+                        $memberCount = 0;
+                        if (Schema::hasTable('channel_members')) {
+                            $memberCount = DB::table('channel_members')
+                                ->where('channel_id', $channel->id)
+                                ->where('status', 'approved')
+                                ->count();
+                        }
+                        
+                        return [
+                            'id' => $channel->id,
+                            'name' => $channel->title,
+                            'description' => $channel->description,
+                            'color' => '#007AFF',
+                            'member_count' => $memberCount,
+                            'is_joined' => false,
+                            'created_at' => $channel->created_at,
+                            'updated_at' => $channel->updated_at,
+                            'source' => 'regular',
+                            'picture' => $channel->picture
+                        ];
+                    });
+                
+                $unjoinedHives = $unjoinedHives->concat($regularChannels);
+            }
+            
+            // Sort by creation date
+            $unjoinedHives = $unjoinedHives->sortByDesc('created_at')->values();
+            
+            return response()->json([
+                'message' => 'Unjoined hives retrieved successfully',
+                'hives' => $unjoinedHives
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to retrieve unjoined hives: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Error retrieving unjoined hives: ' . $e->getMessage(),
+                'hives' => []
+            ], 500);
+        }
+    }
 }

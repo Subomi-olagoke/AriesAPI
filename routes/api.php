@@ -957,6 +957,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('hive')->middleware('auth:sanctum')->group(function () {
         // Channels endpoints - using temporary controller for graceful error handling
         Route::get('/channels', [\App\Http\Controllers\Hive\HiveTemporaryController::class, 'getChannels']);
+        Route::get('/channels/joined', [\App\Http\Controllers\Hive\HiveTemporaryController::class, 'getJoinedHives']);
+        Route::get('/channels/unjoined', [\App\Http\Controllers\Hive\HiveTemporaryController::class, 'getUnjoinedHives']);
         Route::post('/channels/{id}/join', [\App\Http\Controllers\Hive\HiveTemporaryController::class, 'joinChannel']);
         Route::delete('/channels/{id}/leave', [\App\Http\Controllers\Hive\HiveTemporaryController::class, 'leaveChannel']);
         

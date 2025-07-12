@@ -86,12 +86,11 @@ class PostAnalysisController extends Controller
                         $content .= "- Image: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
                         
-                        // Analyze images with natural, conversational focus
+                        // Analyze images with brief, natural focus
                         try {
-                            $prompt = "Look at this image and tell me what it shows in a natural way. " . 
-                                      "Describe what you see and how it relates to what the post is about. " .
-                                      "If it's a diagram, chart, or screenshot, explain what it's showing. " .
-                                      "Keep it conversational and easy to understand - like you're explaining it to someone who can't see the image.";
+                            $prompt = "Look at this image and briefly describe what it shows in 1 sentence. " . 
+                                      "Keep it simple and mention how it relates to the post. " .
+                                      "If it's a diagram or screenshot, just say what it's showing.";
                             
                             $imageResult = $this->cogniService->analyzeImage($mediaUrl, $prompt, $postContext);
                             
@@ -106,14 +105,10 @@ class PostAnalysisController extends Controller
                         $content .= "- Video: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
                         
-                        // Natural video analysis
-                        $videoPrompt = "Look at this video and tell me what it's likely about based on the post context. " .
-                                      "Explain: " .
-                                      "1. What the video probably shows or explains " .
-                                      "2. How it relates to what the post is talking about " .
-                                      "3. What someone might learn from watching it " .
-                                      "Keep it conversational and natural - like you're explaining what the video is about to a friend. " .
-                                      "Don't be overly formal or academic.";
+                        // Brief video analysis
+                        $videoPrompt = "Look at this video and briefly describe what it's likely about in 1 sentence. " .
+                                      "Mention how it relates to the post content. " .
+                                      "Keep it simple and conversational.";
                         
                         // Try to extract video ID if it's a YouTube URL
                         $videoId = null;
@@ -275,17 +270,12 @@ class PostAnalysisController extends Controller
                 }
             }
             
-            // STEP 4: Create a natural, insightful explanation of what the post is about
-            $summaryPrompt = "Look at this post and tell me what it's about in a natural, conversational way. " .
-                             "Explain it like you're helping someone understand what they're looking at. " .
-                             "Focus on: " .
-                             "1) What the main topic or subject is " .
-                             "2) What the person is trying to share or explain " .
-                             "3) Any interesting insights or key points " .
-                             "4) If there are images/videos, what they show and how they relate " .
-                             "Keep it conversational and easy to understand - like you're explaining it to a friend. " .
-                             "Make it insightful but not overly academic. " .
-                             "Aim for 2-4 sentences that capture the essence of what this post is about.";
+            // STEP 4: Create a brief, natural explanation of what the post is about
+            $summaryPrompt = "Look at this post and briefly explain what it's about in 1-2 sentences. " .
+                             "Keep it simple and conversational - like quickly telling a friend what you're looking at. " .
+                             "Focus on the main point and what the person is sharing. " .
+                             "If there are images/videos, mention what they show briefly. " .
+                             "Make it short and to the point.";
             
             $summaryResult = $this->cogniService->askQuestion($summaryPrompt . "\n\nHere's the content:\n" . $content);
             
