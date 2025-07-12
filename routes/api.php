@@ -209,6 +209,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/courses/{id}/toggle-featured', [CoursesController::class, 'toggleFeatured']);
     Route::post('/course/{id}/toggle-featured', [CoursesController::class, 'toggleFeatured']);
     
+    // Course Rating routes
+    Route::post('/courses/{courseId}/rate', [App\Http\Controllers\CourseRatingController::class, 'rateCourse']);
+    Route::get('/courses/{courseId}/ratings', [App\Http\Controllers\CourseRatingController::class, 'getCourseRatings']);
+    Route::delete('/courses/{courseId}/rating', [App\Http\Controllers\CourseRatingController::class, 'deleteRating']);
+    Route::get('/courses/{courseId}/can-rate', [App\Http\Controllers\CourseRatingController::class, 'canRateCourse']);
+    
     // Trending Topics route
     Route::get('/trending-topics', [TrendingTopicsController::class, 'getTrendingTopics'])->middleware('auth:sanctum');
 

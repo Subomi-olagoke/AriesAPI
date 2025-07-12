@@ -23,7 +23,9 @@ class Course extends Model {
         'difficulty_level',
         'topic_id',
         'user_id',
-        'is_featured'
+        'is_featured',
+        'average_rating',
+        'total_ratings'
     ];
 
     protected $casts = [
@@ -31,7 +33,9 @@ class Course extends Model {
         'learning_outcomes' => 'array',
         'prerequisites' => 'array',
         'completion_criteria' => 'array',
-        'is_featured' => 'boolean'
+        'is_featured' => 'boolean',
+        'average_rating' => 'decimal:2',
+        'total_ratings' => 'integer'
     ];
 
     public function user(){
@@ -201,5 +205,62 @@ class Course extends Model {
     public function readlistItems()
     {
         return $this->morphMany(ReadlistItem::class, 'item');
+    }
+
+    /**
+     * Get the ratings for this course.
+     */
+    public function ratings()
+    {
+        return $this->hasMany(CourseRating::class);
+    }
+
+    /**
+     * Get the average rating for this course.
+     */
+    public function getAverageRatingAttribute($value)
+    {
+        if ($this->total_ratings > 0) {
+            return round($value, 1);
+        }
+        return 0.0;
+    }
+
+    /**
+     * Check if a user has rated this course.
+     */
+    public function hasUserRated(User $user)
+    {
+        return $this->ratings()->where('user_id', $user->id)->exists();
+    }
+
+    /**
+     * Get a user's rating for this course.
+     */
+    public function getUserRating(User $user)
+    {
+        return $this->ratings()->where('user_id', $user->id)->first();
+    }
+
+    /**
+     * Update course rating statistics.
+     */
+    public function updateRatingStats()
+    {
+        $ratings = $this->ratings();
+        $totalRatings = $ratings->count();
+        
+        if ($totalRatings > 0) {
+            $averageRating = $ratings->avg('rating');
+            $this->update([
+                'average_rating' => round($averageRating, 2),
+                'total_ratings' => $totalRatings
+            ]);
+        } else {
+            $this->update([
+                'average_rating' => 0.00,
+                'total_ratings' => 0
+            ]);
+        }
     }
 }

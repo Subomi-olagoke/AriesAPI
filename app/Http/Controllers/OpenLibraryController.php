@@ -54,8 +54,67 @@ class OpenLibraryController extends Controller
             // Get results ordered by creation date
             $libraries = $query->orderBy('created_at', 'desc')->get();
             
+            // Format the response to match iOS expectations
+            $formattedLibraries = $libraries->map(function ($library) {
+                return [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description,
+                    'type' => $library->type,
+                    'thumbnailUrl' => $library->thumbnail_url,
+                    'coverImageUrl' => $library->cover_image_url,
+                    'courseId' => $library->course_id,
+                    'criteria' => $library->criteria,
+                    'keywords' => $library->keywords,
+                    'isApproved' => $library->is_approved,
+                    'approvalStatus' => $library->approval_status,
+                    'approvalDate' => $library->approval_date,
+                    'approvedBy' => $library->approved_by,
+                    'rejectionReason' => $library->rejection_reason,
+                    'coverPrompt' => $library->cover_prompt,
+                    'aiGenerated' => $library->ai_generated,
+                    'aiGenerationDate' => $library->ai_generation_date,
+                    'aiModelUsed' => $library->ai_model_used,
+                    'hasAiCover' => $library->has_ai_cover,
+                    'createdAt' => $library->created_at,
+                    'updatedAt' => $library->updated_at,
+                    'contents' => $library->contents ? $library->contents->map(function ($content) {
+                        return [
+                            'id' => $content->id,
+                            'libraryId' => $content->library_id,
+                            'contentId' => $content->content_id,
+                            'contentType' => $content->content_type,
+                            'relevanceScore' => $content->relevance_score,
+                            'createdAt' => $content->created_at,
+                            'updatedAt' => $content->updated_at,
+                            'contentData' => $content->content ? [
+                                'id' => $content->content->id,
+                                'title' => $content->content->title ?? null,
+                                'body' => $content->content->body ?? null,
+                                'mediaType' => $content->content->media_type ?? null,
+                                'mediaLink' => $content->content->media_link ?? null,
+                                'mediaThumbnail' => $content->content->media_thumbnail ?? null,
+                                'visibility' => $content->content->visibility ?? null,
+                                'user' => $content->content->user ? [
+                                    'id' => $content->content->user->id,
+                                    'firstName' => $content->content->user->first_name,
+                                    'lastName' => $content->content->user->last_name,
+                                    'username' => $content->content->user->username,
+                                    'avatar' => $content->content->user->avatar,
+                                    'isVerified' => $content->content->user->is_verified ?? false,
+                                    'role' => $content->content->user->role,
+                                    'alex_points' => $content->content->user->alex_points
+                                ] : null
+                            ] : null
+                        ];
+                    }) : [],
+                    'user' => null,
+                    'userId' => null
+                ];
+            });
+            
             return response()->json([
-                'libraries' => $libraries
+                'libraries' => $formattedLibraries
             ]);
         } catch (\Exception $e) {
             Log::error('Error retrieving libraries: ' . $e->getMessage());
