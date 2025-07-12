@@ -45,6 +45,7 @@ class Kernel extends ConsoleKernel {
 		\App\Console\Commands\CreateTestReadlist::class,
 		\App\Console\Commands\RefreshTrendsCommand::class,
 		\App\Console\Commands\CleanupExpiredEnrollments::class,
+		\App\Console\Commands\FollowSubomiCommand::class,
 	];
 
 	/**

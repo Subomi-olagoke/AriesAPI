@@ -21,6 +21,8 @@ use App\Events\LiveClassChatMessage;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use App\Events\HandRaiseToggled;
+use App\Events\ChatMessageSent;
 
 class LiveClassController extends Controller
 {
@@ -573,10 +575,9 @@ class LiveClassController extends Controller
         }
 
         $validated = $request->validate([
-            'preferences' => 'required|array',
-            'preferences.video' => 'boolean',
-            'preferences.audio' => 'boolean',
-            'preferences.screen_share' => 'boolean'
+            'video' => 'sometimes|boolean',
+            'audio' => 'sometimes|boolean',
+            'screen_share' => 'sometimes|boolean',
         ]);
 
         $participant = $liveClass->participants()
@@ -585,541 +586,172 @@ class LiveClassController extends Controller
             ->first();
 
         if (!$participant) {
-            return response()->json(['message' => 'Not a participant of this class'], 403);
+            return response()->json(['message' => 'You are not a participant in this class'], 403);
         }
 
-        $participant->update([
-            'preferences' => $validated['preferences']
-        ]);
+        // Update preferences
+        $preferences = array_merge($participant->preferences ?? [], $validated);
+        $participant->update(['preferences' => $preferences]);
 
-        broadcast(new ParticipantSettingsUpdated(
-            $liveClass->id,
-            auth()->id(),
-            $validated['preferences']
-        ))->toOthers();
-
-        return response()->json(['status' => 'success']);
-    }
-
-    /**
-     * Get live classes for a specific course.
-     */
-    public function getClassesForCourse($courseId)
-    {
-        $course = Course::findOrFail($courseId);
-        
-        // Check if user has access to the course
-        $user = auth()->user();
-        $isOwner = $course->user_id === $user->id;
-        $isEnrolled = $user->isEnrolledIn($course);
-        
-        if (!$isOwner && !$isEnrolled) {
-            return response()->json([
-                'message' => 'You need to be enrolled in this course to access its live classes'
-            ], 403);
-        }
-        
-        // Get live classes for this course
-        $liveClasses = LiveClass::where('course_id', $courseId)
-            ->with('teacher:id,username,first_name,last_name,avatar,role')
-            ->orderBy('scheduled_at', 'desc')
-            ->get();
-            
-        // Add participant count to each class
-        foreach ($liveClasses as $class) {
-            $class->participant_count = $class->activeParticipants()->count();
-            $class->is_participant = $class->participants()
-                ->where('user_id', $user->id)
-                ->whereNull('left_at')
-                ->exists();
-        }
-        
-        return response()->json([
-            'live_classes' => $liveClasses,
-            'course' => [
-                'id' => $course->id,
-                'title' => $course->title
-            ]
-        ]);
-    }
-
-    /**
-     * Get live classes where the user is a teacher.
-     */
-    public function getMyClasses(Request $request)
-    {
-        $user = auth()->user();
-        $status = $request->get('status', 'all');
-        
-        $query = LiveClass::where('teacher_id', $user->id);
-        
-        // Filter by status if specified
-        if ($status !== 'all') {
-            $query->where('status', $status);
-        }
-        
-        // Filter by course if specified
-        if ($request->has('course_id')) {
-            $query->where('course_id', $request->get('course_id'));
-        }
-        
-        // Get upcoming or past classes
-        if ($request->has('upcoming') && $request->get('upcoming')) {
-            $query->where('scheduled_at', '>', now())
-                  ->orderBy('scheduled_at', 'asc');
-        } else if ($request->has('past') && $request->get('past')) {
-            $query->where(function($q) {
-                $q->where('status', 'ended')
-                  ->orWhere('scheduled_at', '<', now());
-            })
-            ->orderBy('scheduled_at', 'desc');
-        } else {
-            // Default: order by scheduled_at descending
-            $query->orderBy('scheduled_at', 'desc');
-        }
-        
-        $liveClasses = $query->with('course:id,title,thumbnail_url')
-            ->paginate($request->get('per_page', 15));
-            
-        // Add participant count
-        foreach ($liveClasses as $class) {
-            $class->participant_count = $class->activeParticipants()->count();
-        }
-        
-        return response()->json([
-            'live_classes' => $liveClasses
-        ]);
-    }
-
-    /**
-     * Get live classes where the user is a student/participant.
-     */
-    public function getEnrolledClasses(Request $request)
-    {
-        $user = auth()->user();
-        $status = $request->get('status', 'all');
-        
-        // Get IDs of classes where the user is a participant
-        $participatedClassIds = $user->liveClassParticipation()
-            ->pluck('live_class_id')
-            ->toArray();
-            
-        // Get course IDs where the user is enrolled
-        $enrolledCourseIds = $user->enrolledCourses()
-            ->pluck('courses.id')
-            ->toArray();
-            
-        $query = LiveClass::where(function($q) use ($participatedClassIds, $enrolledCourseIds) {
-            // Include classes where the user participated
-            $q->whereIn('id', $participatedClassIds)
-              // Or classes for courses the user is enrolled in
-              ->orWhereIn('course_id', $enrolledCourseIds);
-        });
-        
-        // Filter by status if specified
-        if ($status !== 'all') {
-            $query->where('status', $status);
-        }
-        
-        // Get upcoming or past classes
-        if ($request->has('upcoming') && $request->get('upcoming')) {
-            $query->where('scheduled_at', '>', now())
-                  ->orderBy('scheduled_at', 'asc');
-        } else if ($request->has('past') && $request->get('past')) {
-            $query->where(function($q) {
-                $q->where('status', 'ended')
-                  ->orWhere('scheduled_at', '<', now());
-            })
-            ->orderBy('scheduled_at', 'desc');
-        } else {
-            // Default: order by scheduled_at descending
-            $query->orderBy('scheduled_at', 'desc');
-        }
-        
-        $liveClasses = $query->with(['teacher:id,username,first_name,last_name,avatar,role', 
-                                     'course:id,title,thumbnail_url'])
-            ->paginate($request->get('per_page', 15));
-            
-        // Add participant status
-        foreach ($liveClasses as $class) {
-            $class->is_participant = $class->participants()
-                ->where('user_id', $user->id)
-                ->whereNull('left_at')
-                ->exists();
-        }
-        
-        return response()->json([
-            'live_classes' => $liveClasses
-        ]);
-    }
-
-    /**
-     * Update a live class (only by teacher).
-     */
-    public function update(Request $request, LiveClass $liveClass)
-    {
-        // Check if user is the teacher
-        if (auth()->id() !== $liveClass->teacher_id) {
-            return response()->json([
-                'message' => 'Only the teacher can update this class'
-            ], 403);
-        }
-        
-        // Can't update a class that has already ended
-        if ($liveClass->status === 'ended') {
-            return response()->json([
-                'message' => 'Cannot update a class that has already ended'
-            ], 400);
-        }
-        
-        $validated = $request->validate([
-            'title' => 'sometimes|string|max:255',
-            'description' => 'nullable|string',
-            'scheduled_at' => 'sometimes|date|after:now',
-            'settings' => 'nullable|array',
-        ]);
-        
-        try {
-            // If course_id or lesson_id are being updated, check ownership
-            if ($request->has('course_id') || $request->has('lesson_id')) {
-                if ($request->has('course_id')) {
-                    $course = Course::findOrFail($request->course_id);
-                    
-                    if ($course->user_id !== auth()->id()) {
-                        return response()->json([
-                            'message' => 'You can only link classes to courses you own'
-                        ], 403);
-                    }
-                }
-                
-                if ($request->has('lesson_id')) {
-                    $lesson = CourseLesson::findOrFail($request->lesson_id);
-                    $courseId = $request->has('course_id') ? $request->course_id : $liveClass->course_id;
-                    
-                    if ($lesson->section->course_id != $courseId) {
-                        return response()->json([
-                            'message' => 'The lesson must belong to the selected course'
-                        ], 400);
-                    }
-                }
-            }
-            
-            // Merge settings rather than replace
-            if (isset($validated['settings'])) {
-                $settings = array_merge($liveClass->settings ?? [], $validated['settings']);
-                $validated['settings'] = $settings;
-            }
-            
-            // Update class
-            $liveClass->update($validated);
-            
-            // Load relationships
-            $liveClass->load('teacher');
-            if ($liveClass->course_id) {
-                $liveClass->load(['course', 'lesson']);
-            }
-            
-            return response()->json([
-                'message' => 'Live class updated successfully',
-                'live_class' => $liveClass
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Failed to update live class: ' . $e->getMessage());
-            
-            return response()->json([
-                'message' => 'Failed to update live class: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Delete a live class (only by teacher, and only if it hasn't started).
-     */
-    public function destroy(LiveClass $liveClass)
-    {
-        // Check if user is the teacher
-        if (auth()->id() !== $liveClass->teacher_id) {
-            return response()->json([
-                'message' => 'Only the teacher can delete this class'
-            ], 403);
-        }
-        
-        // Can't delete a class that has already started or ended
-        if ($liveClass->status !== 'scheduled') {
-            return response()->json([
-                'message' => 'Cannot delete a class that has already started or ended'
-            ], 400);
-        }
-        
-        try {
-            // Delete participants (cascade via foreign key)
-            $liveClass->delete();
-            
-            return response()->json([
-                'message' => 'Live class deleted successfully'
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Failed to delete live class: ' . $e->getMessage());
-            
-            return response()->json([
-                'message' => 'Failed to delete live class: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Start the live stream for a class.
-     * Subscription is required and only moderators can start the stream.
-     */
-    public function startStream(LiveClass $liveClass)
-    {
-        if (!$this->checkSubscription()) {
-            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
-        }
-
-        $participant = $liveClass->participants()
-            ->where('user_id', auth()->id())
-            ->first();
-
-        if (!$participant || $participant->role !== 'moderator') {
-            return response()->json(['message' => 'Only moderators can start the stream'], 403);
-        }
-
-        $liveClass->update([
-            'status' => 'live'
-        ]);
-
-        broadcast(new StreamStarted($liveClass))->toOthers();
+        broadcast(new ParticipantSettingsUpdated($liveClass, auth()->user(), $validated))->toOthers();
 
         return response()->json([
-            'message' => 'Stream started',
-            'stream_info' => [
-                'class_id' => $liveClass->id,
-                'meeting_id' => $liveClass->meeting_id,
-                'started_at' => now()
-            ]
+            'message' => 'Settings updated successfully',
+            'preferences' => $preferences
         ]);
-    }
-
-    /**
-     * Stop the live stream for a class.
-     * Subscription is required and only moderators can stop the stream.
-     * When a stream is ended, the live class is deleted.
-     */
-    public function stopStream(LiveClass $liveClass)
-    {
-        if (!$this->checkSubscription()) {
-            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
-        }
-
-        $participant = $liveClass->participants()
-            ->where('user_id', auth()->id())
-            ->first();
-
-        if (!$participant || $participant->role !== 'moderator') {
-            return response()->json(['message' => 'Only moderators can stop the stream'], 403);
-        }
-
-        try {
-            // First update the status to ended for the broadcast event
-            $liveClass->update([
-                'status' => 'ended',
-                'ended_at' => now()
-            ]);
-
-            // Broadcast that the stream has ended
-            broadcast(new StreamEnded($liveClass))->toOthers();
-            
-            // Get the class ID for the response
-            $classId = $liveClass->id;
-            
-            // Delete participants first (foreign key constraints)
-            $liveClass->participants()->delete();
-            
-            // Delete any chat messages
-            if (method_exists($liveClass, 'chatMessages')) {
-                $liveClass->chatMessages()->delete();
-            }
-            
-            // Delete the live class
-            $liveClass->delete();
-            
-            return response()->json([
-                'message' => 'Stream ended and class deleted',
-                'class_id' => $classId
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Failed to delete live class after ending stream: ' . $e->getMessage());
-            
-            return response()->json([
-                'message' => 'Stream ended but failed to delete class: ' . $e->getMessage(),
-                'class_id' => $liveClass->id
-            ]);
-        }
     }
     
     /**
-     * Get stream information for a live class.
-     * Includes active participants, stream status, and settings.
-     * If teacher accesses this endpoint and class isn't started, it automatically marks the stream as started.
+     * Raise or lower hand for a participant.
+     * Subscription is required.
      */
-    public function getStreamInfo(LiveClass $liveClass)
+    public function toggleHandRaise(Request $request, LiveClass $liveClass)
     {
         if (!$this->checkSubscription()) {
             return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
         }
-        
-        // Check if user is a participant
+
         $participant = $liveClass->participants()
             ->where('user_id', auth()->id())
+            ->whereNull('left_at')
             ->first();
-            
-        if (!$participant) {
-            return response()->json([
-                'message' => 'You are not a participant in this class',
-                'join_required' => true
-            ], 403);
-        }
-        
-        // Auto-start stream if teacher is accessing and the class isn't started yet
-        $user = auth()->user();
-        $isTeacher = $user->id === $liveClass->teacher_id;
-        $isModeratorOrTeacher = $participant->role === 'moderator' || $isTeacher;
-        
-        // If teacher/moderator is viewing and class is in scheduled status, start it
-        if ($isModeratorOrTeacher && $liveClass->status === 'scheduled') {
-            $liveClass->update(['status' => 'live']);
-            
-            // Broadcast that the stream has started
-            try {
-                broadcast(new StreamStarted($liveClass))->toOthers();
-                Log::info("Stream automatically started by teacher viewing stream info", ['class_id' => $liveClass->id]);
-            } catch (\Exception $e) {
-                Log::error("Failed to broadcast stream start", ['error' => $e->getMessage()]);
-            }
-        }
-        
-        // Get active participants (refresh after potential status update)
-        $activeParticipants = $liveClass->activeParticipants()
-            ->with('user:id,username,first_name,last_name,avatar,role')
-            ->get();
-        
-        // Get stream settings and status (reload after potential update)
-        $liveClass = LiveClass::find($liveClass->id); // Refresh the model
-            
-        // Get stream settings and status
-        $streamInfo = [
-            'class_id' => $liveClass->id,
-            'meeting_id' => $liveClass->meeting_id,
-            'status' => $liveClass->status,
-            'started_at' => $liveClass->status === 'live' ? $liveClass->updated_at : null,
-            'ended_at' => $liveClass->ended_at,
-            'settings' => $liveClass->settings,
-            'active_participants' => $activeParticipants,
-            'is_moderator' => $participant->role === 'moderator',
-            'current_user' => [
-                'participant_id' => $participant->id,
-                'role' => $participant->role,
-                'preferences' => $participant->preferences
-            ]
-        ];
-        
-        return response()->json($streamInfo);
-    }
 
+        if (!$participant) {
+            return response()->json(['message' => 'You are not a participant in this class'], 403);
+        }
+
+        // Toggle hand raised status
+        $handRaised = !$participant->hand_raised;
+        $participant->update([
+            'hand_raised' => $handRaised,
+            'hand_raised_at' => $handRaised ? now() : null
+        ]);
+
+        // Broadcast the hand raise event
+        broadcast(new HandRaiseToggled($liveClass, auth()->user(), $handRaised))->toOthers();
+
+        return response()->json([
+            'message' => $handRaised ? 'Hand raised' : 'Hand lowered',
+            'hand_raised' => $handRaised,
+            'hand_raised_at' => $participant->hand_raised_at
+        ]);
+    }
+    
     /**
-     * Send a message in a live class chat.
-     * User must be a participant in the class.
+     * Get all participants with hand raised status.
      */
-    public function sendChatMessage(Request $request, $classId)
+    public function getParticipantsWithHandRaise(LiveClass $liveClass)
     {
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
+        }
+
+        $participants = $liveClass->activeParticipants()
+            ->with('user:id,username,first_name,last_name,avatar,role')
+            ->orderBy('hand_raised', 'desc') // Hand raised participants first
+            ->orderBy('hand_raised_at', 'asc') // Oldest hand raises first
+            ->get()
+            ->map(function($participant) {
+                return [
+                    'user_id' => $participant->user_id,
+                    'role' => $participant->role,
+                    'preferences' => $participant->preferences,
+                    'joined_at' => $participant->joined_at,
+                    'hand_raised' => $participant->hand_raised,
+                    'hand_raised_at' => $participant->hand_raised_at,
+                    'user' => $participant->user
+                ];
+            });
+
+        return response()->json([
+            'participants' => $participants,
+            'hand_raised_count' => $participants->where('hand_raised', true)->count()
+        ]);
+    }
+    
+    /**
+     * Send a chat message in the live class.
+     * Subscription is required.
+     */
+    public function sendChatMessage(Request $request, LiveClass $liveClass)
+    {
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
+        }
+
         $validated = $request->validate([
             'message' => 'required|string|max:1000',
         ]);
-        
-        $liveClass = LiveClass::findOrFail($classId);
-        $user = auth()->user();
-        
-        // Check if user is a participant
-        $isParticipant = $liveClass->participants()
-            ->where('user_id', $user->id)
+
+        $participant = $liveClass->participants()
+            ->where('user_id', auth()->id())
             ->whereNull('left_at')
-            ->exists();
-            
-        if (!$isParticipant) {
-            return response()->json([
-                'message' => 'You must be a participant to send messages in this class',
-                'join_required' => true
-            ], 403);
+            ->first();
+
+        if (!$participant) {
+            return response()->json(['message' => 'You are not a participant in this class'], 403);
         }
-        
-        // Check if chat is enabled in class settings
-        if (!($liveClass->settings['enable_chat'] ?? false)) {
-            return response()->json([
-                'message' => 'Chat is disabled for this class'
-            ], 403);
-        }
-        
-        try {
-            $chatMessage = LiveClassChat::create([
-                'live_class_id' => $liveClass->id,
-                'user_id' => $user->id,
-                'message' => $validated['message'],
-                'type' => 'text',
-            ]);
-            
-            $chatMessage->load('user:id,username,first_name,last_name,avatar,role');
-            
-            // Broadcast to other participants
-            broadcast(new LiveClassChatMessage($chatMessage))->toOthers();
-            
-            return response()->json([
-                'message' => 'Message sent successfully',
-                'chat_message' => $chatMessage
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Failed to send live class chat message: ' . $e->getMessage());
-            
-            return response()->json([
-                'message' => 'Failed to send message: ' . $e->getMessage()
-            ], 500);
-        }
+
+        // Create the message
+        $message = $liveClass->chatMessages()->create([
+            'live_class_id' => $liveClass->id,
+            'user_id' => auth()->id(),
+            'message' => $validated['message'],
+            'type' => 'text'
+        ]);
+
+        // Load the user relationship
+        $message->load('user:id,username,first_name,last_name,avatar,role');
+
+        // Broadcast the message to other participants
+        broadcast(new LiveClassChatMessage($message))->toOthers();
+
+        return response()->json([
+            'message' => 'Message sent successfully',
+            'chat_message' => $message
+        ]);
     }
     
     /**
-     * Get chat history for a live class.
-     * User must be a participant in the class.
+     * Get chat messages for the live class.
+     * Subscription is required.
      */
-    public function getChatHistory($classId)
+    public function getChatMessages(LiveClass $liveClass)
     {
-        $liveClass = LiveClass::findOrFail($classId);
-        $user = auth()->user();
-        
-        // Check if user is a participant
-        $isParticipant = $liveClass->participants()
-            ->where('user_id', $user->id)
-            ->exists();
-            
-        if (!$isParticipant) {
-            return response()->json([
-                'message' => 'You must be a participant to view chat history',
-                'join_required' => true
-            ], 403);
+        if (!$this->checkSubscription()) {
+            return response()->json(['message' => 'Active subscription required to access live classes. Please subscribe to continue.'], 403);
         }
-        
-        // Get chat messages with user info
-        $chatMessages = $liveClass->chatMessages()
+
+        $participant = $liveClass->participants()
+            ->where('user_id', auth()->id())
+            ->whereNull('left_at')
+            ->first();
+
+        if (!$participant) {
+            return response()->json(['message' => 'You are not a participant in this class'], 403);
+        }
+
+        $messages = $liveClass->chatMessages()
             ->with('user:id,username,first_name,last_name,avatar,role')
-            ->orderBy('created_at')
-            ->get();
-            
+            ->orderBy('created_at', 'asc')
+            ->get()
+            ->map(function($message) {
+                return [
+                    'id' => $message->id,
+                    'user_id' => $message->user_id,
+                    'username' => $message->user->username,
+                    'first_name' => $message->user->first_name,
+                    'last_name' => $message->user->last_name,
+                    'avatar' => $message->user->avatar,
+                    'message' => $message->message,
+                    'message_type' => $message->type,
+                    'created_at' => $message->created_at->toISOString()
+                ];
+            });
+
         return response()->json([
-            'chat_messages' => $chatMessages,
-            'chat_enabled' => $liveClass->settings['enable_chat'] ?? false
+            'messages' => $messages,
+            'total_count' => $messages->count()
         ]);
     }
     

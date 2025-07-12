@@ -12,13 +12,17 @@ class LiveClassParticipant extends Model
         'role',
         'preferences',
         'joined_at',
-        'left_at'
+        'left_at',
+        'hand_raised',
+        'hand_raised_at'
     ];
 
     protected $casts = [
         'preferences' => 'array',
         'joined_at' => 'datetime',
-        'left_at' => 'datetime'
+        'left_at' => 'datetime',
+        'hand_raised' => 'boolean',
+        'hand_raised_at' => 'datetime'
     ];
 
     public function user()

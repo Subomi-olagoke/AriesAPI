@@ -11,6 +11,7 @@
         "beyondcode/laravel-websockets": "^1.14",
         "cloudinary/cloudinary_php": "^3.1",
         "doctrine/dbal": "^3.5.1",
+        "firebase/php-jwt": "^6.11",
         "google/apiclient": "^2.12",
         "guzzlehttp/guzzle": "^7.2",
         "illuminate/support": "^10.0",

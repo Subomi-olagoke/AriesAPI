@@ -260,6 +260,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{liveClass}/stop-stream', [LiveClassController::class, 'stopStream']);
         Route::get('/{liveClass}/stream-info', [LiveClassController::class, 'getStreamInfo']);
         Route::post('/{liveClass}/report-connection', [LiveClassController::class, 'reportConnectionQuality']);
+        
+        // Status and Settings
+        Route::get('/{liveClass}/status', [LiveClassController::class, 'getRoomStatus']);
+        Route::post('/{liveClass}/settings', [LiveClassController::class, 'updateParticipantSettings']);
+        
+        // Hand Raising
+        Route::post('/{liveClass}/toggle-hand-raise', [LiveClassController::class, 'toggleHandRaise']);
+        Route::get('/{liveClass}/participants-with-hand-raise', [LiveClassController::class, 'getParticipantsWithHandRaise']);
+        
+        // Chat
+        Route::post('/{liveClass}/chat', [LiveClassController::class, 'sendChatMessage']);
+        Route::get('/{liveClass}/chat', [LiveClassController::class, 'getChatMessages']);
     });
 
     // Duplicate routes with singular "live-class"
@@ -760,6 +772,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/notifications/send', [NotificationController::class, 'sendPushNotification']);
     Route::post('/notification/send', [NotificationController::class, 'sendPushNotification']); // Additional route
     Route::get('/notifications/debug-apns', [NotificationController::class, 'debugApns']);
+    Route::post('/notifications/test', [NotificationController::class, 'testNotification']);
     
     // Channel routes
     Route::prefix('channels')->group(function () {

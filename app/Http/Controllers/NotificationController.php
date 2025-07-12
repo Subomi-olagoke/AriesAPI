@@ -79,7 +79,7 @@ class NotificationController extends Controller
     }
 
     /**
-     * Send a push notification to a specific user using direct APNs package access.
+     * Send a push notification to a specific user using standard notification system.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
@@ -110,215 +110,30 @@ class NotificationController extends Controller
             'token_format' => ctype_xdigit($user->device_token) ? 'hexadecimal' : 'non-hexadecimal'
         ]);
         
-        // Standard notification attempt
-        $standardSuccess = false;
         try {
-            // Try sending through standard notification system
+            // Send through standard notification system
             $user->notify(new BroadcastNotification(
                 $request->title,
                 $request->body,
                 $request->data ?? []
             ));
             
-            Log::info('Notification sent to user through standard channel', ['user_id' => $user->id]);
-            $standardSuccess = true;
-        } catch (\Exception $e) {
-            Log::error('Failed to send standard notification', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-        }
+            Log::info('Notification sent to user successfully', ['user_id' => $user->id]);
             
-        // Direct notification attempt
-        $directSuccess = false;
-        try {
-            // Try direct APNs approach
-            $this->sendDirectAppleNotification($user, $request->title, $request->body, $request->data ?? []);
-            Log::info('Notification sent to user through direct channel', ['user_id' => $user->id]);
-            $directSuccess = true;
-        } catch (\Exception $directException) {
-            Log::error('Failed to send direct notification', [
-                'error' => $directException->getMessage(),
-                'trace' => $directException->getTraceAsString()
-            ]);
-        }
-            
-        // Return response based on success of either method
-        if ($standardSuccess || $directSuccess) {
             return response()->json([
                 'status' => 'success',
-                'message' => 'Push notification sent successfully' . 
-                            ($standardSuccess && $directSuccess ? ' using both methods' : 
-                             ($standardSuccess ? ' using standard method' : ' using direct method')),
-                'standard_success' => $standardSuccess,
-                'direct_success' => $directSuccess
+                'message' => 'Push notification sent successfully',
             ]);
-        } else {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to send push notification through any available method',
-            ], 500);
-        }
-    }
-    
-    /**
-     * Send a direct notification to Apple's APNS service bypassing Laravel's notification system
-     */
-    protected function sendDirectAppleNotification(User $user, string $title, string $body, array $data = [])
-    {
-        if ($user->device_type !== 'ios' || empty($user->device_token)) {
-            Log::warning('Cannot send direct Apple notification', [
-                'reason' => 'User has no iOS device or token',
-                'device_type' => $user->device_type,
-                'has_token' => !empty($user->device_token)
-            ]);
-            return false;
-        }
-        
-        try {
-            // Get config from environment variables directly
-            $keyId = env('APNS_KEY_ID');
-            $teamId = env('APNS_TEAM_ID');
-            $appBundleId = env('APNS_APP_BUNDLE_ID');
-            $production = env('APNS_PRODUCTION', false);
-            
-            // Create p8 file if needed
-            $privateKeyPath = storage_path('app/direct_apns_key.p8');
-            $privateKeyContent = env('APNS_PRIVATE_KEY_CONTENT');
-            
-            if (!empty($privateKeyContent)) {
-                $keyContent = base64_decode($privateKeyContent);
-                if (!file_exists($privateKeyPath) || md5_file($privateKeyPath) !== md5($keyContent)) {
-                    file_put_contents($privateKeyPath, $keyContent);
-                    chmod($privateKeyPath, 0600); // Ensure proper permissions
-                }
-                
-                Log::info('Created direct p8 file', [
-                    'path' => $privateKeyPath,
-                    'size' => filesize($privateKeyPath),
-                    'permissions' => substr(sprintf('%o', fileperms($privateKeyPath)), -4)
-                ]);
-            } else {
-                Log::error('Cannot create direct p8 file - no key content available');
-                return false;
-            }
-            
-            // Log the direct notification attempt
-            Log::info('Attempting direct APNs notification', [
-                'device_token' => $user->device_token,
-                'key_id' => $keyId,
-                'team_id' => $teamId,
-                'app_bundle_id' => $appBundleId,
-                'p8_file_exists' => file_exists($privateKeyPath),
-                'production' => $production
-            ]);
-            
-            // Create a new client
-            $options = [
-                'key_id' => $keyId,
-                'team_id' => $teamId,
-                'app_bundle_id' => $appBundleId,
-                'private_key_path' => $privateKeyPath,
-                'production' => $production
-            ];
-            
-            // Use Firebase JWT directly for a very manual approach
-            Log::info('Attempting manual JWT-based APNs notification');
-            
-            // Get the private key content
-            $privateKeyContent = base64_decode($privateKeyContent);
-            
-            try {
-                // Create JWT token for APNs authentication
-                $issuedAt = time();
-                $token = \Firebase\JWT\JWT::encode(
-                    [
-                        'iss' => $teamId,
-                        'iat' => $issuedAt,
-                    ],
-                    $privateKeyContent,
-                    'ES256',
-                    $keyId
-                );
-                
-                // Create message payload
-                $alert = [
-                    'title' => $title,
-                    'body' => $body,
-                ];
-                
-                $payload = [
-                    'aps' => [
-                        'alert' => $alert,
-                        'badge' => 1,
-                        'sound' => 'default',
-                        'content-available' => 1,
-                        'mutable-content' => 1,
-                    ],
-                ];
-                
-                // Add custom data
-                if (!empty($data)) {
-                    $payload['custom_data'] = $data;
-                }
-                
-                // Convert payload to JSON
-                $payloadJson = json_encode($payload);
-                
-                // Determine correct APNs host based on production flag
-                $apnsHost = $production 
-                    ? 'api.push.apple.com' 
-                    : 'api.sandbox.push.apple.com';
-                
-                // Set up curl request to APNs
-                $ch = curl_init("https://{$apnsHost}/3/device/{$user->device_token}");
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
-                curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
-                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    'Content-Type: application/json',
-                    'Connection: keep-alive',
-                    'Authorization: bearer ' . $token,
-                    'apns-topic: ' . $appBundleId,
-                    'apns-push-type: alert',
-                    'apns-priority: 10',
-                ]);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                
-                // Execute request
-                $response = curl_exec($ch);
-                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                $error = curl_error($ch);
-                curl_close($ch);
-                
-                // Log response
-                Log::info('Manual APNs notification response', [
-                    'http_code' => $httpCode,
-                    'response' => $response,
-                    'curl_error' => $error
-                ]);
-                
-                if ($httpCode === 200) {
-                    return true;
-                } else {
-                    Log::error('APNs error', [
-                        'http_code' => $httpCode,
-                        'response' => $response
-                    ]);
-                    throw new \Exception('APNs error: ' . $httpCode . ' - ' . $response);
-                }
-            } catch (\Exception $e) {
-                Log::error('Failed to create or send APNs JWT', [
-                    'error' => $e->getMessage()
-                ]);
-                throw $e;
-            }
         } catch (\Exception $e) {
-            Log::error('Failed to send direct APNs notification', [
+            Log::error('Failed to send notification', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
             
-            throw $e;
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to send push notification: ' . $e->getMessage(),
+            ], 500);
         }
     }
     
@@ -342,11 +157,6 @@ class NotificationController extends Controller
         $p8FileExists = file_exists($p8FilePath);
         $p8FileContents = $p8FileExists ? (strlen(file_get_contents($p8FilePath)) . ' bytes') : 'File not found';
         
-        // Check direct p8 file
-        $directP8FilePath = storage_path('app/direct_apns_key.p8');
-        $directP8FileExists = file_exists($directP8FilePath);
-        $directP8FileContents = $directP8FileExists ? (strlen(file_get_contents($directP8FilePath)) . ' bytes') : 'File not found';
-        
         // Format the config for display (hide sensitive data)
         $safeConfig = array_merge($config ?? [], [
             'key_id' => env('APNS_KEY_ID'),
@@ -359,24 +169,71 @@ class NotificationController extends Controller
         
         return response()->json([
             'apns_config' => $safeConfig,
-            'certificate_app_config' => config('services.apn.certificate.app') ?? 'Not configured',
-            'storage_path_exists' => $storagePathExists,
-            'storage_path_writable' => $storagePathWritable,
-            'p8_file_exists' => $p8FileExists,
-            'p8_file_contents_length' => $p8FileContents,
-            'direct_p8_file_exists' => $directP8FileExists,
-            'direct_p8_file_contents_length' => $directP8FileContents,
-            'users_with_tokens_count' => $usersWithTokens->count(),
-            'users_with_tokens_sample' => $usersWithTokens->map(function($user) {
+            'users_with_tokens' => $usersWithTokens->count(),
+            'sample_users' => $usersWithTokens->map(function($user) {
                 return [
                     'id' => $user->id,
                     'token_length' => strlen($user->device_token),
-                    'token_preview' => substr($user->device_token, 0, 10) . '...' . substr($user->device_token, -10)
+                    'token_format' => ctype_xdigit($user->device_token) ? 'hexadecimal' : 'non-hexadecimal'
                 ];
             }),
-            'environment' => app()->environment(),
-            'package_version' => \Composer\InstalledVersions::getVersion('laravel-notification-channels/apn') ?? 'unknown',
+            'storage' => [
+                'path_exists' => $storagePathExists,
+                'path_writable' => $storagePathWritable,
+                'p8_file_exists' => $p8FileExists,
+                'p8_file_contents' => $p8FileContents
+            ],
+            'environment' => [
+                'app_env' => env('APP_ENV'),
+                'app_debug' => env('APP_DEBUG'),
+                'queue_connection' => env('QUEUE_CONNECTION')
+            ]
         ]);
+    }
+    
+    /**
+     * Test notification endpoint
+     */
+    public function testNotification(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required|exists:users,id',
+        ]);
+
+        $user = User::find($request->user_id);
+        
+        if (!$user->device_token) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'User has no device token registered'
+            ], 404);
+        }
+
+        try {
+            // Send a test notification
+            $user->notify(new BroadcastNotification(
+                'Test Notification',
+                'This is a test notification from the backend',
+                ['type' => 'test', 'timestamp' => now()->toISOString()]
+            ));
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Test notification sent successfully',
+                'user_id' => $user->id,
+                'device_token_length' => strlen($user->device_token)
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Test notification failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Test notification failed: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
