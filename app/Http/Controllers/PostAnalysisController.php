@@ -36,10 +36,10 @@ class PostAnalysisController extends Controller
             $content = $post->title . "\n\n" . $post->body;
             $postContext = $content; // Save for image analysis
             
-            // STEP 1: First, identify the key topics in the post
-            $topicsPrompt = "Analyze this post and identify the 3-5 main educational topics or concepts it covers. " .
-                            "Be specific, academic, and educational in your identification. " .
-                            "Return only a comma-separated list of key educational topics with no explanations.";
+            // STEP 1: First, identify what the post is mainly about
+            $topicsPrompt = "Look at this post and tell me what it's mainly about. " .
+                            "What are the main topics or subjects being discussed? " .
+                            "Return just a simple comma-separated list of 3-5 key topics, no explanations needed.";
             
             $topicsResult = $this->cogniService->askQuestion($topicsPrompt . "\n\nHere's the content:\n" . $content);
             
@@ -86,13 +86,12 @@ class PostAnalysisController extends Controller
                         $content .= "- Image: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
                         
-                        // Analyze images with educational focus
+                        // Analyze images with natural, conversational focus
                         try {
-                            $prompt = "Analyze this image in the context of an educational post. " . 
-                                      "First, describe what's shown in the image clearly. " .
-                                      "Then, explain its educational significance and how it relates to the post topic. " .
-                                      "If the image contains any diagrams, charts, or educational elements, explain them in detail. " .
-                                      "Focus on making your analysis educational and informative.";
+                            $prompt = "Look at this image and tell me what it shows in a natural way. " . 
+                                      "Describe what you see and how it relates to what the post is about. " .
+                                      "If it's a diagram, chart, or screenshot, explain what it's showing. " .
+                                      "Keep it conversational and easy to understand - like you're explaining it to someone who can't see the image.";
                             
                             $imageResult = $this->cogniService->analyzeImage($mediaUrl, $prompt, $postContext);
                             
@@ -107,16 +106,14 @@ class PostAnalysisController extends Controller
                         $content .= "- Video: {$mediaName}\n";
                         $content .= "  URL: {$mediaUrl}\n";
                         
-                        // Comprehensive video analysis
-                        $videoPrompt = "Perform a professional, detailed analysis of this video in the context of the post. " .
-                                      "In a system-like tone, provide: " .
-                                      "1. Likely content based on post context and video title/name " .
-                                      "2. Educational concepts that may be covered " .
-                                      "3. Potential learning outcomes from watching this video " .
-                                      "4. How it complements the post's educational value " .
-                                      "Format as a concise, factual analysis using professional language. " .
-                                      "If the video appears to be a demonstration, tutorial, lecture, or educational content, " .
-                                      "analyze what skills or knowledge viewers would gain.";
+                        // Natural video analysis
+                        $videoPrompt = "Look at this video and tell me what it's likely about based on the post context. " .
+                                      "Explain: " .
+                                      "1. What the video probably shows or explains " .
+                                      "2. How it relates to what the post is talking about " .
+                                      "3. What someone might learn from watching it " .
+                                      "Keep it conversational and natural - like you're explaining what the video is about to a friend. " .
+                                      "Don't be overly formal or academic.";
                         
                         // Try to extract video ID if it's a YouTube URL
                         $videoId = null;
@@ -278,14 +275,17 @@ class PostAnalysisController extends Controller
                 }
             }
             
-            // STEP 4: Create a concise educational summary that includes interesting facts
-            $summaryPrompt = "Based on this post about '{$topics}', provide a concise educational summary in a professional, system-like tone. " .
-                             "In 3-5 sentences total, include: " .
-                             "1) A clear, factual explanation of what the post is about " .
-                             "2) 1-2 educational facts related to the topics " .
-                             "Make it informative and educational without being verbose or overly friendly. " .
-                             "Maintain a neutral, professional tone throughout. Avoid exclamations, casual language, or first-person references. " .
-                             "This should read like a system-generated educational analysis.";
+            // STEP 4: Create a natural, insightful explanation of what the post is about
+            $summaryPrompt = "Look at this post and tell me what it's about in a natural, conversational way. " .
+                             "Explain it like you're helping someone understand what they're looking at. " .
+                             "Focus on: " .
+                             "1) What the main topic or subject is " .
+                             "2) What the person is trying to share or explain " .
+                             "3) Any interesting insights or key points " .
+                             "4) If there are images/videos, what they show and how they relate " .
+                             "Keep it conversational and easy to understand - like you're explaining it to a friend. " .
+                             "Make it insightful but not overly academic. " .
+                             "Aim for 2-4 sentences that capture the essence of what this post is about.";
             
             $summaryResult = $this->cogniService->askQuestion($summaryPrompt . "\n\nHere's the content:\n" . $content);
             
