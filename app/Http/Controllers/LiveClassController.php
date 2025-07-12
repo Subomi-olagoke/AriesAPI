@@ -210,9 +210,12 @@ class LiveClassController extends Controller
                 'lesson_id' => $validated['lesson_id'] ?? null,
                 'meeting_id' => $meetingId,
                 'settings' => $settings,
-                'status' => 'scheduled',
+                'status' => 'live', // Always live on creation
                 'class_type' => $classType
             ]);
+
+            // Broadcast stream started event immediately
+            broadcast(new StreamStarted($liveClass))->toOthers();
             
             // Automatically add the creator as a participant with moderator role
             $participant = $liveClass->participants()->create([
@@ -318,9 +321,9 @@ class LiveClassController extends Controller
                 ]
             ]);
 
-            // Start class if teacher is joining (regardless of scheduled time)
-            if ($liveClass->status === 'scheduled' && $user->id === $liveClass->teacher_id) {
-                $liveClass->update(['status' => 'live']);
+            // After joining, if educator, broadcast StreamStarted event (if not already broadcast)
+            if ($role === 'moderator') {
+                broadcast(new StreamStarted($liveClass))->toOthers();
             }
 
             broadcast(new UserJoinedClass($liveClass, $user, $participant))->toOthers();
