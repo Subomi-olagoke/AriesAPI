@@ -59,6 +59,11 @@ class Readlist extends Model
         return $this->hasMany(ReadlistItem::class)->orderBy('order');
     }
 
+    public function links()
+    {
+        return $this->hasMany(ReadlistLink::class);
+    }
+
     public function getCourses()
     {
         $courseIds = $this->items()

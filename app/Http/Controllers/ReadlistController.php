@@ -168,7 +168,8 @@ class ReadlistController extends Controller
             // Find the readlist by ID with its relations
             $readlist = Readlist::with([
                 'user:id,username,first_name,last_name,avatar',
-                'items.item'
+                'items.item',
+                'links',
             ])->find($id);
             
             // Return 404 if readlist doesn't exist
@@ -220,29 +221,38 @@ class ReadlistController extends Controller
                             ]
                         ];
                     }
-                } elseif ($item->item_type === null && $item->type === 'external') {
-                    // Handle external items
-                    $organizedItems[] = [
-                        'id' => $item->id,
-                        'type' => 'external',
-                        'order' => $item->order,
-                        'notes' => $item->notes,
-                        'item' => [
-                            'id' => $item->id,
-                            'title' => $item->title,
-                            'description' => $item->description,
-                            'url' => $item->url,
-                            'type' => $item->type
-                        ]
-                    ];
                 }
             }
-            
-            // Sort by order
+            // Add links as inline items
+            foreach ($readlist->links as $link) {
+                $organizedItems[] = [
+                    'id' => $link->id,
+                    'type' => 'link',
+                    'order' => null, // Links don't have an order, but you can add one if needed
+                    'notes' => null,
+                    'item' => [
+                        'id' => $link->id,
+                        'title' => $link->title,
+                        'description' => $link->description,
+                        'url' => $link->url,
+                        'created_at' => $link->created_at,
+                    ]
+                ];
+            }
+            // Sort by order (items) and created_at (links)
             usort($organizedItems, function($a, $b) {
-                return $a['order'] <=> $b['order'];
+                // Items with order come first, then links by created_at
+                if ($a['order'] !== null && $b['order'] !== null) {
+                    return $a['order'] <=> $b['order'];
+                } elseif ($a['order'] !== null) {
+                    return -1;
+                } elseif ($b['order'] !== null) {
+                    return 1;
+                } else {
+                    // Both are links, sort by created_at
+                    return strtotime($a['item']['created_at']) <=> strtotime($b['item']['created_at']);
+                }
             });
-            
             return response()->json([
                 'readlist' => [
                     'id' => $readlist->id,
@@ -275,7 +285,8 @@ class ReadlistController extends Controller
         try {
             $readlist = Readlist::with([
                 'user:id,username,first_name,last_name,avatar',
-                'items.item'
+                'items.item',
+                'links',
             ])->where('share_key', $shareKey)->first();
             
             if (!$readlist) {
@@ -326,29 +337,36 @@ class ReadlistController extends Controller
                             ]
                         ];
                     }
-                } elseif ($item->item_type === null && $item->type === 'external') {
-                    // Handle external items
-                    $organizedItems[] = [
-                        'id' => $item->id,
-                        'type' => 'external',
-                        'order' => $item->order,
-                        'notes' => $item->notes,
-                        'item' => [
-                            'id' => $item->id,
-                            'title' => $item->title,
-                            'description' => $item->description,
-                            'url' => $item->url,
-                            'type' => $item->type
-                        ]
-                    ];
                 }
             }
-            
-            // Sort by order
+            // Add links as inline items
+            foreach ($readlist->links as $link) {
+                $organizedItems[] = [
+                    'id' => $link->id,
+                    'type' => 'link',
+                    'order' => null,
+                    'notes' => null,
+                    'item' => [
+                        'id' => $link->id,
+                        'title' => $link->title,
+                        'description' => $link->description,
+                        'url' => $link->url,
+                        'created_at' => $link->created_at,
+                    ]
+                ];
+            }
+            // Sort by order (items) and created_at (links)
             usort($organizedItems, function($a, $b) {
-                return $a['order'] <=> $b['order'];
+                if ($a['order'] !== null && $b['order'] !== null) {
+                    return $a['order'] <=> $b['order'];
+                } elseif ($a['order'] !== null) {
+                    return -1;
+                } elseif ($b['order'] !== null) {
+                    return 1;
+                } else {
+                    return strtotime($a['item']['created_at']) <=> strtotime($b['item']['created_at']);
+                }
             });
-            
             return response()->json([
                 'readlist' => [
                     'id' => $readlist->id,
@@ -910,6 +928,33 @@ class ReadlistController extends Controller
                 'message' => 'Failed to add URL to readlist: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Add an external link to a readlist
+     */
+    public function addExternalLink(Request $request, $id)
+    {
+        $request->validate([
+            'url' => 'required|url|max:2048',
+            'title' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:1000',
+        ]);
+
+        $readlist = Readlist::findOrFail($id);
+
+        $link = $readlist->links()->create([
+            'url' => $request->input('url'),
+            'title' => $request->input('title'),
+            'description' => $request->input('description'),
+            'added_by' => $request->user() ? $request->user()->id : null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Link added to readlist successfully',
+            'link' => $link,
+        ]);
     }
 
     /**

@@ -1019,3 +1019,6 @@ Route::post('/cloudinary/notification', function (Request $request) {
     Log::info('Cloudinary notification received', ['data' => $request->all()]);
     return response()->json(['status' => 'success']);
 });
+
+// Add external link to a readlist
+Route::post('/readlists/{readlist}/links', [ReadlistController::class, 'addExternalLink']);
