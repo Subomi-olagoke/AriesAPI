@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ['php80', 'php80Packages.composer']
+nixPkgs = ['php82', 'php82Packages.composer']
 
 [phases.build]
 cmds = [
