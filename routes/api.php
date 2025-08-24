@@ -680,7 +680,7 @@ Route::get('/payment-method/verify', [PaymentMethodController::class, 'verify'])
 // Success and failure routes for payment methods and subscriptions
 Route::get('/payment-methods/success', function() {
     return view('payment-methods.success');
-})->name('payment-methods.success');
+})->name('api.payment-methods.success');
 
 Route::get('/payment-method/success', function() {
     return view('payment-methods.success');
@@ -688,7 +688,7 @@ Route::get('/payment-method/success', function() {
 
 Route::get('/payment-methods/failed', function() {
     return view('payment-methods.failed');
-})->name('payment-methods.failed');
+})->name('api.payment-methods.failed');
 
 Route::get('/payment-method/failed', function() {
     return view('payment-methods.failed');
@@ -696,7 +696,7 @@ Route::get('/payment-method/failed', function() {
 
 Route::get('/subscription/success', function() {
     return view('subscription.success');
-})->name('subscription.success');
+})->name('api.subscription.success');
 
 Route::get('/subscriptions/success', function() {
     return view('subscription.success');
@@ -704,7 +704,7 @@ Route::get('/subscriptions/success', function() {
 
 Route::get('/subscription/failed', function() {
     return view('subscription.failed');
-})->name('subscription.failed');
+})->name('api.subscription.failed');
 
 Route::get('/subscriptions/failed', function() {
     return view('subscription.failed');
