@@ -37,6 +37,10 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI', 'https://ariesmvp-9903a26b3095.herokuapp.com/api/login/google/callback'),
     ],
 
+    'apple' => [
+        'client_id' => env('APPLE_CLIENT_ID'),
+    ],
+
     'openai' => [
         'api_key' => env('OPENAI_API_KEY'),
         'endpoint' => env('OPENAI_ENDPOINT', 'https://api.openai.com/v1'),

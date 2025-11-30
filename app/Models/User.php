@@ -42,6 +42,7 @@ class User extends Authenticatable {
         'role',
         'avatar',
         'google_id',
+        'apple_id',
         'isAdmin',
         'is_banned',
         'banned_at',

@@ -39,6 +39,7 @@ Route::middleware(['api.stateless'])->group(function () {
     Route::post('/reset-password/token', [ResetPasswordController::class, 'generateResetToken']);
     Route::post('/reset-password/reset', [ResetPasswordController::class, 'resetPassword']);
     Route::post('/auth/google', [\App\Http\Controllers\GoogleController::class, 'authenticateWithGoogle']);
+    Route::post('/auth/apple', [\App\Http\Controllers\AppleController::class, 'authenticateWithApple']);
 });
 
 // Public profile access routes
