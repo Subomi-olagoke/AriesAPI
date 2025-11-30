@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Providers\CogniServiceProvider;
 use App\Services\ContentModerationService;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Schema;
@@ -14,8 +13,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->register(CogniServiceProvider::class);
-        
         $this->app->singleton(ContentModerationService::class, function ($app) {
             return new ContentModerationService();
         });

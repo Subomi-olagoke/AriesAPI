@@ -169,18 +169,10 @@ return [
         App\Providers\BroadcastServiceProvider::class,
         App\Providers\EventServiceProvider::class,
         App\Providers\RouteServiceProvider::class,
-        App\Providers\PaymentServiceProvider::class,
-        App\Providers\CogniServiceProvider::class,
-        App\Providers\EnhancedCogniServiceProvider::class,
         App\Providers\ApnsServiceProvider::class,
         App\Providers\AlexPointsServiceProvider::class,
-        App\Providers\CognitionServiceProvider::class,
-        App\Providers\ApiClientServiceProvider::class,
-        App\Providers\GPTSearchServiceProvider::class,
         App\Providers\UrlFetchServiceProvider::class,
-        App\Providers\TrendingTopicsServiceProvider::class,
         App\Providers\CloudinaryServiceProvider::class,
-        // App\Providers\ExaServiceProvider::class, // Commented out as we're replacing with GPT
     ])->toArray(),
 
     /*
