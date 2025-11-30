@@ -120,19 +120,70 @@ class AppleController extends Controller
             // Load the user's profile to include bio and other profile data
             $user->load('profile');
             
-            // Create a response array that includes profile information
-            $userData = $user->toArray();
-            
-            // If profile exists, add bio to user object directly
-            if ($user->profile) {
-                $userData['bio'] = $user->profile->bio;
-            } else {
-                $userData['bio'] = null;
-            }
-
             // Create new token without revoking existing ones
             // This allows users to be logged in from multiple devices simultaneously
             $token = $user->createToken('apple-auth-mobile')->plainTextToken;
+
+            if (!$token) {
+                return response()->json([
+                    'message' => 'Failed to create token',
+                ], 500);
+            }
+            
+            // Manually build user data array to avoid serialization issues
+            // This matches the format expected by the iOS app
+            // Ensure all required fields have non-null values
+            $userData = [
+                'id' => (string) $user->id,
+                'username' => $user->username ?? '',
+                'email' => $user->email ?? '',
+                'first_name' => $user->first_name ?? '',
+                'last_name' => $user->last_name ?? '',
+                'role' => $user->role ?? 'learner',
+                'avatar' => $user->avatar,
+                'verification_code' => $user->verification_code,
+                'email_verified_at' => $user->email_verified_at ? $user->email_verified_at->toDateTimeString() : null,
+                'api_token' => null,
+                'device_token' => $user->device_token,
+                'device_type' => $user->device_type,
+                'created_at' => $user->created_at ? $user->created_at->toDateTimeString() : now()->toDateTimeString(),
+                'updated_at' => $user->updated_at ? $user->updated_at->toDateTimeString() : now()->toDateTimeString(),
+                'isAdmin' => $user->isAdmin ? 1 : 0,
+                'google_id' => $user->google_id,
+                'name' => $user->name,
+                'alex_points' => $user->alex_points ?? 0,
+                'point_level' => $user->point_level ?? 1,
+                'points_to_next_level' => $user->points_to_next_level ?? 100,
+                'is_banned' => $user->is_banned ?? false,
+                'banned_at' => $user->banned_at ? $user->banned_at->toDateTimeString() : null,
+                'ban_reason' => $user->ban_reason,
+                'is_verified' => $user->is_verified ? 1 : 0,
+                'verified_at' => $user->verified_at ? $user->verified_at->toDateTimeString() : null,
+                'verification_status' => null,
+                'verification_notes' => null,
+                'setup_completed' => $user->setup_completed ?? true, // Default to true since role is set
+                'bio' => $user->profile ? $user->profile->bio : null,
+            ];
+            
+            // Add profile if it exists
+            if ($user->profile) {
+                $userData['profile'] = [
+                    'id' => $user->profile->id ?? null,
+                    'user_id' => $user->profile->user_id ?? $user->id,
+                    'bio' => $user->profile->bio ?? null,
+                    'avatar' => $user->profile->avatar ?? null,
+                    'created_at' => $user->profile->created_at ? $user->profile->created_at->toDateTimeString() : null,
+                    'updated_at' => $user->profile->updated_at ? $user->profile->updated_at->toDateTimeString() : null,
+                    'qualifications' => $user->profile->qualifications ?? null,
+                    'teaching_style' => $user->profile->teaching_style ?? null,
+                    'availability' => $user->profile->availability ?? null,
+                    'hire_rate' => $user->profile->hire_rate ?? null,
+                    'hire_currency' => $user->profile->hire_currency ?? null,
+                    'social_links' => $user->profile->social_links ?? null,
+                    'share_key' => $user->profile->share_key ?? null,
+                    'share_url' => $user->profile->share_url ?? null,
+                ];
+            }
 
             $responseData = [
                 'user' => $userData,
@@ -145,6 +196,14 @@ class AppleController extends Controller
                 $responseData['qualifications'] = $user->profile->qualifications;
                 $responseData['teaching_style'] = $user->profile->teaching_style;
             }
+
+            // Log the response for debugging (remove sensitive data in production)
+            \Log::info('Apple authentication successful', [
+                'user_id' => $user->id,
+                'username' => $user->username,
+                'has_token' => !empty($token),
+                'response_keys' => array_keys($responseData)
+            ]);
 
             return response()->json($responseData);
             
