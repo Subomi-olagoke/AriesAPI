@@ -39,6 +39,8 @@ use Illuminate\Validation\Rules\Password;
         $user->last_name = $request->last_name;
         $user->email = $request->email;
         $user->password = $incomingFields['password'];
+        // Default role to learner if not provided
+        $user->role = $request->has('role') ? $request->role : 'learner';
 
 
         $save = $user->save();

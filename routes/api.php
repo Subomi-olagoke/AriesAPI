@@ -54,6 +54,9 @@ Route::get('/readlist/shared/{shareKey}', [ReadlistController::class, 'showBySha
 // Protected routes that require authentication
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthManager::class, 'logout']);
+    
+    // Follow options route
+    Route::get('/followOptions', [\App\Http\Controllers\FollowOptionsController::class, 'getFollowOptions']);
 
     // Onboarding routes
     Route::get('/onboarding/suggested-libraries', [OnboardingController::class, 'getSuggestedLibraries']);

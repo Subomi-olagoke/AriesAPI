@@ -56,6 +56,7 @@ class GoogleController extends Controller
                 $user->password = Hash::make(Str::random(16));
                 $user->email_verified_at = now();
                 $user->avatar = $avatar;
+                $user->role = 'learner'; // Default to learner
                 $user->save();
             }
             
