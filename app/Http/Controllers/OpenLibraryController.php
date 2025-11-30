@@ -3,9 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\OpenLibrary;
-use App\Models\Course;
-use App\Models\Post;
-use App\Models\Topic;
 use App\Models\LibraryUrl;
 use App\Services\OpenLibraryService;
 use App\Services\UrlFetchService;
@@ -132,79 +129,28 @@ class OpenLibraryController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'type' => 'required|in:auto,course',
-            'course_id' => 'required_if:type,course|exists:courses,id',
-            'topic_id' => 'required_if:type,auto|exists:topics,id',
-            'max_items' => 'nullable|integer|min:5|max:100',
+            'type' => 'nullable|string|max:50',
         ]);
         
         try {
-            if ($request->type === 'course') {
-                $course = Course::findOrFail($request->course_id);
-                $library = $this->libraryService->createCourseLibrary($course);
-                
-                return response()->json([
-                    'message' => 'Course library created successfully',
-                    'library' => $library
-                ], 201);
-            } 
-            elseif ($request->type === 'auto' && $request->has('topic_id')) {
-                $topic = Topic::findOrFail($request->topic_id);
-                $maxItems = $request->input('max_items', 50);
-                
-                $library = $this->libraryService->createTopicLibrary($topic, $maxItems);
-                
-                return response()->json([
-                    'message' => 'Topic library created successfully',
-                    'library' => $library
-                ], 201);
-            }
+            // Create a basic library (course and topic-based libraries removed)
+            $library = OpenLibrary::create([
+                'name' => $request->name,
+                'description' => $request->description,
+                'type' => $request->type ?? 'manual',
+                'is_approved' => false,
+                'approval_status' => 'pending'
+            ]);
             
             return response()->json([
-                'message' => 'Invalid library configuration'
-            ], 400);
+                'message' => 'Library created successfully',
+                'library' => $library
+            ], 201);
             
         } catch (\Exception $e) {
             Log::error('Library creation failed: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Library creation failed: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-    
-    /**
-     * Create a dynamic library based on a piece of content.
-     */
-    public function createDynamicLibrary(Request $request)
-    {
-        $request->validate([
-            'content_id' => 'required|integer',
-            'content_type' => 'required|in:course,post',
-            'name' => 'nullable|string|max:255',
-            'max_items' => 'nullable|integer|min:5|max:50',
-        ]);
-        
-        try {
-            $contentId = $request->content_id;
-            $contentType = $request->content_type === 'course' 
-                ? Course::class 
-                : Post::class;
-                
-            $content = $contentType::findOrFail($contentId);
-            $name = $request->input('name');
-            $maxItems = $request->input('max_items', 20);
-            
-            $library = $this->libraryService->createDynamicLibrary($content, $name, $maxItems);
-            
-            return response()->json([
-                'message' => 'Dynamic library created successfully',
-                'library' => $library
-            ], 201);
-            
-        } catch (\Exception $e) {
-            Log::error('Dynamic library creation failed: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Dynamic library creation failed: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -858,92 +804,4 @@ class OpenLibraryController extends Controller
         }
     }
     
-    /**
-     * Get all libraries for a specific course.
-     */
-    public function getCourseLibraries($courseId)
-    {
-        try {
-            $course = Course::findOrFail($courseId);
-            
-            // Get course-specific libraries
-            $courseLibraries = OpenLibrary::where('course_id', $courseId)->get();
-            
-            // Get auto libraries containing this course
-            $autoLibraryIds = DB::table('library_content')
-                ->where('content_id', $courseId)
-                ->where('content_type', Course::class)
-                ->pluck('library_id');
-                
-            $autoLibraries = OpenLibrary::whereIn('id', $autoLibraryIds)
-                ->where('type', 'auto')
-                ->get();
-                
-            $libraries = $courseLibraries->merge($autoLibraries);
-            
-            return response()->json([
-                'libraries' => $libraries
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Error retrieving course libraries: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Error retrieving course libraries: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-    
-    /**
-     * Get libraries by content similarity.
-     */
-    public function getSimilarLibraries(Request $request)
-    {
-        $request->validate([
-            'content_id' => 'required|integer',
-            'content_type' => 'required|in:course,post',
-            'limit' => 'nullable|integer|min:1|max:10',
-        ]);
-        
-        try {
-            $contentId = $request->content_id;
-            $contentType = $request->content_type === 'course' 
-                ? Course::class 
-                : Post::class;
-                
-            $content = $contentType::findOrFail($contentId);
-            $limit = $request->input('limit', 5);
-            
-            // Extract keywords from the content
-            $keywords = $this->libraryService->extractKeywords($content);
-            
-            // Find libraries containing similar content
-            $libraryIds = DB::table('library_content')
-                ->where('content_type', $contentType)
-                ->whereIn('content_id', function($query) use ($contentType, $contentId) {
-                    // Get IDs of similar content items
-                    $query->select('content_id')
-                        ->from('library_content')
-                        ->where('content_type', $contentType)
-                        ->where('content_id', '!=', $contentId)
-                        ->orderBy('relevance_score', 'desc')
-                        ->limit(50);
-                })
-                ->distinct()
-                ->pluck('library_id');
-                
-            $libraries = OpenLibrary::whereIn('id', $libraryIds)
-                ->limit($limit)
-                ->get();
-                
-            return response()->json([
-                'libraries' => $libraries
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Error finding similar libraries: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Error finding similar libraries: ' . $e->getMessage()
-            ], 500);
-        }
-    }
 }

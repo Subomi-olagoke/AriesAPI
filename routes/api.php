@@ -139,10 +139,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/library/{id}/url', [OpenLibraryController::class, 'removeUrl']);
     Route::delete('/libraries/{id}/content', [OpenLibraryController::class, 'removeContent']);
     Route::delete('/library/{id}/content', [OpenLibraryController::class, 'removeContent']);
-    Route::post('/libraries/dynamic', [OpenLibraryController::class, 'createDynamicLibrary']);
-    Route::post('/library/dynamic', [OpenLibraryController::class, 'createDynamicLibrary']);
-    Route::get('/libraries/similar', [OpenLibraryController::class, 'getSimilarLibraries']);
-    Route::get('/library/similar', [OpenLibraryController::class, 'getSimilarLibraries']);
 
     // Library Follow routes
     Route::post('/libraries/{id}/follow', [LibraryFollowController::class, 'followLibrary']);

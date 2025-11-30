@@ -18,7 +18,6 @@ class Kernel extends ConsoleKernel {
 		// Existing commands...
 		\App\Console\Commands\NgrokCommand::class,
 		\App\Console\Commands\SeedAlexPointsSystem::class,
-		\App\Console\Commands\GenerateOpenLibraries::class,
 		\App\Console\Commands\CreateTestReadlist::class,
 		\App\Console\Commands\FollowSubomiCommand::class,
 	];
