@@ -210,6 +210,83 @@ class OpenLibraryController extends Controller
     }
     
     /**
+     * Get library private page with links and user interaction data
+     */
+    public function getPrivatePage(Request $request, $id)
+    {
+        try {
+            $user = Auth::user();
+            $library = OpenLibrary::findOrFail($id);
+            
+            // Check if user is following this library
+            $isFollowing = DB::table('library_follows')
+                ->where('user_id', $user->id)
+                ->where('library_id', $library->id)
+                ->exists();
+            
+            // Get library URLs with like counts and user's like status
+            $contents = DB::table('library_content')
+                ->where('library_id', $library->id)
+                ->where('content_type', LibraryUrl::class)
+                ->orderBy('relevance_score', 'desc')
+                ->get();
+            
+            $formattedLinks = [];
+            foreach ($contents as $content) {
+                $libraryUrl = LibraryUrl::with('creator')->find($content->content_id);
+                if ($libraryUrl) {
+                    // Get like count
+                    $likeCount = DB::table('likes')
+                        ->where('likeable_type', LibraryUrl::class)
+                        ->where('likeable_id', $libraryUrl->id)
+                        ->count();
+                    
+                    // Check if user has liked this link
+                    $userLiked = DB::table('likes')
+                        ->where('user_id', $user->id)
+                        ->where('likeable_type', LibraryUrl::class)
+                        ->where('likeable_id', $libraryUrl->id)
+                        ->exists();
+                    
+                    $formattedLinks[] = [
+                        'id' => $libraryUrl->id,
+                        'title' => $libraryUrl->title,
+                        'url' => $libraryUrl->url,
+                        'summary' => $libraryUrl->summary,
+                        'notes' => $libraryUrl->notes,
+                        'like_count' => $likeCount,
+                        'user_liked' => $userLiked,
+                        'created_by' => $libraryUrl->creator ? [
+                            'id' => $libraryUrl->creator->id,
+                            'username' => $libraryUrl->creator->username
+                        ] : null,
+                        'created_at' => $libraryUrl->created_at
+                    ];
+                }
+            }
+            
+            return response()->json([
+                'library' => [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description,
+                    'thumbnail_url' => $library->thumbnail_url,
+                    'cover_image_url' => $library->cover_image_url,
+                    'type' => $library->type,
+                    'is_following' => $isFollowing
+                ],
+                'links' => $formattedLinks
+            ], 200);
+            
+        } catch (\Exception $e) {
+            Log::error('Get library private page failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to get library page: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
      * Display the specified library with its content.
      */
     public function show($id)

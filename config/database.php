@@ -15,7 +15,7 @@ return [
 		    |
 	*/
 
-	'default' => env('DB_CONNECTION', 'mysql'),
+	'default' => env('DB_CONNECTION', 'pgsql'),
 
 	/*
 		    |--------------------------------------------------------------------------
@@ -65,12 +65,12 @@ return [
 
 		'pgsql' => [
 			'driver' => 'pgsql',
-			'url' => 'postgresql://postgres:KpkPFOcKokcXVDynBxPjVweIfvKKkXoe@shinkansen.proxy.rlwy.net:53608/railway',
-			'host' => 'shinkansen.proxy.rlwy.net',
-			'port' => '53608',
+			'url' => 'postgresql://postgres:feNIDxcvQeTilZuHZHKnWOSNYCOwLfds@gondola.proxy.rlwy.net:15799/railway',
+			'host' => 'gondola.proxy.rlwy.net',
+			'port' => '15799',
 			'database' => 'railway',
 			'username' => 'postgres',
-			'password' => 'KpkPFOcKokcXVDynBxPjVweIfvKKkXoe',
+			'password' => 'feNIDxcvQeTilZuHZHKnWOSNYCOwLfds',
 			'charset' => 'utf8',
 			'prefix' => '',
 			'prefix_indexes' => true,

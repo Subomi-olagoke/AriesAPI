@@ -909,9 +909,71 @@ class ReadlistController extends Controller
     }
 
     /**
+     * Add a library URL to a readlist
+     */
+    public function addLibraryUrlToReadlist(Request $request, $readlistId)
+    {
+        $request->validate([
+            'library_url_id' => 'required|exists:library_urls,id'
+        ]);
+        
+        try {
+            $user = Auth::user();
+            $readlist = Readlist::where('user_id', $user->id)->findOrFail($readlistId);
+            $libraryUrl = \App\Models\LibraryUrl::findOrFail($request->library_url_id);
+            
+            DB::beginTransaction();
+            
+            // Get the next order number
+            $maxOrder = $readlist->items()->max('order') ?? 0;
+            $order = $maxOrder + 1;
+            
+            // Check if URL already exists in readlist
+            $existing = $readlist->items()
+                ->where('type', 'url')
+                ->where('url', $libraryUrl->url)
+                ->first();
+            
+            if ($existing) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'URL already exists in this readlist'
+                ], 400);
+            }
+            
+            // Create the readlist item with URL data
+            $readlistItem = new ReadlistItem([
+                'readlist_id' => $readlist->id,
+                'order' => $order,
+                'notes' => null,
+                'type' => 'url',
+                'url' => $libraryUrl->url,
+                'title' => $libraryUrl->title,
+                'description' => $libraryUrl->summary
+            ]);
+            
+            $readlistItem->save();
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Library URL added to readlist successfully',
+                'readlist_item' => $readlistItem
+            ], 201);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Adding library URL to readlist failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to add library URL to readlist: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Add an external link to a readlist
      */
-    public function addExternalLink(Request $request, $id)
+public function addExternalLink(Request $request, $id)
     {
         $request->validate([
             'url' => 'required|url|max:2048',

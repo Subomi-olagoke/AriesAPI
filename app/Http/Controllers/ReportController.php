@@ -6,6 +6,7 @@ use App\Models\Report;
 use App\Models\User;
 use App\Models\Post;
 use App\Models\Educators;
+use App\Models\LibraryUrl;
 use App\Notifications\ReportSubmittedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -46,6 +47,11 @@ class ReportController extends Controller
                 $reportable = User::where('id', $id)
                     ->where('role', User::ROLE_EDUCATOR)
                     ->firstOrFail();
+                break;
+            case 'library-url':
+            case 'library_url':
+                $reportableType = LibraryUrl::class;
+                $reportable = LibraryUrl::findOrFail($id);
                 break;
             default:
                 return response()->json([
@@ -138,6 +144,18 @@ class ReportController extends Controller
     public function reportEducator(Request $request, $educatorId)
     {
         return $this->storeReport($request, 'educator', $educatorId);
+    }
+
+    /**
+     * Report a library URL
+     *
+     * @param Request $request
+     * @param int $urlId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function reportLibraryUrl(Request $request, $urlId)
+    {
+        return $this->storeReport($request, 'library-url', $urlId);
     }
 
     /**

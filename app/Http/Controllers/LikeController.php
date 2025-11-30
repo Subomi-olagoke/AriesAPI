@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Course;
 use App\Models\Comment;
 use App\Models\OpenLibrary;
+use App\Models\LibraryUrl;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use App\Notifications\LikeNotification;
@@ -182,6 +183,61 @@ class LikeController {
         return response()->json([
             'success' => true,
             'open_library_id' => $openLibraryId,
+            'like_count' => $count
+        ]);
+    }
+
+    /**
+     * Like or unlike a library URL
+     */
+    public function likeLibraryUrl(Request $request, $urlId)
+    {
+        $user = $request->user();
+        $libraryUrl = LibraryUrl::findOrFail($urlId);
+        
+        $usePolymorphic = Schema::hasColumn('likes', 'likeable_type');
+        
+        if ($usePolymorphic) {
+            $existingLike = Like::where('user_id', $user->id)
+                ->where('likeable_type', LibraryUrl::class)
+                ->where('likeable_id', $urlId)
+                ->first();
+            
+            if ($existingLike) {
+                $existingLike->delete();
+                return response()->json(['message' => 'Like removed'], 200);
+            }
+            
+            $like = new Like();
+            $like->user_id = $user->id;
+            $like->likeable_type = LibraryUrl::class;
+            $like->likeable_id = $urlId;
+            $like->save();
+            
+            return response()->json(['message' => 'Like created successfully'], 200);
+        }
+        
+        return response()->json(['message' => 'Like functionality not available'], 400);
+    }
+
+    /**
+     * Get like count for a library URL
+     */
+    public function libraryUrlLikeCount($urlId)
+    {
+        $usePolymorphic = Schema::hasColumn('likes', 'likeable_type');
+        
+        if ($usePolymorphic) {
+            $count = Like::where('likeable_type', LibraryUrl::class)
+                         ->where('likeable_id', $urlId)
+                         ->count();
+        } else {
+            $count = 0;
+        }
+        
+        return response()->json([
+            'success' => true,
+            'library_url_id' => $urlId,
             'like_count' => $count
         ]);
     }

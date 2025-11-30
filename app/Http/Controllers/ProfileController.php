@@ -170,6 +170,44 @@ class ProfileController extends Controller
         $followersCount = $user->followers()->count();
         $followingCount = $user->following()->count();
         
+        // Get user's contributions (library URLs created)
+        $contributions = \App\Models\LibraryUrl::where('created_by', $user->id)
+            ->count();
+        
+        // Get user's readlists (playlists)
+        $readlists = \App\Models\Readlist::where('user_id', $user->id)
+            ->where(function($q) {
+                $q->whereNull('is_system')->orWhere('is_system', false);
+            })
+            ->get()
+            ->map(function($readlist) {
+                return [
+                    'id' => $readlist->id,
+                    'title' => $readlist->title,
+                    'description' => $readlist->description,
+                    'image_url' => $readlist->image_url,
+                    'is_public' => $readlist->is_public,
+                    'items_count' => $readlist->items()->count()
+                ];
+            });
+        
+        // Get libraries user is following
+        $followedLibraries = \DB::table('library_follows')
+            ->where('user_id', $user->id)
+            ->join('open_libraries', 'library_follows.library_id', '=', 'open_libraries.id')
+            ->select('open_libraries.*')
+            ->get()
+            ->map(function($library) {
+                return [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description,
+                    'thumbnail_url' => $library->thumbnail_url,
+                    'cover_image_url' => $library->cover_image_url,
+                    'type' => $library->type
+                ];
+            });
+        
         // Get likes given by the user (post IDs)
         $likedPostIds = $user->likes()->pluck('post_id')->filter()->map(function($id) {
             return (string)$id;
@@ -226,6 +264,9 @@ class ProfileController extends Controller
             'bio' => $user->profile ? $user->profile->bio : null,
             'followers' => $followersCount,
             'following' => $followingCount,
+            'contributions' => $contributions,
+            'playlists' => $readlists,
+            'followed_libraries' => $followedLibraries,
             'likes' => $likedPostIds,
             'posts' => $posts,
             'educator_profile' => $educatorProfile
