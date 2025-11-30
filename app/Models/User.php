@@ -14,7 +14,9 @@ class User extends Authenticatable {
     protected $appends = ['setup_completed'];
 
     public function getSetupCompletedAttribute(): bool {
-        return !empty($this->role) && $this->topic()->exists();
+        // Setup is complete if role is set
+        // Since we're defaulting everyone to 'learner', this will be true for all new users
+        return !empty($this->role);
     }
     
     const ROLE_EDUCATOR = 'educator';

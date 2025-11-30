@@ -47,8 +47,11 @@ class FollowOptionsController extends Controller
                     
                     // Get user topics if available
                     $topics = [];
-                    if ($suggestedUser->topic) {
+                    try {
                         $topics = $suggestedUser->topic->pluck('name')->toArray();
+                    } catch (\Exception $e) {
+                        // Topics not available or relationship issue
+                        $topics = [];
                     }
                     
                     return [
