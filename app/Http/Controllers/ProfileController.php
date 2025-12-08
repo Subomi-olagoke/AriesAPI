@@ -484,17 +484,21 @@ class ProfileController extends Controller
         // Get user's profile
         $profile = Profile::where('user_id', $user->id)->first();
         
-        // Get user's posts (public or appropriate visibility level)
-        $posts = $user->posts()
-            ->with(['user', 'likes', 'comments', 'media'])
-            ->orderBy('created_at', 'desc')
-            ->limit(10)  // Limit to recent posts to avoid large responses
-            ->get();
+        // Get user's posts (public or appropriate visibility level) - optional if table exists
+        $posts = [];
+        $postsCount = 0;
+        if (\Illuminate\Support\Facades\Schema::hasTable('posts')) {
+            $posts = $user->posts()
+                ->with(['user', 'likes', 'comments', 'media'])
+                ->orderBy('created_at', 'desc')
+                ->limit(10)  // Limit to recent posts to avoid large responses
+                ->get();
+            $postsCount = $user->posts()->count();
+        }
             
         // Get counts for various metrics
         $followers = $user->followers()->count();
         $following = $user->following()->count();
-        $postsCount = $user->posts()->count();
         
         // Get likes given by the user (post IDs)
         $likedPostIds = $user->likes()->pluck('post_id')->filter()->map(function($id) {

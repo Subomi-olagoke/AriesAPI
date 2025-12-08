@@ -158,10 +158,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Stub routes to satisfy mobile calls
     Route::get('/hive/channels', function () {
-        return response()->json([]);
+        return response()->json(['channels' => []]);
     });
     Route::get('/courses', function () {
-        return response()->json(['courses_by_topic' => []]);
+        return response()->json([
+            'recommended_courses' => [],
+            'courses_by_topic' => [],
+        ]);
     });
 
     // Library URL Like routes
