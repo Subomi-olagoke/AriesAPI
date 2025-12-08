@@ -11,133 +11,134 @@ use Illuminate\Support\Facades\Log;
 
 class LibraryFollowController extends Controller
 {
-    /**
-     * Follow a library
-     */
-    public function followLibrary(Request $request, $libraryId)
+    public function listLibraries(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            $perPage = (int) $request->get('per_page', 50);
+            $search = $request->get('search');
+            
+            $query = OpenLibrary::query()->whereNull('deleted_at');
+            if ($search) {
+                $query->where('name', 'like', "%{$search}%");
+            }
+            
+            $libraries = $query
+                ->orderByDesc('created_at')
+                ->paginate($perPage);
+            
+            // Preload follow state for current user
+            $libraryIds = $libraries->pluck('id');
+            $followed = DB::table('library_follows')
+                ->where('user_id', $user->id)
+                ->whereIn('library_id', $libraryIds)
+                ->pluck('library_id')
+                ->toArray();
+            
+            $payload = $libraries->getCollection()->map(function ($library) use ($followed) {
+                return [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description,
+                    'thumbnail_url' => $library->thumbnail_url ?? $library->cover_image_url,
+                    'cover_image_url' => $library->cover_image_url,
+                    'followers_count' => DB::table('library_follows')->where('library_id', $library->id)->count(),
+                    'is_following' => in_array($library->id, $followed),
+                ];
+            });
+            
+            return response()->json([
+                'data' => $payload,
+                'current_page' => $libraries->currentPage(),
+                'last_page' => $libraries->lastPage(),
+                'per_page' => $libraries->perPage(),
+                'total' => $libraries->total(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('List libraries failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to list libraries.'
+            ], 500);
+        }
+    }
+
+    public function followToggle(Request $request, $libraryId)
     {
         try {
             $user = Auth::user();
             $library = OpenLibrary::findOrFail($libraryId);
             
-            // Check if already following (assuming library_follows table exists)
-            $existing = DB::table('library_follows')
+            $desired = $request->boolean('follow', null);
+            $exists = DB::table('library_follows')
                 ->where('user_id', $user->id)
-                ->where('library_id', $library->id)
-                ->first();
+                ->where('library_id', $library->id);
             
-            if ($existing) {
-                return response()->json([
-                    'message' => 'You are already following this library'
-                ], 409);
+            if ($desired === true) {
+                if (!$exists->exists()) {
+                    $exists->delete(); // no-op safety
+                    DB::table('library_follows')->insert([
+                        'user_id' => $user->id,
+                        'library_id' => $library->id,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                }
+                $following = true;
+            } elseif ($desired === false) {
+                $exists->delete();
+                $following = false;
+            } else {
+                // toggle
+                if ($exists->exists()) {
+                    $exists->delete();
+                    $following = false;
+                } else {
+                    DB::table('library_follows')->insert([
+                        'user_id' => $user->id,
+                        'library_id' => $library->id,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                    $following = true;
+                }
             }
             
-            // Follow the library
-            DB::table('library_follows')->insert([
-                'user_id' => $user->id,
-                'library_id' => $library->id,
-                'created_at' => now(),
-                'updated_at' => now()
+            $count = DB::table('library_follows')->where('library_id', $library->id)->count();
+            
+            return response()->json([
+                'message' => $following ? 'Library followed.' : 'Library unfollowed.',
+                'is_following' => $following,
+                'followers_count' => $count,
             ]);
             
-            return response()->json([
-                'message' => 'Library followed successfully',
-                'library' => [
-                    'id' => $library->id,
-                    'name' => $library->name
-                ]
-            ], 200);
-            
         } catch (\Exception $e) {
-            Log::error('Follow library failed: ' . $e->getMessage());
+            Log::error('Follow toggle failed: ' . $e->getMessage());
             return response()->json([
-                'message' => 'Failed to follow library: ' . $e->getMessage()
+                'message' => 'Failed to update follow status.'
             ], 500);
         }
     }
-    
-    /**
-     * Unfollow a library
-     */
-    public function unfollowLibrary(Request $request, $libraryId)
-    {
-        try {
-            $user = Auth::user();
-            $library = OpenLibrary::findOrFail($libraryId);
-            
-            $deleted = DB::table('library_follows')
-                ->where('user_id', $user->id)
-                ->where('library_id', $library->id)
-                ->delete();
-            
-            if ($deleted) {
-                return response()->json([
-                    'message' => 'Library unfollowed successfully'
-                ], 200);
-            }
-            
-            return response()->json([
-                'message' => 'You are not following this library'
-            ], 404);
-            
-        } catch (\Exception $e) {
-            Log::error('Unfollow library failed: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Failed to unfollow library: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-    
-    /**
-     * Check if user is following a library
-     */
-    public function checkFollowStatus(Request $request, $libraryId)
-    {
-        try {
-            $user = Auth::user();
-            
-            $isFollowing = DB::table('library_follows')
-                ->where('user_id', $user->id)
-                ->where('library_id', $libraryId)
-                ->exists();
-            
-            return response()->json([
-                'is_following' => $isFollowing
-            ], 200);
-            
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Failed to check follow status: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-    
-    /**
-     * Get libraries user is following
-     */
+
     public function getFollowedLibraries(Request $request)
     {
         try {
             $user = Auth::user();
             
-            $libraryIds = DB::table('library_follows')
-                ->where('user_id', $user->id)
-                ->pluck('library_id');
-            
-            $libraries = OpenLibrary::whereIn('id', $libraryIds)
-                ->orderBy('created_at', 'desc')
-                ->get()
-                ->map(function($library) {
-                    return [
-                        'id' => $library->id,
-                        'name' => $library->name,
-                        'description' => $library->description,
-                        'thumbnail_url' => $library->thumbnail_url,
-                        'cover_image_url' => $library->cover_image_url,
-                        'type' => $library->type,
-                        'created_at' => $library->created_at
-                    ];
-                });
+            $libraries = OpenLibrary::whereIn('id', function ($q) use ($user) {
+                $q->select('library_id')
+                  ->from('library_follows')
+                  ->where('user_id', $user->id);
+            })->orderByDesc('created_at')->get()->map(function ($library) {
+                return [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description,
+                    'thumbnail_url' => $library->thumbnail_url ?? $library->cover_image_url,
+                    'cover_image_url' => $library->cover_image_url,
+                    'followers_count' => DB::table('library_follows')->where('library_id', $library->id)->count(),
+                    'is_following' => true,
+                ];
+            });
             
             return response()->json([
                 'libraries' => $libraries

@@ -25,7 +25,7 @@ class EventServiceProvider extends ServiceProvider
         Registered::class => [
             SendEmailVerificationNotification::class,
             AwardPointsListener::class.'@handleUserRegistered',
-            \App\Listeners\CreateCognitionReadlistListener::class,
+            // Removed CreateCognitionReadlistListener to avoid missing class at deploy time
         ],
         Login::class => [
             AwardPointsListener::class.'@handleUserLogin',

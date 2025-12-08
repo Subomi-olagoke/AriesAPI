@@ -15,11 +15,7 @@ class Kernel extends ConsoleKernel {
 	}
 
 	protected $commands = [
-		// Existing commands...
-		\App\Console\Commands\NgrokCommand::class,
-		\App\Console\Commands\SeedAlexPointsSystem::class,
-		\App\Console\Commands\CreateTestReadlist::class,
-		\App\Console\Commands\FollowSubomiCommand::class,
+		// Custom commands (none registered to avoid missing class errors during deploy)
 	];
 
 	/**
