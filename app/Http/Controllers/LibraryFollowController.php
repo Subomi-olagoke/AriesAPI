@@ -48,11 +48,15 @@ class LibraryFollowController extends Controller
             });
             
             return response()->json([
-                'data' => $payload,
-                'current_page' => $libraries->currentPage(),
-                'last_page' => $libraries->lastPage(),
-                'per_page' => $libraries->perPage(),
-                'total' => $libraries->total(),
+                // Keep a flat array for clients expecting `libraries`
+                'libraries' => $payload,
+                // Also return pagination metadata for future use
+                'meta' => [
+                    'current_page' => $libraries->currentPage(),
+                    'last_page' => $libraries->lastPage(),
+                    'per_page' => $libraries->perPage(),
+                    'total' => $libraries->total(),
+                ],
             ]);
         } catch (\Exception $e) {
             Log::error('List libraries failed: ' . $e->getMessage());

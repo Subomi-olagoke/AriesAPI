@@ -145,14 +145,24 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/library/{id}/content', [OpenLibraryController::class, 'removeContent']);
 
     // Library Follow routes
-    Route::post('/libraries/{id}/follow', [LibraryFollowController::class, 'followLibrary']);
-    Route::post('/library/{id}/follow', [LibraryFollowController::class, 'followLibrary']);
-    Route::delete('/libraries/{id}/follow', [LibraryFollowController::class, 'unfollowLibrary']);
-    Route::delete('/library/{id}/follow', [LibraryFollowController::class, 'unfollowLibrary']);
-    Route::get('/libraries/{id}/follow-status', [LibraryFollowController::class, 'checkFollowStatus']);
-    Route::get('/library/{id}/follow-status', [LibraryFollowController::class, 'checkFollowStatus']);
+    Route::post('/libraries/{id}/follow', [LibraryFollowController::class, 'followToggle']);
+    Route::post('/library/{id}/follow', [LibraryFollowController::class, 'followToggle']);
+    Route::post('/libraries/{id}/follow-toggle', [LibraryFollowController::class, 'followToggle']);
+    Route::post('/library/{id}/follow-toggle', [LibraryFollowController::class, 'followToggle']);
     Route::get('/libraries/followed', [LibraryFollowController::class, 'getFollowedLibraries']);
     Route::get('/library/followed', [LibraryFollowController::class, 'getFollowedLibraries']);
+    
+    // Library listing with follow state
+    Route::get('/libraries', [LibraryFollowController::class, 'listLibraries']);
+    Route::get('/library', [LibraryFollowController::class, 'listLibraries']);
+
+    // Stub routes to satisfy mobile calls
+    Route::get('/hive/channels', function () {
+        return response()->json([]);
+    });
+    Route::get('/courses', function () {
+        return response()->json(['courses_by_topic' => []]);
+    });
 
     // Library URL Like routes
     Route::post('/library-urls/{urlId}/like', [LikeController::class, 'likeLibraryUrl']);
