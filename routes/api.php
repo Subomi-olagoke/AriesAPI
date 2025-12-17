@@ -217,5 +217,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Dashboard stats
         Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index']);
+        
+        // Admin Lists
+        Route::get('/users', [\App\Http\Controllers\DashboardController::class, 'getUsers']);
+        Route::get('/readlists', [\App\Http\Controllers\DashboardController::class, 'getReadlists']);
     });
 });

@@ -45,7 +45,26 @@ class DashboardController extends Controller
                     'total' => $totalReadlists
                 ]
             ],
-            'recent_activity' => $recentLibraries
         ]);
+    }
+
+    /**
+     * Get list of users for admin dashboard.
+     */
+    public function getUsers()
+    {
+        $users = User::orderBy('created_at', 'desc')->paginate(20);
+        return response()->json($users);
+    }
+
+    /**
+     * Get list of readlists for admin dashboard.
+     */
+    public function getReadlists()
+    {
+        $readlists = Readlist::with('user:id,name,username')
+            ->orderBy('created_at', 'desc')
+            ->paginate(20);
+        return response()->json($readlists);
     }
 }
