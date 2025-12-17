@@ -247,18 +247,52 @@ class OpenLibraryController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'type' => 'nullable|string|max:50',
+            'category' => 'nullable|string|max:50',
+            'image' => 'nullable|file|mimes:jpeg,png,jpg,gif|max:5048', // 5MB max
         ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
         
         try {
-            // Create a basic library (course and topic-based libraries removed)
+            $coverImageUrl = null;
+            $thumbnailUrl = null;
+
+            // Handle Image Upload
+            if ($request->hasFile('image')) {
+                try {
+                    // Get Cloudinary instance from container
+                    $cloudinary = app(\Cloudinary\Cloudinary::class);
+                    
+                    // Upload to Cloudinary
+                    $result = $cloudinary->uploadApi()->upload(
+                        $request->file('image')->getRealPath(), 
+                        ['folder' => 'libraries']
+                    );
+                    
+                    $coverImageUrl = $result['secure_url'];
+                    $thumbnailUrl = $coverImageUrl; // Use same image for thumbnail for now
+                } catch (\Exception $e) {
+                    Log::error('Cloudinary upload failed: ' . $e->getMessage());
+                    // Continue without image or fail? Deciding to fail to inform user.
+                    throw new \Exception('Failed to upload image: ' . $e->getMessage());
+                }
+            }
+
+            // Create library
             $library = OpenLibrary::create([
                 'name' => $request->name,
                 'description' => $request->description,
-                'type' => $request->type ?? 'manual',
+                'type' => $request->category ?? 'manual', // Map category to type
+                'cover_image_url' => $coverImageUrl,
+                'thumbnail_url' => $thumbnailUrl,
                 'is_approved' => false,
                 'approval_status' => 'pending'
             ]);

@@ -214,5 +214,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/libraries/{id}/approve', [App\Http\Controllers\AdminApiLibraryController::class, 'approveLibrary']);
         Route::post('/libraries/{id}/reject', [App\Http\Controllers\AdminApiLibraryController::class, 'rejectLibrary']);
         Route::post('/libraries/{id}/generate-cover', [App\Http\Controllers\AdminApiLibraryController::class, 'generateCoverImage']);
+
+        // Dashboard stats
+        Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index']);
     });
 });
