@@ -117,6 +117,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/readlists/{readlist}/links', [ReadlistController::class, 'addExternalLink']);
 
     // Open Library routes
+    Route::get('/libraries/sections', [OpenLibraryController::class, 'getSections']);
+    Route::get('/library/sections', [OpenLibraryController::class, 'getSections']);
     Route::get('/libraries', [OpenLibraryController::class, 'index']);
     Route::get('/library', [OpenLibraryController::class, 'index']);
     Route::post('/libraries', [OpenLibraryController::class, 'store']);

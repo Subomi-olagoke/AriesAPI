@@ -122,6 +122,127 @@ class OpenLibraryController extends Controller
     }
     
     /**
+     * Get personalized library sections for the feed.
+     * Returns libraries organized into sections like "For You", "Because You Liked X", etc.
+     */
+    public function getSections()
+    {
+        try {
+            // Check if the is_approved column exists in the schema
+            $hasIsApprovedColumn = Schema::hasColumn('open_libraries', 'is_approved');
+            $hasApprovalStatusColumn = Schema::hasColumn('open_libraries', 'approval_status');
+            
+            // Build query based on available columns
+            $query = OpenLibrary::query();
+            
+            if ($hasIsApprovedColumn) {
+                $query->where('is_approved', true);
+            }
+            
+            if ($hasApprovalStatusColumn) {
+                $query->where('approval_status', 'approved');
+            }
+            
+            // Get all approved libraries ordered by creation date
+            $libraries = $query->orderBy('created_at', 'desc')->get();
+            
+            // Format libraries to match iOS expectations
+            $formattedLibraries = $libraries->map(function ($library) {
+                return [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description,
+                    'type' => $library->type,
+                    'thumbnailUrl' => $library->thumbnail_url,
+                    'coverImageUrl' => $library->cover_image_url,
+                    'courseId' => $library->course_id,
+                    'criteria' => $library->criteria,
+                    'keywords' => $library->keywords,
+                    'isApproved' => $library->is_approved,
+                    'approvalStatus' => $library->approval_status,
+                    'approvalDate' => $library->approval_date,
+                    'approvedBy' => $library->approved_by,
+                    'rejectionReason' => $library->rejection_reason,
+                    'coverPrompt' => $library->cover_prompt,
+                    'aiGenerated' => $library->ai_generated,
+                    'aiGenerationDate' => $library->ai_generation_date,
+                    'aiModelUsed' => $library->ai_model_used,
+                    'hasAiCover' => $library->has_ai_cover,
+                    'createdAt' => $library->created_at,
+                    'updatedAt' => $library->updated_at,
+                    'contents' => [],
+                    'user' => null,
+                    'userId' => null
+                ];
+            })->toArray();
+            
+            // Create sections from the libraries
+            $sections = [];
+            $libraryCount = count($formattedLibraries);
+            
+            // "For You" section - first 5 libraries
+            if ($libraryCount > 0) {
+                $sections[] = [
+                    'id' => 'for_you',
+                    'title' => 'For You',
+                    'type' => 'personalized',
+                    'source_library_id' => null,
+                    'source_library_name' => null,
+                    'libraries' => array_slice($formattedLibraries, 0, min(5, $libraryCount))
+                ];
+            }
+            
+            // "Because You Liked X" section - next 5 libraries
+            if ($libraryCount > 5) {
+                $sourceLibrary = $formattedLibraries[0];
+                $sections[] = [
+                    'id' => 'because_you_liked_' . $sourceLibrary['id'],
+                    'title' => 'Because You Liked ' . $sourceLibrary['name'],
+                    'type' => 'related',
+                    'source_library_id' => (string)$sourceLibrary['id'],
+                    'source_library_name' => $sourceLibrary['name'],
+                    'libraries' => array_slice($formattedLibraries, 5, min(5, $libraryCount - 5))
+                ];
+            }
+            
+            // "Top Reads" section - first 6 libraries
+            if ($libraryCount > 0) {
+                $sections[] = [
+                    'id' => 'top_reads',
+                    'title' => 'Top Reads',
+                    'type' => 'trending',
+                    'source_library_id' => null,
+                    'source_library_name' => null,
+                    'libraries' => array_slice($formattedLibraries, 0, min(6, $libraryCount))
+                ];
+            }
+            
+            // "More to Explore" section - remaining libraries after first 10
+            if ($libraryCount > 10) {
+                $sections[] = [
+                    'id' => 'more_to_explore',
+                    'title' => 'More to Explore',
+                    'type' => 'discovery',
+                    'source_library_id' => null,
+                    'source_library_name' => null,
+                    'libraries' => array_slice($formattedLibraries, 10, min(5, $libraryCount - 10))
+                ];
+            }
+            
+            return response()->json([
+                'sections' => $sections
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error retrieving library sections: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Error retrieving library sections: ' . $e->getMessage(),
+                'sections' => []
+            ], 500);
+        }
+    }
+    
+    /**
      * Store a newly created library.
      */
     public function store(Request $request)
