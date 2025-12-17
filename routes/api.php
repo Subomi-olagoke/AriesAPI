@@ -57,6 +57,9 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Follow options route
     Route::get('/followOptions', [\App\Http\Controllers\FollowOptionsController::class, 'getFollowOptions']);
+    
+    // Search route
+    Route::get('/search', [\App\Http\Controllers\SearchController::class, 'search']);
 
     // Onboarding routes
     Route::get('/onboarding/suggested-libraries', [OnboardingController::class, 'getSuggestedLibraries']);
