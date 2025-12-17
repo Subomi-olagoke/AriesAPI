@@ -16,8 +16,8 @@ class CloudinaryServiceProvider extends ServiceProvider
             // Hardcoded Cloudinary credentials
             // API Key: 629585269241426
             // API Secret: BgyO8HM53l3u1e4D5GtGJM8EZks
-            // Cloud Name: digjzuwdf
-            $cloudinaryUrl = "cloudinary://629585269241426:BgyO8HM53l3u1e4D5GtGJM8EZks@digjzuwdf";
+            // Cloud Name: duimsumox
+            $cloudinaryUrl = "cloudinary://629585269241426:BgyO8HM53l3u1e4D5GtGJM8EZks@duimsumox";
             return new Cloudinary($cloudinaryUrl);
         });
     }
