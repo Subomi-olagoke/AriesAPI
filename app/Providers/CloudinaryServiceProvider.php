@@ -13,8 +13,11 @@ class CloudinaryServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(Cloudinary::class, function ($app) {
-            // Hardcode the Cloudinary URL instead of using config
-            $cloudinaryUrl = "cloudinary://747141434628117:6mb0FviHFXjJsit1CoG32G515rE@digjzuwdf";
+            // Hardcoded Cloudinary credentials
+            // API Key: 629585269241426
+            // API Secret: BgyO8HM53l3u1e4D5GtGJM8EZks
+            // Cloud Name: digjzuwdf
+            $cloudinaryUrl = "cloudinary://629585269241426:BgyO8HM53l3u1e4D5GtGJM8EZks@digjzuwdf";
             return new Cloudinary($cloudinaryUrl);
         });
     }
