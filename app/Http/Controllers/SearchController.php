@@ -99,4 +99,121 @@ class SearchController extends Controller
             'count' => count($results)
         ]);
     }
+
+    /**
+     * Get user's recent searches
+     */
+    public function getRecentSearches(Request $request)
+    {
+        $user = $request->user();
+        
+        // Get recent searches from user_search_history table (or use cache/meta)
+        $recentSearches = DB::table('user_search_history')
+            ->where('user_id', $user->id)
+            ->orderBy('searched_at', 'desc')
+            ->limit(10)
+            ->pluck('query')
+            ->toArray();
+        
+        return response()->json([
+            'success' => true,
+            'recent_searches' => $recentSearches
+        ]);
+    }
+
+    /**
+     * Save a search query to user's history
+     */
+    public function saveRecentSearch(Request $request)
+    {
+        $request->validate([
+            'query' => 'required|string|min:2|max:100'
+        ]);
+
+        $user = $request->user();
+        $query = $request->input('query');
+
+        // Remove existing entry if it exists
+        DB::table('user_search_history')
+            ->where('user_id', $user->id)
+            ->where('query', $query)
+            ->delete();
+
+        // Insert new entry
+        DB::table('user_search_history')->insert([
+            'user_id' => $user->id,
+            'query' => $query,
+            'searched_at' => now()
+        ]);
+
+        // Keep only last 20 searches per user
+        $count = DB::table('user_search_history')
+            ->where('user_id', $user->id)
+            ->count();
+
+        if ($count > 20) {
+            DB::table('user_search_history')
+                ->where('user_id', $user->id)
+                ->orderBy('searched_at', 'asc')
+                ->limit($count - 20)
+                ->delete();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Search saved'
+        ]);
+    }
+
+    /**
+     * Clear user's search history
+     */
+    public function clearRecentSearches(Request $request)
+    {
+        $user = $request->user();
+        
+        DB::table('user_search_history')
+            ->where('user_id', $user->id)
+            ->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Search history cleared'
+        ]);
+    }
+
+    /**
+     * Get search suggestions (trending + popular libraries)
+     */
+    public function getSuggestions(Request $request)
+    {
+        // Get popular/trending libraries
+        $popularLibraries = DB::table('open_libraries')
+            ->whereNull('deleted_at')
+            ->where('is_approved', true)
+            ->orderByDesc('created_at')
+            ->limit(6)
+            ->get(['id', 'name', 'description', 'thumbnail_url', 'cover_image_url', 'type']);
+
+        // Get trending search terms (most searched in last 7 days)
+        $trendingSearches = DB::table('user_search_history')
+            ->where('searched_at', '>=', now()->subDays(7))
+            ->select('query', DB::raw('COUNT(*) as count'))
+            ->groupBy('query')
+            ->orderByDesc('count')
+            ->limit(8)
+            ->pluck('query')
+            ->toArray();
+
+        // If no trending searches, use defaults
+        if (empty($trendingSearches)) {
+            $trendingSearches = ['Design', 'Technology', 'Business', 'Science', 'Arts', 'Health'];
+        }
+
+        return response()->json([
+            'success' => true,
+            'trending_searches' => $trendingSearches,
+            'popular_libraries' => $popularLibraries
+        ]);
+    }
 }

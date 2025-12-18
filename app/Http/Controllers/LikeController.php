@@ -242,4 +242,44 @@ class LikeController {
         ]);
     }
 
+    /**
+     * Vote on a library URL (upvote/downvote)
+     */
+    public function voteLibraryUrl(Request $request, $urlId)
+    {
+        $user = $request->user();
+        $voteType = $request->input('vote_type'); // 'up' or 'down'
+        
+        $libraryUrl = LibraryUrl::findOrFail($urlId);
+        
+        // For simplicity, we'll use the likes table with a vote_type concept
+        // In a production app, you might want a separate votes table
+        $usePolymorphic = Schema::hasColumn('likes', 'likeable_type');
+        
+        if ($usePolymorphic) {
+            // Remove any existing vote by this user
+            Like::where('user_id', $user->id)
+                ->where('likeable_type', LibraryUrl::class)
+                ->where('likeable_id', $urlId)
+                ->delete();
+            
+            // Record the vote as a "like" (upvote counts as like)
+            if ($voteType === 'up') {
+                $like = new Like();
+                $like->user_id = $user->id;
+                $like->likeable_type = LibraryUrl::class;
+                $like->likeable_id = $urlId;
+                $like->save();
+            }
+            
+            return response()->json([
+                'message' => 'Vote recorded',
+                'vote_type' => $voteType
+            ], 200);
+        }
+        
+        return response()->json(['message' => 'Vote functionality not available'], 400);
+    }
+
 }
+

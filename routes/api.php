@@ -60,6 +60,12 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Search route
     Route::get('/search', [\App\Http\Controllers\SearchController::class, 'search']);
+    
+    // Search history and suggestions routes
+    Route::get('/search/recent', [\App\Http\Controllers\SearchController::class, 'getRecentSearches']);
+    Route::post('/search/recent', [\App\Http\Controllers\SearchController::class, 'saveRecentSearch']);
+    Route::delete('/search/recent', [\App\Http\Controllers\SearchController::class, 'clearRecentSearches']);
+    Route::get('/search/suggestions', [\App\Http\Controllers\SearchController::class, 'getSuggestions']);
 
     // Onboarding routes
     Route::get('/onboarding/suggested-libraries', [OnboardingController::class, 'getSuggestedLibraries']);
@@ -175,6 +181,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Library URL Like routes
     Route::post('/library-urls/{urlId}/like', [LikeController::class, 'likeLibraryUrl']);
     Route::get('/library-urls/{urlId}/like-count', [LikeController::class, 'libraryUrlLikeCount']);
+    
+    // Library URL Vote routes (upvote/downvote)
+    Route::post('/library-urls/{urlId}/vote', [LikeController::class, 'voteLibraryUrl']);
 
     // Library URL Report routes
     Route::post('/library-urls/{urlId}/report', [ReportController::class, 'reportLibraryUrl']);
