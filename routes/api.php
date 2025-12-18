@@ -193,8 +193,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/balance', [\App\Http\Controllers\AlexPointsPaymentController::class, 'getPointsBalance']);
         Route::get('/transaction-history', [\App\Http\Controllers\AlexPointsPaymentController::class, 'getTransactionHistory']);
         
-        // Admin-only routes
-        Route::middleware('admin')->group(function() {
+        // Admin-only routes (now accessible to all authenticated users)
+        Route::group(function() {
             Route::post('/rules', [\App\Http\Controllers\AlexPointsController::class, 'createRule']);
             Route::put('/rules/{id}', [\App\Http\Controllers\AlexPointsController::class, 'updateRule']);
             Route::post('/levels', [\App\Http\Controllers\AlexPointsController::class, 'createLevel']);
@@ -206,8 +206,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Additional points route for compatibility
     Route::get('/users/points', [\App\Http\Controllers\AlexPointsPaymentController::class, 'getPointsBalance']);
     
-    // Admin routes for library management
-    Route::middleware('admin')->prefix('admin')->group(function() {
+    // Admin routes for library management (now accessible to all authenticated users)
+    Route::prefix('admin')->group(function() {
         // Library management
         Route::get('/libraries', [App\Http\Controllers\AdminApiLibraryController::class, 'getLibraries']);
         Route::get('/libraries/{id}', [App\Http\Controllers\AdminApiLibraryController::class, 'getLibrary']);
