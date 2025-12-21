@@ -285,7 +285,7 @@ class OpenLibraryController extends Controller
             // ========== SECTION 1: FOR YOU ==========
             // Personalized recommendations based on followed libraries' keywords/categories
             // Or high-engagement libraries if no follows
-            $forYouLibraries = [];
+            $forYouLibraries = collect([]);
             
             if (!empty($followedLibraryIds)) {
                 // Get keywords from followed libraries
