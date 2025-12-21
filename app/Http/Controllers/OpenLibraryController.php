@@ -305,7 +305,7 @@ class OpenLibraryController extends Controller
                     
                     $libKeywords = (array)$lib->keywords;
                     return !empty(array_intersect($libKeywords, $followedKeywords));
-                })->take(5)->values();
+                })->values();
             }
             
             // If not enough recommendations, fill with popular libraries
@@ -374,7 +374,7 @@ class OpenLibraryController extends Controller
                         // Library must be type 'private' and created by a followed user
                         return strtolower($lib->type ?? '') === 'private' 
                             && in_array($lib->creator_id, $followedUserIds);
-                    })->take(6)->values();
+                    })->values();
                 }
             }
             
@@ -410,7 +410,7 @@ class OpenLibraryController extends Controller
                     }
                     
                     return false;
-                })->take(5)->values();
+                })->values();
                 
                 // If not enough matches, just take random others
                 if ($similarLibraries->count() < 5) {
@@ -445,7 +445,7 @@ class OpenLibraryController extends Controller
                 return !in_array($lib->id, $usedLibraryIds) 
                     && !in_array($lib->id, $followedLibraryIds)
                     && !in_array($lib->id, $createdLibraryIds);
-            })->take(6)->values();
+            })->values();
             
             if ($exploreLibraries->isNotEmpty()) {
                 $formattedExplore = $exploreLibraries->map($formatLibrary)->values()->toArray();
@@ -457,21 +457,6 @@ class OpenLibraryController extends Controller
                     'source_library_id' => null,
                     'source_library_name' => null,
                     'libraries' => $formattedExplore
-                ];
-            }
-            
-            // ========== SECTION 5: ALL LIBRARIES ==========
-            // Show ALL libraries so none are missed (for browsing)
-            if ($allLibraries->isNotEmpty()) {
-                $formattedAll = $allLibraries->map($formatLibrary)->values()->toArray();
-                
-                $sections[] = [
-                    'id' => 'all_libraries',
-                    'title' => 'All Libraries',
-                    'type' => 'discovery',
-                    'source_library_id' => null,
-                    'source_library_name' => null,
-                    'libraries' => $formattedAll
                 ];
             }
             
