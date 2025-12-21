@@ -164,6 +164,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/libraries/followed', [LibraryFollowController::class, 'getFollowedLibraries']);
     Route::get('/library/followed', [LibraryFollowController::class, 'getFollowedLibraries']);
     
+    // User Follow routes
+    Route::post('/users/{userId}/follow', [\App\Http\Controllers\UserFollowController::class, 'follow']);
+    Route::delete('/users/{userId}/follow', [\App\Http\Controllers\UserFollowController::class, 'unfollow']);
+    Route::post('/users/{userId}/unfollow', [\App\Http\Controllers\UserFollowController::class, 'unfollow']);
+    Route::get('/users/{userId}/is-following', [\App\Http\Controllers\UserFollowController::class, 'checkFollowing']);
+    Route::get('/users/following', [\App\Http\Controllers\UserFollowController::class, 'following']);
+    Route::get('/users/followers', [\App\Http\Controllers\UserFollowController::class, 'followers']);
+    
     // Library listing with follow state
     Route::get('/libraries', [LibraryFollowController::class, 'listLibraries']);
     Route::get('/library', [LibraryFollowController::class, 'listLibraries']);

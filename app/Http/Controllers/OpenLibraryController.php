@@ -359,8 +359,6 @@ class OpenLibraryController extends Controller
             
             // ========== SECTION 2: PRIVATE LIBRARIES ==========
             // Private-type libraries created by users that the current user follows
-            // TODO: Implement this when user-to-user follows table is created
-            /*
             $privateLibraries = collect([]);
             
             if ($userId) {
@@ -392,7 +390,6 @@ class OpenLibraryController extends Controller
                     'libraries' => $formattedPrivate
                 ];
             }
-            */
             
             // ========== SECTION 3: BECAUSE YOU LIKED ==========
             // Similar to most recently followed library
