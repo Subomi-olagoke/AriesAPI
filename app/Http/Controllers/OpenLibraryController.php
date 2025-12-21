@@ -460,6 +460,21 @@ class OpenLibraryController extends Controller
                 ];
             }
             
+            // ========== SECTION 5: ALL LIBRARIES ==========
+            // Show ALL libraries so none are missed (for browsing)
+            if ($allLibraries->isNotEmpty()) {
+                $formattedAll = $allLibraries->map($formatLibrary)->values()->toArray();
+                
+                $sections[] = [
+                    'id' => 'all_libraries',
+                    'title' => 'All Libraries',
+                    'type' => 'discovery',
+                    'source_library_id' => null,
+                    'source_library_name' => null,
+                    'libraries' => $formattedAll
+                ];
+            }
+            
             return response()->json([
                 'sections' => $sections
             ]);
