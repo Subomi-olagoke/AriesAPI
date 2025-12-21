@@ -122,32 +122,135 @@ class OpenLibraryController extends Controller
     }
     
     /**
+     * Get libraries created by or contributed to by the authenticated user.
+     */
+    public function getUserLibraries()
+    {
+        try {
+            $userId = Auth::id();
+            
+            if (!$userId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+            
+            // Get libraries created by the user
+            $createdLibraries = OpenLibrary::where('creator_id', $userId)
+                ->orderBy('created_at', 'desc')
+                ->get();
+            
+            // Get library IDs where user has contributed URLs
+            $contributedLibraryIds = LibraryUrl::where('added_by', $userId)
+                ->distinct()
+                ->pluck('library_id');
+            
+            // Get contributed libraries (excluding ones already created by user)
+            $contributedLibraries = OpenLibrary::whereIn('id', $contributedLibraryIds)
+                ->where(function($query) use ($userId) {
+                    $query->whereNull('creator_id')
+                        ->orWhere('creator_id', '!=', $userId);
+                })
+                ->orderBy('created_at', 'desc')
+                ->get();
+            
+            // Merge and format the libraries
+            $allLibraries = $createdLibraries->merge($contributedLibraries)->unique('id');
+            
+            $formattedLibraries = $allLibraries->map(function ($library) use ($userId) {
+                // Count user's contributions to this library
+                $contributionCount = LibraryUrl::where('library_id', $library->id)
+                    ->where('added_by', $userId)
+                    ->count();
+                
+                // Count total content in library
+                $contentCount = LibraryUrl::where('library_id', $library->id)->count();
+                
+                return [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description,
+                    'type' => $library->type,
+                    'thumbnailUrl' => $library->thumbnail_url,
+                    'coverImageUrl' => $library->cover_image_url,
+                    'isCreator' => $library->creator_id === $userId,
+                    'contributionCount' => $contributionCount,
+                    'contentCount' => $contentCount,
+                    'createdAt' => $library->created_at,
+                    'updatedAt' => $library->updated_at,
+                ];
+            })->values();
+            
+            return response()->json([
+                'success' => true,
+                'libraries' => $formattedLibraries
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error fetching user libraries: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching user libraries: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
      * Get personalized library sections for the feed.
-     * Returns libraries organized into sections like "For You", "Because You Liked X", etc.
+     * Returns libraries organized into sections:
+     * - For You: Personalized based on user's followed libraries
+     * - Private Libraries: Libraries created or followed by user
+     * - Because You Liked: Similar to recently followed library
+     * - More to Explore: Discovery of other approved libraries
      */
     public function getSections()
     {
         try {
-            // Check if the is_approved column exists in the schema
-            $hasIsApprovedColumn = Schema::hasColumn('open_libraries', 'is_approved');
-            $hasApprovalStatusColumn = Schema::hasColumn('open_libraries', 'approval_status');
+            $user = Auth::user();
+            $userId = $user ? $user->id : null;
             
-            // Build query based on available columns
-            $query = OpenLibrary::query();
+            // Get all approved libraries
+            $allLibraries = OpenLibrary::where(function($q) {
+                if (Schema::hasColumn('open_libraries', 'is_approved')) {
+                    $q->where('is_approved', true);
+                }
+                if (Schema::hasColumn('open_libraries', 'approval_status')) {
+                    $q->where('approval_status', 'approved');
+                }
+            })->orderBy('created_at', 'desc')->get();
             
-            if ($hasIsApprovedColumn) {
-                $query->where('is_approved', true);
+            // Get user's followed library IDs
+            $followedLibraryIds = [];
+            $recentlyFollowedLibrary = null;
+            
+            if ($userId) {
+                $followedLibraryIds = DB::table('library_follows')
+                    ->where('user_id', $userId)
+                    ->pluck('library_id')
+                    ->toArray();
+                
+                // Get most recently followed library for "Because You Liked"
+                $recentFollow = DB::table('library_follows')
+                    ->where('user_id', $userId)
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+                
+                if ($recentFollow) {
+                    $recentlyFollowedLibrary = OpenLibrary::find($recentFollow->library_id);
+                }
             }
             
-            if ($hasApprovalStatusColumn) {
-                $query->where('approval_status', 'approved');
+            // Get user's created libraries
+            $createdLibraryIds = [];
+            if ($userId && Schema::hasColumn('open_libraries', 'creator_id')) {
+                $createdLibraryIds = OpenLibrary::where('creator_id', $userId)
+                    ->pluck('id')
+                    ->toArray();
             }
             
-            // Get all approved libraries ordered by creation date
-            $libraries = $query->orderBy('created_at', 'desc')->get();
-            
-            // Format libraries to match iOS expectations
-            $formattedLibraries = $libraries->map(function ($library) {
+            // Helper function to format library for iOS
+            $formatLibrary = function ($library) {
                 return [
                     'id' => $library->id,
                     'name' => $library->name,
@@ -174,58 +277,186 @@ class OpenLibraryController extends Controller
                     'user' => null,
                     'userId' => null
                 ];
-            })->toArray();
+            };
             
-            // Create sections from the libraries
             $sections = [];
-            $libraryCount = count($formattedLibraries);
+            $usedLibraryIds = [];
             
-            // "For You" section - first 5 libraries
-            if ($libraryCount > 0) {
+            // ========== SECTION 1: FOR YOU ==========
+            // Personalized recommendations based on followed libraries' keywords/categories
+            // Or high-engagement libraries if no follows
+            $forYouLibraries = [];
+            
+            if (!empty($followedLibraryIds)) {
+                // Get keywords from followed libraries
+                $followedKeywords = [];
+                foreach ($followedLibraryIds as $libId) {
+                    $lib = $allLibraries->firstWhere('id', $libId);
+                    if ($lib && $lib->keywords) {
+                        $followedKeywords = array_merge($followedKeywords, (array)$lib->keywords);
+                    }
+                }
+                $followedKeywords = array_unique($followedKeywords);
+                
+                // Find libraries with matching keywords that user doesn't follow
+                $forYouLibraries = $allLibraries->filter(function ($lib) use ($followedLibraryIds, $followedKeywords) {
+                    if (in_array($lib->id, $followedLibraryIds)) return false;
+                    if (empty($lib->keywords)) return false;
+                    
+                    $libKeywords = (array)$lib->keywords;
+                    return !empty(array_intersect($libKeywords, $followedKeywords));
+                })->take(5)->values();
+            }
+            
+            // If not enough recommendations, fill with popular libraries
+            if ($forYouLibraries->count() < 5) {
+                $remaining = 5 - $forYouLibraries->count();
+                $existingIds = $forYouLibraries->pluck('id')->toArray();
+                
+                // Get libraries with most followers
+                $popularIds = DB::table('library_follows')
+                    ->select('library_id', DB::raw('COUNT(*) as follower_count'))
+                    ->groupBy('library_id')
+                    ->orderByDesc('follower_count')
+                    ->limit($remaining + 10)
+                    ->pluck('library_id')
+                    ->toArray();
+                
+                $additionalLibraries = $allLibraries->filter(function ($lib) use ($existingIds, $followedLibraryIds, $popularIds) {
+                    return !in_array($lib->id, $existingIds) 
+                        && !in_array($lib->id, $followedLibraryIds)
+                        && in_array($lib->id, $popularIds);
+                })->take($remaining);
+                
+                $forYouLibraries = $forYouLibraries->merge($additionalLibraries);
+            }
+            
+            // If still not enough, just take recent libraries
+            if ($forYouLibraries->count() < 5) {
+                $remaining = 5 - $forYouLibraries->count();
+                $existingIds = $forYouLibraries->pluck('id')->toArray();
+                
+                $additionalLibraries = $allLibraries->filter(function ($lib) use ($existingIds, $followedLibraryIds) {
+                    return !in_array($lib->id, $existingIds) && !in_array($lib->id, $followedLibraryIds);
+                })->take($remaining);
+                
+                $forYouLibraries = $forYouLibraries->merge($additionalLibraries);
+            }
+            
+            if ($forYouLibraries->isNotEmpty()) {
+                $formattedForYou = $forYouLibraries->map($formatLibrary)->values()->toArray();
+                $usedLibraryIds = array_merge($usedLibraryIds, $forYouLibraries->pluck('id')->toArray());
+                
                 $sections[] = [
                     'id' => 'for_you',
                     'title' => 'For You',
                     'type' => 'personalized',
                     'source_library_id' => null,
                     'source_library_name' => null,
-                    'libraries' => array_slice($formattedLibraries, 0, min(5, $libraryCount))
+                    'libraries' => $formattedForYou
                 ];
             }
             
-            // "Because You Liked X" section - next 5 libraries
-            if ($libraryCount > 5) {
-                $sourceLibrary = $formattedLibraries[0];
-                $sections[] = [
-                    'id' => 'because_you_liked_' . $sourceLibrary['id'],
-                    'title' => 'Because You Liked ' . $sourceLibrary['name'],
-                    'type' => 'related',
-                    'source_library_id' => (string)$sourceLibrary['id'],
-                    'source_library_name' => $sourceLibrary['name'],
-                    'libraries' => array_slice($formattedLibraries, 5, min(5, $libraryCount - 5))
-                ];
+            // ========== SECTION 2: PRIVATE LIBRARIES ==========
+            // Private-type libraries created by users that the current user follows
+            $privateLibraries = collect([]);
+            
+            if ($userId) {
+                // Get IDs of users the current user follows
+                $followedUserIds = DB::table('follows')
+                    ->where('user_id', $userId)
+                    ->pluck('followeduser')
+                    ->toArray();
+                
+                if (!empty($followedUserIds) && Schema::hasColumn('open_libraries', 'creator_id')) {
+                    // Get private-type libraries created by followed users
+                    $privateLibraries = $allLibraries->filter(function ($lib) use ($followedUserIds) {
+                        // Library must be type 'private' and created by a followed user
+                        return strtolower($lib->type ?? '') === 'private' 
+                            && in_array($lib->creator_id, $followedUserIds);
+                    })->take(6)->values();
+                }
             }
             
-            // "Top Reads" section - first 6 libraries
-            if ($libraryCount > 0) {
+            if ($privateLibraries->isNotEmpty()) {
+                $formattedPrivate = $privateLibraries->map($formatLibrary)->values()->toArray();
+                
                 $sections[] = [
-                    'id' => 'top_reads',
-                    'title' => 'Top Reads',
-                    'type' => 'trending',
+                    'id' => 'private_libraries',
+                    'title' => 'Private Libraries',
+                    'type' => 'private',
                     'source_library_id' => null,
                     'source_library_name' => null,
-                    'libraries' => array_slice($formattedLibraries, 0, min(6, $libraryCount))
+                    'libraries' => $formattedPrivate
                 ];
             }
             
-            // "More to Explore" section - remaining libraries after first 10
-            if ($libraryCount > 10) {
+            // ========== SECTION 3: BECAUSE YOU LIKED ==========
+            // Similar to most recently followed library
+            if ($recentlyFollowedLibrary) {
+                $sourceKeywords = (array)($recentlyFollowedLibrary->keywords ?? []);
+                $sourceName = $recentlyFollowedLibrary->name;
+                
+                $similarLibraries = $allLibraries->filter(function ($lib) use ($recentlyFollowedLibrary, $followedLibraryIds, $usedLibraryIds, $sourceKeywords) {
+                    // Exclude the source library and already followed
+                    if ($lib->id === $recentlyFollowedLibrary->id) return false;
+                    if (in_array($lib->id, $followedLibraryIds)) return false;
+                    if (in_array($lib->id, $usedLibraryIds)) return false;
+                    
+                    // Match on keywords
+                    if (!empty($sourceKeywords) && !empty($lib->keywords)) {
+                        $libKeywords = (array)$lib->keywords;
+                        return !empty(array_intersect($libKeywords, $sourceKeywords));
+                    }
+                    
+                    return false;
+                })->take(5)->values();
+                
+                // If not enough matches, just take random others
+                if ($similarLibraries->count() < 5) {
+                    $remaining = 5 - $similarLibraries->count();
+                    $existingIds = array_merge($usedLibraryIds, $similarLibraries->pluck('id')->toArray(), $followedLibraryIds);
+                    
+                    $additionalLibraries = $allLibraries->filter(function ($lib) use ($existingIds) {
+                        return !in_array($lib->id, $existingIds);
+                    })->take($remaining);
+                    
+                    $similarLibraries = $similarLibraries->merge($additionalLibraries);
+                }
+                
+                if ($similarLibraries->isNotEmpty()) {
+                    $formattedSimilar = $similarLibraries->map($formatLibrary)->values()->toArray();
+                    $usedLibraryIds = array_merge($usedLibraryIds, $similarLibraries->pluck('id')->toArray());
+                    
+                    $sections[] = [
+                        'id' => 'because_you_liked_' . $recentlyFollowedLibrary->id,
+                        'title' => 'Because You Liked ' . $sourceName,
+                        'type' => 'related',
+                        'source_library_id' => (string)$recentlyFollowedLibrary->id,
+                        'source_library_name' => $sourceName,
+                        'libraries' => $formattedSimilar
+                    ];
+                }
+            }
+            
+            // ========== SECTION 4: MORE TO EXPLORE ==========
+            // Discovery - other libraries not yet shown
+            $exploreLibraries = $allLibraries->filter(function ($lib) use ($usedLibraryIds, $followedLibraryIds, $createdLibraryIds) {
+                return !in_array($lib->id, $usedLibraryIds) 
+                    && !in_array($lib->id, $followedLibraryIds)
+                    && !in_array($lib->id, $createdLibraryIds);
+            })->take(6)->values();
+            
+            if ($exploreLibraries->isNotEmpty()) {
+                $formattedExplore = $exploreLibraries->map($formatLibrary)->values()->toArray();
+                
                 $sections[] = [
                     'id' => 'more_to_explore',
                     'title' => 'More to Explore',
                     'type' => 'discovery',
                     'source_library_id' => null,
                     'source_library_name' => null,
-                    'libraries' => array_slice($formattedLibraries, 10, min(5, $libraryCount - 10))
+                    'libraries' => $formattedExplore
                 ];
             }
             
