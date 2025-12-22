@@ -134,7 +134,7 @@ class ContentModerationService
      * @param string $text
      * @return array
      */
-    private function checkForInappropriateWords(string $text): array
+    public function checkForInappropriateWords(string $text): array
     {
         $lowercaseText = strtolower($text);
 

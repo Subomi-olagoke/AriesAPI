@@ -993,41 +993,8 @@ class OpenLibraryController extends Controller
                 throw new \Exception('Failed to fetch URL content: ' . ($urlData['error'] ?? 'Unknown error'));
             }
             
-            // Skip content moderation for admin users
-            $user = Auth::user();
-            $isAdmin = $user && $user->isAdmin;
-            
-            if (!$isAdmin) {
-                // Content moderation check for URL content
-                $contentModerationService = app(\App\Services\ContentModerationService::class);
-                
-                // Check URL itself for inappropriate content
-                $urlCheck = $contentModerationService->analyzeText($url);
-                if (!$urlCheck['isAllowed']) {
-                    return response()->json([
-                        'message' => 'URL contains inappropriate content and cannot be added to the library',
-                        'reason' => $urlCheck['reason']
-                    ], 400);
-                }
-                
-                // Check fetched title
-                $titleCheck = $contentModerationService->analyzeText($urlData['title'] ?? '');
-                if (!$titleCheck['isAllowed']) {
-                    return response()->json([
-                        'message' => 'URL content contains inappropriate material and cannot be added to the library',
-                        'reason' => $titleCheck['reason']
-                    ], 400);
-                }
-                
-                // Check fetched summary
-                $summaryCheck = $contentModerationService->analyzeText($urlData['summary'] ?? '');
-                if (!$summaryCheck['isAllowed']) {
-                    return response()->json([
-                        'message' => 'URL content contains inappropriate material and cannot be added to the library',
-                        'reason' => $summaryCheck['reason']
-                    ], 400);
-                }
-            }
+            // URLs are fine to be added to libraries - no content moderation needed
+            // Libraries are curated spaces where admins and users can add educational resources
             
             // First, check if this URL already exists in our database
             $existingUrl = LibraryUrl::where('url', $url)->first();

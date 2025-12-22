@@ -296,8 +296,8 @@ class SearchController extends Controller
                         'id' => (int)$library->id,
                         'name' => $library->name,
                         'description' => $library->description,
-                        'thumbnailUrl' => $library->thumbnail_url,
-                        'coverImageUrl' => $library->cover_image_url,
+                        'thumbnail_url' => $library->thumbnail_url,
+                        'cover_image_url' => $library->cover_image_url,
                         'type' => $library->type,
                         'keywords' => $library->keywords ? json_decode($library->keywords, true) : []
                     ];
