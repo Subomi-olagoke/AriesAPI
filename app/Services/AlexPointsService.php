@@ -7,6 +7,7 @@ use App\Models\AlexPointsRule;
 use App\Models\AlexPointsTransaction;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class AlexPointsService
 {
@@ -182,7 +183,7 @@ class AlexPointsService
                 json_encode(['previous_level' => $currentLevel ? $currentLevel->level : 0])
             );
             
-            $user->alex_level = $newLevel->level;
+            $user->point_level = $newLevel->level;
             $user->save();
             
             return $newLevel;
@@ -209,20 +210,21 @@ class AlexPointsService
             ->orderBy('created_at', 'asc') // Tie-breaker: older accounts rank higher
             ->offset($offset)
             ->limit($perPage)
-            ->get(['id', 'first_name', 'last_name', 'username', 'avatar', 'alex_points', 'alex_level', 'created_at']);
+            ->get(['id', 'first_name', 'last_name', 'username', 'avatar', 'alex_points', 'point_level', 'created_at']);
         
         // Calculate ranks (accounting for ties)
-        $rank = $offset + 1;
         $previousPoints = null;
-        $actualRank = $rank;
+        $actualRank = $offset + 1;
         
-        $leaderboard = $users->map(function ($user, $index) use (&$actualRank, &$previousPoints, $includeContributions) {
-            // If points are different from previous, update actual rank
+        $leaderboard = $users->map(function ($user, $index) use (&$actualRank, &$previousPoints, $offset, $includeContributions) {
+            // If points are different from previous user, update rank to current position
             if ($previousPoints !== null && $user->alex_points < $previousPoints) {
-                $actualRank = $index + 1 + ($actualRank - $index);
+                $actualRank = $offset + $index + 1;
             } elseif ($previousPoints === null) {
-                $actualRank = 1;
+                // First user in the list
+                $actualRank = $offset + 1;
             }
+            // If points are the same as previous, keep the same rank (ties)
             
             $previousPoints = $user->alex_points;
             
@@ -234,8 +236,8 @@ class AlexPointsService
                     'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
                     'avatar' => $user->avatar,
                     'alex_points' => $user->alex_points,
-                    'alex_level' => $user->alex_level ?? 1,
-                    'level_name' => $this->getLevelName($user->alex_level ?? 1)
+                    'alex_level' => $user->point_level ?? 1,
+                    'level_name' => $this->getLevelName($user->point_level ?? 1)
                 ]
             ];
             
@@ -262,8 +264,8 @@ class AlexPointsService
                         'name' => trim(($currentUser->first_name ?? '') . ' ' . ($currentUser->last_name ?? '')),
                         'avatar' => $currentUser->avatar,
                         'alex_points' => $currentUser->alex_points,
-                        'alex_level' => $currentUser->alex_level ?? 1,
-                        'level_name' => $this->getLevelName($currentUser->alex_level ?? 1)
+                        'alex_level' => $currentUser->point_level ?? 1,
+                        'level_name' => $this->getLevelName($currentUser->point_level ?? 1)
                     ],
                     'context' => [
                         'users_above' => max(0, $currentUserRank['rank'] - 1),
@@ -317,11 +319,23 @@ class AlexPointsService
      */
     private function getUserContributions($userId)
     {
+        // Check if tables exist before querying
+        $postsCount = 0;
+        $commentsCount = 0;
+        
+        if (Schema::hasTable('posts')) {
+            $postsCount = DB::table('posts')->where('user_id', $userId)->count();
+        }
+        
+        if (Schema::hasTable('comments')) {
+            $commentsCount = DB::table('comments')->where('user_id', $userId)->count();
+        }
+        
         return [
-            'posts_created' => DB::table('posts')->where('user_id', $userId)->count(),
+            'posts_created' => $postsCount,
             'libraries_created' => DB::table('open_libraries')->where('creator_id', $userId)->count(),
             'urls_added' => DB::table('library_urls')->where('created_by', $userId)->count(),
-            'comments_made' => DB::table('comments')->where('user_id', $userId)->count()
+            'comments_made' => $commentsCount
         ];
     }
     

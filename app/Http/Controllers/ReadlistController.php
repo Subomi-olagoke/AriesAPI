@@ -141,20 +141,36 @@ class ReadlistController extends Controller
                     return $readlist;
                 });
 
-            // Fetch the personalized Cognition readlist
-            $cognitionService = app(\App\Services\CognitionService::class);
-            $cognitionReadlist = $cognitionService->getCognitionReadlist($user);
-            $cognitionReadlist->load('items');
+            // Try to fetch the personalized Cognition readlist if the service exists
+            $cognitionReadlist = null;
+            try {
+                if (class_exists(\App\Services\CognitionService::class)) {
+                    $cognitionService = app(\App\Services\CognitionService::class);
+                    $cognitionReadlist = $cognitionService->getCognitionReadlist($user);
+                    if ($cognitionReadlist) {
+                        $cognitionReadlist->load('items');
+                    }
+                }
+            } catch (\Exception $e) {
+                // CognitionService doesn't exist or failed, continue without it
+                \Log::info('CognitionService not available: ' . $e->getMessage());
+            }
 
-            return response()->json([
+            $response = [
                 'message' => 'User readlists retrieved successfully',
-                'readlists' => $readlists,
-                'cognition_readlist' => $cognitionReadlist
-            ]);
+                'readlists' => $readlists
+            ];
+            
+            if ($cognitionReadlist) {
+                $response['cognition_readlist'] = $cognitionReadlist;
+            }
+
+            return response()->json($response);
         } catch (\Exception $e) {
             \Log::error('Error retrieving user readlists: ' . $e->getMessage());
             return response()->json([
-                'message' => 'Failed to retrieve readlists: ' . $e->getMessage()
+                'message' => 'Failed to retrieve readlists: ' . $e->getMessage(),
+                'readlists' => [] // Always include readlists key even on error
             ], 500);
         }
     }
