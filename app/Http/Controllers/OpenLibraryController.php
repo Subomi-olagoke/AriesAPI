@@ -720,7 +720,7 @@ class OpenLibraryController extends Controller
                     }
                 }
                 elseif ($content->content_type === LibraryUrl::class) {
-                    $contentItem = LibraryUrl::find($content->content_id);
+                    $contentItem = LibraryUrl::with('creator')->find($content->content_id);
                     if ($contentItem) {
                         $formattedContents[] = [
                             'id' => $contentItem->id,
@@ -730,7 +730,11 @@ class OpenLibraryController extends Controller
                             'notes' => $contentItem->notes,
                             'type' => 'url',
                             'relevance_score' => $content->relevance_score,
-                            'created_at' => $contentItem->created_at
+                            'created_at' => $contentItem->created_at,
+                            'added_by' => $contentItem->creator ? [
+                                'id' => $contentItem->creator->id,
+                                'username' => $contentItem->creator->username
+                            ] : null
                         ];
                     }
                 }
@@ -754,6 +758,7 @@ class OpenLibraryController extends Controller
                 
                 // Only add if not already included
                 if (!$alreadyIncluded && !empty($url)) {
+                    // For legacy url_items, we don't have creator info, so set added_by to null
                     $formattedContents[] = [
                         'id' => $urlItem['id'] ?? uniqid('url_'),
                         'title' => $urlItem['title'] ?? 'No title',
@@ -762,7 +767,8 @@ class OpenLibraryController extends Controller
                         'notes' => $urlItem['notes'] ?? '',
                         'type' => 'url',
                         'relevance_score' => $urlItem['relevance_score'] ?? 0.5,
-                        'created_at' => $urlItem['created_at'] ?? now()->toIso8601String()
+                        'created_at' => $urlItem['created_at'] ?? now()->toIso8601String(),
+                        'added_by' => null // Legacy items don't have creator info
                     ];
                 }
             }

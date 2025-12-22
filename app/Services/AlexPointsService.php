@@ -193,13 +193,145 @@ class AlexPointsService
     
     /**
      * Get leaderboard of users with the most points
+     * Enhanced version with rank, contributions, and current user context
      */
-    public function getLeaderboard($limit = 10)
+    public function getLeaderboard($limit = 20, $page = 1, $includeContributions = true, $includeCurrentUserContext = true)
     {
-        return User::where('alex_points', '>', 0)
+        $perPage = min($limit, 100); // Max 100 per page
+        $offset = ($page - 1) * $perPage;
+        
+        // Get total count of users with points
+        $totalUsers = User::where('alex_points', '>', 0)->count();
+        
+        // Get leaderboard users with rank calculation
+        $users = User::where('alex_points', '>', 0)
             ->orderBy('alex_points', 'desc')
-            ->limit($limit)
-            ->get(['id', 'name', 'username', 'alex_points', 'alex_level']);
+            ->orderBy('created_at', 'asc') // Tie-breaker: older accounts rank higher
+            ->offset($offset)
+            ->limit($perPage)
+            ->get(['id', 'first_name', 'last_name', 'username', 'avatar', 'alex_points', 'alex_level', 'created_at']);
+        
+        // Calculate ranks (accounting for ties)
+        $rank = $offset + 1;
+        $previousPoints = null;
+        $actualRank = $rank;
+        
+        $leaderboard = $users->map(function ($user, $index) use (&$actualRank, &$previousPoints, $includeContributions) {
+            // If points are different from previous, update actual rank
+            if ($previousPoints !== null && $user->alex_points < $previousPoints) {
+                $actualRank = $index + 1 + ($actualRank - $index);
+            } elseif ($previousPoints === null) {
+                $actualRank = 1;
+            }
+            
+            $previousPoints = $user->alex_points;
+            
+            $userData = [
+                'rank' => $actualRank,
+                'user' => [
+                    'id' => $user->id,
+                    'username' => $user->username,
+                    'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
+                    'avatar' => $user->avatar,
+                    'alex_points' => $user->alex_points,
+                    'alex_level' => $user->alex_level ?? 1,
+                    'level_name' => $this->getLevelName($user->alex_level ?? 1)
+                ]
+            ];
+            
+            // Include contribution metrics if requested
+            if ($includeContributions) {
+                $userData['contributions'] = $this->getUserContributions($user->id);
+            }
+            
+            return $userData;
+        });
+        
+        // Get current user's rank and context if requested
+        $currentUserData = null;
+        if ($includeCurrentUserContext && auth()->check()) {
+            $currentUser = auth()->user();
+            $currentUserRank = $this->getUserRank($currentUser->id);
+            
+            if ($currentUserRank) {
+                $currentUserData = [
+                    'rank' => $currentUserRank['rank'],
+                    'user' => [
+                        'id' => $currentUser->id,
+                        'username' => $currentUser->username,
+                        'name' => trim(($currentUser->first_name ?? '') . ' ' . ($currentUser->last_name ?? '')),
+                        'avatar' => $currentUser->avatar,
+                        'alex_points' => $currentUser->alex_points,
+                        'alex_level' => $currentUser->alex_level ?? 1,
+                        'level_name' => $this->getLevelName($currentUser->alex_level ?? 1)
+                    ],
+                    'context' => [
+                        'users_above' => max(0, $currentUserRank['rank'] - 1),
+                        'users_below' => max(0, $totalUsers - $currentUserRank['rank'])
+                    ]
+                ];
+                
+                if ($includeContributions) {
+                    $currentUserData['contributions'] = $this->getUserContributions($currentUser->id);
+                }
+            }
+        }
+        
+        return [
+            'leaderboard' => $leaderboard->values(),
+            'current_user' => $currentUserData,
+            'pagination' => [
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'total_users' => $totalUsers,
+                'total_pages' => ceil($totalUsers / $perPage),
+                'has_more' => ($offset + $perPage) < $totalUsers
+            ]
+        ];
+    }
+    
+    /**
+     * Get user's rank in the leaderboard
+     */
+    private function getUserRank($userId)
+    {
+        $user = User::find($userId);
+        if (!$user || $user->alex_points <= 0) {
+            return null;
+        }
+        
+        // Count users with more points, or same points but created earlier
+        $rank = User::where(function($query) use ($user) {
+            $query->where('alex_points', '>', $user->alex_points)
+                  ->orWhere(function($q) use ($user) {
+                      $q->where('alex_points', $user->alex_points)
+                        ->where('created_at', '<', $user->created_at);
+                  });
+        })->count() + 1;
+        
+        return ['rank' => $rank];
+    }
+    
+    /**
+     * Get user's contribution metrics
+     */
+    private function getUserContributions($userId)
+    {
+        return [
+            'posts_created' => DB::table('posts')->where('user_id', $userId)->count(),
+            'libraries_created' => DB::table('open_libraries')->where('creator_id', $userId)->count(),
+            'urls_added' => DB::table('library_urls')->where('created_by', $userId)->count(),
+            'comments_made' => DB::table('comments')->where('user_id', $userId)->count()
+        ];
+    }
+    
+    /**
+     * Get level name from level number
+     */
+    private function getLevelName($level)
+    {
+        $levelModel = AlexPointsLevel::where('level', $level)->first();
+        return $levelModel ? $levelModel->name : 'Basic';
     }
     
     /**

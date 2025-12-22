@@ -172,11 +172,21 @@ class AlexPointsController extends Controller
     
     /**
      * Get leaderboard of users with the most points
+     * Enhanced with rank, contributions, and current user context
      */
     public function leaderboard(Request $request)
     {
-        $limit = $request->limit ?? 10;
-        $leaderboard = $this->pointsService->getLeaderboard($limit);
+        $limit = min($request->input('limit', 20), 100); // Default 20, max 100
+        $page = max(1, $request->input('page', 1));
+        $includeContributions = $request->input('include_contributions', true);
+        $includeCurrentUserContext = $request->input('include_current_user_context', true);
+        
+        $leaderboard = $this->pointsService->getLeaderboard(
+            $limit,
+            $page,
+            filter_var($includeContributions, FILTER_VALIDATE_BOOLEAN),
+            filter_var($includeCurrentUserContext, FILTER_VALIDATE_BOOLEAN)
+        );
         
         return response()->json($leaderboard);
     }
