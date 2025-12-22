@@ -216,4 +216,104 @@ class SearchController extends Controller
             'popular_libraries' => $popularLibraries
         ]);
     }
+
+    /**
+     * Get suggested libraries for search view
+     * Returns personalized library suggestions based on user's preferences
+     */
+    public function getSuggestedLibraries(Request $request)
+    {
+        try {
+            $user = $request->user();
+            $userId = $user ? $user->id : null;
+
+            // Get all approved libraries
+            $hasIsApprovedColumn = \Illuminate\Support\Facades\Schema::hasColumn('open_libraries', 'is_approved');
+            $hasApprovalStatusColumn = \Illuminate\Support\Facades\Schema::hasColumn('open_libraries', 'approval_status');
+            
+            $query = DB::table('open_libraries')
+                ->whereNull('deleted_at');
+            
+            if ($hasIsApprovedColumn && $hasApprovalStatusColumn) {
+                $query->where(function($q) {
+                    $q->where('is_approved', true)
+                      ->orWhere('approval_status', 'approved')
+                      ->orWhere(function($nullQ) {
+                          $nullQ->whereNull('is_approved')
+                                ->whereNull('approval_status');
+                      });
+                })->where(function($q) {
+                    $q->whereNull('approval_status')
+                      ->orWhere('approval_status', '!=', 'rejected');
+                });
+            } elseif ($hasIsApprovedColumn) {
+                $query->where(function($q) {
+                    $q->where('is_approved', true)
+                      ->orWhereNull('is_approved');
+                });
+            } elseif ($hasApprovalStatusColumn) {
+                $query->where(function($q) {
+                    $q->where('approval_status', 'approved')
+                      ->orWhere(function($nullQ) {
+                          $nullQ->whereNull('approval_status')
+                                ->orWhere('approval_status', '!=', 'rejected');
+                      });
+                });
+            }
+
+            // Get user's followed library IDs if authenticated
+            $followedLibraryIds = [];
+            if ($userId) {
+                $followedLibraryIds = DB::table('library_follows')
+                    ->where('user_id', $userId)
+                    ->pluck('library_id')
+                    ->toArray();
+            }
+
+            // Get libraries with most followers (popular libraries)
+            $popularLibraryIds = DB::table('library_follows')
+                ->select('library_id', DB::raw('COUNT(*) as follower_count'))
+                ->groupBy('library_id')
+                ->orderByDesc('follower_count')
+                ->limit(20)
+                ->pluck('library_id')
+                ->toArray();
+
+            // Get suggested libraries (exclude followed ones, prioritize popular ones)
+            $suggestedQuery = $query->whereNotIn('id', $followedLibraryIds);
+            
+            // Prioritize popular libraries if we have any
+            if (!empty($popularLibraryIds)) {
+                $suggestedQuery->orderByRaw('CASE WHEN id IN (' . implode(',', array_map('intval', $popularLibraryIds)) . ') THEN 0 ELSE 1 END');
+            }
+            
+            $suggestedLibraries = $suggestedQuery
+                ->orderByDesc('created_at')
+                ->limit(10)
+                ->get(['id', 'name', 'description', 'thumbnail_url', 'cover_image_url', 'type', 'keywords'])
+                ->map(function($library) {
+                    return [
+                        'id' => (int)$library->id,
+                        'name' => $library->name,
+                        'description' => $library->description,
+                        'thumbnailUrl' => $library->thumbnail_url,
+                        'coverImageUrl' => $library->cover_image_url,
+                        'type' => $library->type,
+                        'keywords' => $library->keywords ? json_decode($library->keywords, true) : []
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'libraries' => $suggestedLibraries
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Get suggested libraries failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get suggested libraries: ' . $e->getMessage(),
+                'libraries' => []
+            ], 500);
+        }
+    }
 }

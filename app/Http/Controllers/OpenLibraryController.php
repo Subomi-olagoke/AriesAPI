@@ -211,14 +211,53 @@ class OpenLibraryController extends Controller
             $userId = $user ? $user->id : null;
             
             // Get all approved libraries
-            $allLibraries = OpenLibrary::where(function($q) {
-                if (Schema::hasColumn('open_libraries', 'is_approved')) {
-                    $q->where('is_approved', true);
+            // Include libraries that are:
+            // 1. Explicitly approved (is_approved = true OR approval_status = 'approved')
+            // 2. Older libraries without approval fields set (treat as approved)
+            // 3. Exclude only libraries that are explicitly rejected
+            $hasIsApprovedColumn = Schema::hasColumn('open_libraries', 'is_approved');
+            $hasApprovalStatusColumn = Schema::hasColumn('open_libraries', 'approval_status');
+            
+            $query = OpenLibrary::query();
+            
+            if ($hasIsApprovedColumn && $hasApprovalStatusColumn) {
+                // Both columns exist: include if approved by either field, or if approval_status is null (older libraries)
+                // Exclude only if explicitly rejected
+                $query->where(function($q) {
+                    $q->where('is_approved', true)
+                      ->orWhere('approval_status', 'approved')
+                      ->orWhere(function($nullQ) {
+                          // Older libraries without approval_status set - treat as approved
+                          // This includes libraries where approval_status is null (regardless of is_approved)
+                          $nullQ->whereNull('approval_status');
+                      });
+                });
+                // Exclude explicitly rejected libraries
+                if ($hasApprovalStatusColumn) {
+                    $query->where(function($q) {
+                        $q->whereNull('approval_status')
+                          ->orWhere('approval_status', '!=', 'rejected');
+                    });
                 }
-                if (Schema::hasColumn('open_libraries', 'approval_status')) {
-                    $q->where('approval_status', 'approved');
-                }
-            })->orderBy('created_at', 'desc')->get();
+            } elseif ($hasIsApprovedColumn) {
+                // Only is_approved column exists
+                $query->where(function($q) {
+                    $q->where('is_approved', true)
+                      ->orWhereNull('is_approved');
+                });
+            } elseif ($hasApprovalStatusColumn) {
+                // Only approval_status column exists
+                $query->where(function($q) {
+                    $q->where('approval_status', 'approved')
+                      ->orWhere(function($nullQ) {
+                          $nullQ->whereNull('approval_status')
+                                ->orWhere('approval_status', '!=', 'rejected');
+                      });
+                });
+            }
+            // If neither column exists, include all libraries (no filtering)
+            
+            $allLibraries = $query->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
             
             // Get user's followed library IDs
             $followedLibraryIds = [];

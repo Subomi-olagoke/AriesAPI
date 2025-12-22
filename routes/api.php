@@ -66,6 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/search/recent', [\App\Http\Controllers\SearchController::class, 'saveRecentSearch']);
     Route::delete('/search/recent', [\App\Http\Controllers\SearchController::class, 'clearRecentSearches']);
     Route::get('/search/suggestions', [\App\Http\Controllers\SearchController::class, 'getSuggestions']);
+    Route::get('/search/suggested-libraries', [\App\Http\Controllers\SearchController::class, 'getSuggestedLibraries']);
 
     // Onboarding routes
     Route::get('/onboarding/suggested-libraries', [OnboardingController::class, 'getSuggestedLibraries']);
