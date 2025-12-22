@@ -198,6 +198,13 @@ Route::middleware('auth:sanctum')->group(function () {
     // Library URL Report routes
     Route::post('/library-urls/{urlId}/report', [ReportController::class, 'reportLibraryUrl']);
 
+    // Library URL Comment routes
+    Route::get('/comments/library-url/{id}', [\App\Http\Controllers\CommentController::class, 'index']);
+    Route::get('/comments/library_url/{id}', [\App\Http\Controllers\CommentController::class, 'index']);
+    Route::post('/comments/library-url/{id}', [\App\Http\Controllers\CommentController::class, 'store']);
+    Route::post('/comments/library_url/{id}', [\App\Http\Controllers\CommentController::class, 'store']);
+    Route::delete('/comments/{id}', [\App\Http\Controllers\CommentController::class, 'destroy']);
+
     // Add library URL to readlist
     Route::post('/readlists/{readlistId}/library-url', [ReadlistController::class, 'addLibraryUrlToReadlist']);
     Route::post('/readlist/{readlistId}/library-url', [ReadlistController::class, 'addLibraryUrlToReadlist']);

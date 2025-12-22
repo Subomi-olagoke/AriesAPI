@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\OpenLibrary;
 use App\Models\User;
+use App\Services\AlexPointsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -11,6 +12,13 @@ use Illuminate\Support\Facades\Log;
 
 class LibraryFollowController extends Controller
 {
+    protected $alexPointsService;
+    
+    public function __construct(AlexPointsService $alexPointsService)
+    {
+        $this->alexPointsService = $alexPointsService;
+    }
+    
     public function listLibraries(Request $request)
     {
         try {
@@ -86,6 +94,19 @@ class LibraryFollowController extends Controller
                         'created_at' => now(),
                         'updated_at' => now()
                     ]);
+                    
+                    // Award points for following a library
+                    try {
+                        $this->alexPointsService->addPoints(
+                            $user,
+                            'follow_library',
+                            OpenLibrary::class,
+                            $library->id,
+                            "Followed library: {$library->name}"
+                        );
+                    } catch (\Exception $e) {
+                        Log::warning('Failed to award points for following library: ' . $e->getMessage());
+                    }
                 }
                 $following = true;
             } elseif ($desired === false) {
@@ -103,6 +124,20 @@ class LibraryFollowController extends Controller
                         'created_at' => now(),
                         'updated_at' => now()
                     ]);
+                    
+                    // Award points for following a library
+                    try {
+                        $this->alexPointsService->addPoints(
+                            $user,
+                            'follow_library',
+                            OpenLibrary::class,
+                            $library->id,
+                            "Followed library: {$library->name}"
+                        );
+                    } catch (\Exception $e) {
+                        Log::warning('Failed to award points for following library: ' . $e->getMessage());
+                    }
+                    
                     $following = true;
                 }
             }

@@ -213,6 +213,15 @@ class OpenLibraryController extends Controller
             $user = Auth::user();
             $userId = $user ? $user->id : null;
             
+            // Get follow status for current user if authenticated
+            $followedLibraryIds = [];
+            if ($userId) {
+                $followedLibraryIds = DB::table('library_follows')
+                    ->where('user_id', $userId)
+                    ->pluck('library_id')
+                    ->toArray();
+            }
+            
             // Get all approved libraries
             // Include libraries that are:
             // 1. Explicitly approved (is_approved = true OR approval_status = 'approved')
@@ -688,6 +697,19 @@ class OpenLibraryController extends Controller
     {
         try {
             $library = OpenLibrary::findOrFail($id);
+            $user = Auth::user();
+            
+            // Increment view count
+            $library->increment('views_count');
+            
+            // Get follow status for current user
+            $isFollowing = false;
+            if ($user) {
+                $isFollowing = DB::table('library_follows')
+                    ->where('user_id', $user->id)
+                    ->where('library_id', $library->id)
+                    ->exists();
+            }
             
             // Get content with appropriate relationships
             $contents = DB::table('library_content')
@@ -741,20 +763,20 @@ class OpenLibraryController extends Controller
                 elseif ($content->content_type === LibraryUrl::class) {
                     $contentItem = LibraryUrl::with('creator')->find($content->content_id);
                     if ($contentItem) {
-                        $formattedContents[] = [
-                            'id' => $contentItem->id,
-                            'title' => $contentItem->title,
-                            'url' => $contentItem->url,
-                            'description' => $contentItem->summary,
-                            'notes' => $contentItem->notes,
-                            'type' => 'url',
-                            'relevance_score' => $content->relevance_score,
-                            'created_at' => $contentItem->created_at,
-                            'added_by' => $contentItem->creator ? [
-                                'id' => $contentItem->creator->id,
-                                'username' => $contentItem->creator->username
-                            ] : null
-                        ];
+                    $formattedContents[] = [
+                        'id' => $contentItem->id,
+                        'title' => $contentItem->title,
+                        'url' => $contentItem->url,
+                        'description' => $contentItem->summary,
+                        'notes' => $contentItem->notes,
+                        'type' => 'url',
+                        'relevance_score' => $content->relevance_score,
+                        'created_at' => $contentItem->created_at ? $contentItem->created_at->toIso8601String() : now()->toIso8601String(),
+                        'added_by' => $contentItem->creator ? [
+                            'id' => $contentItem->creator->id,
+                            'username' => $contentItem->creator->username
+                        ] : null
+                    ];
                     }
                 }
             }
@@ -797,8 +819,15 @@ class OpenLibraryController extends Controller
                 return $b['relevance_score'] <=> $a['relevance_score'];
             });
             
+            // Refresh library to get updated views_count
+            $library->refresh();
+            
             return response()->json([
-                'library' => $library,
+                'library' => array_merge($library->toArray(), [
+                    'views_count' => $library->views_count ?? 0,
+                    'is_following' => $isFollowing,
+                    'followers_count' => DB::table('library_follows')->where('library_id', $library->id)->count()
+                ]),
                 'contents' => $formattedContents
             ]);
             
