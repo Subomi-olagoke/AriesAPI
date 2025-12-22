@@ -141,36 +141,21 @@ class ReadlistController extends Controller
                     return $readlist;
                 });
 
-            // Try to fetch the personalized Cognition readlist if the service exists
-            $cognitionReadlist = null;
-            try {
-                if (class_exists(\App\Services\CognitionService::class)) {
-                    $cognitionService = app(\App\Services\CognitionService::class);
-                    $cognitionReadlist = $cognitionService->getCognitionReadlist($user);
-                    if ($cognitionReadlist) {
-                        $cognitionReadlist->load('items');
-                    }
-                }
-            } catch (\Exception $e) {
-                // CognitionService doesn't exist or failed, continue without it
-                \Log::info('CognitionService not available: ' . $e->getMessage());
-            }
-
+            // Return user readlists
             $response = [
                 'message' => 'User readlists retrieved successfully',
                 'readlists' => $readlists
             ];
-            
-            if ($cognitionReadlist) {
-                $response['cognition_readlist'] = $cognitionReadlist;
-            }
 
             return response()->json($response);
         } catch (\Exception $e) {
             \Log::error('Error retrieving user readlists: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            // Always return readlists key even on error to prevent frontend decoding errors
             return response()->json([
                 'message' => 'Failed to retrieve readlists: ' . $e->getMessage(),
-                'readlists' => [] // Always include readlists key even on error
+                'readlists' => []
             ], 500);
         }
     }
