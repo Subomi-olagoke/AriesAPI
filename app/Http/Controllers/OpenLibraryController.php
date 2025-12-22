@@ -6,6 +6,7 @@ use App\Models\OpenLibrary;
 use App\Models\LibraryUrl;
 use App\Services\OpenLibraryService;
 use App\Services\UrlFetchService;
+use App\Services\AlexPointsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -17,14 +18,16 @@ class OpenLibraryController extends Controller
 {
     protected $libraryService;
     protected $urlFetchService;
+    protected $alexPointsService;
     
     /**
      * Create a new controller instance.
      */
-    public function __construct(OpenLibraryService $libraryService, UrlFetchService $urlFetchService)
+    public function __construct(OpenLibraryService $libraryService, UrlFetchService $urlFetchService, AlexPointsService $alexPointsService)
     {
         $this->libraryService = $libraryService;
         $this->urlFetchService = $urlFetchService;
+        $this->alexPointsService = $alexPointsService;
     }
     
     /**
@@ -572,6 +575,22 @@ class OpenLibraryController extends Controller
                 'approval_status' => $isAdmin ? 'approved' : 'pending'
             ]);
             
+            // Award points for creating a library
+            if ($user) {
+                try {
+                    $this->alexPointsService->addPoints(
+                        $user,
+                        'create_library',
+                        OpenLibrary::class,
+                        $library->id,
+                        "Created library: {$library->name}"
+                    );
+                } catch (\Exception $e) {
+                    // Log but don't fail the request if points fail
+                    Log::warning('Failed to award points for library creation: ' . $e->getMessage());
+                }
+            }
+            
             return response()->json([
                 'message' => 'Library created successfully',
                 'library' => $library
@@ -1062,6 +1081,23 @@ class OpenLibraryController extends Controller
             // Update the library with the new URL item (for backward compatibility)
             $library->url_items = $urlItems;
             $library->save();
+            
+            // Award points for adding URL to library
+            $user = Auth::user();
+            if ($user) {
+                try {
+                    $this->alexPointsService->addPoints(
+                        $user,
+                        'add_url',
+                        LibraryUrl::class,
+                        $existingUrl->id,
+                        "Added URL to library: {$library->name}"
+                    );
+                } catch (\Exception $e) {
+                    // Log but don't fail the request if points fail
+                    Log::warning('Failed to award points for adding URL: ' . $e->getMessage());
+                }
+            }
             
             return response()->json([
                 'message' => 'URL added to library successfully',

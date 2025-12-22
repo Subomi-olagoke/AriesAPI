@@ -11,9 +11,17 @@ use App\Models\OpenLibrary;
 use App\Models\LibraryUrl;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 use App\Notifications\LikeNotification;
+use App\Services\AlexPointsService;
 
 class LikeController {
+    protected $alexPointsService;
+    
+    public function __construct(AlexPointsService $alexPointsService)
+    {
+        $this->alexPointsService = $alexPointsService;
+    }
 
     public function createLike(Request $request, Post $post = null, Comment $comment = null, Course $course = null, OpenLibrary $openLibrary = null) {
         $user = $request->user();
@@ -105,6 +113,27 @@ class LikeController {
 
             if ($notifiable) {
                 $notifiable->notify(new LikeNotification($post, $user, $comment, $course));
+                
+                // Award points to the user who received the like
+                // Only award if it's not the same user liking their own content
+                if ($notifiable->id !== $user->id) {
+                    try {
+                        $referenceType = $post ? Post::class : ($comment ? Comment::class : ($course ? Course::class : null));
+                        $referenceId = $post?->id ?? $comment?->id ?? $course?->id ?? null;
+                        
+                        if ($referenceType && $referenceId) {
+                            $this->alexPointsService->addPoints(
+                                $notifiable,
+                                'receive_like',
+                                $referenceType,
+                                $referenceId,
+                                "Received a like on your content"
+                            );
+                        }
+                    } catch (\Exception $e) {
+                        Log::warning('Failed to award points for receiving like: ' . $e->getMessage());
+                    }
+                }
             }
             return response()->json(['message' => 'like created successfully'], 200);
         }

@@ -6,10 +6,19 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use App\Models\User;
+use App\Services\AlexPointsService;
 
 class UserFollowController extends Controller
 {
+    protected $alexPointsService;
+    
+    public function __construct(AlexPointsService $alexPointsService)
+    {
+        $this->alexPointsService = $alexPointsService;
+    }
+    
     /**
      * Follow a user
      */
@@ -59,6 +68,32 @@ class UserFollowController extends Controller
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
+            
+            // Award points for following a user
+            try {
+                $this->alexPointsService->addPoints(
+                    $currentUser,
+                    'follow_user',
+                    User::class,
+                    $userId,
+                    "Followed user: {$userToFollow->username}"
+                );
+            } catch (\Exception $e) {
+                Log::warning('Failed to award points for following user: ' . $e->getMessage());
+            }
+            
+            // Award points to the user who gained a follower
+            try {
+                $this->alexPointsService->addPoints(
+                    $userToFollow,
+                    'gained_follower',
+                    User::class,
+                    $currentUser->id,
+                    "Gained a new follower: {$currentUser->username}"
+                );
+            } catch (\Exception $e) {
+                Log::warning('Failed to award points for gaining follower: ' . $e->getMessage());
+            }
             
             return response()->json([
                 'message' => 'Successfully followed user',
