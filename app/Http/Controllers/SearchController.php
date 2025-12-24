@@ -82,11 +82,11 @@ class SearchController extends Controller
 
         // --- Libraries (relevance ranked) ---
         if ($requestedTypes->contains('library')) {
-            $libraryVector = "to_tsvector('simple', coalesce(name,'') || ' ' || coalesce(description,'') || ' ' || coalesce(keywords,''))";
+            // Note: keywords column may be JSON; avoid parsing issues by excluding it from the vector
+            $libraryVector = "to_tsvector('simple', coalesce(name,'') || ' ' || coalesce(description,''))";
             $libraryRank = "ts_rank(" .
                 "(setweight(to_tsvector('simple', coalesce(name,'')), 'A') || " .
-                " setweight(to_tsvector('simple', coalesce(description,'')), 'B') || " .
-                " setweight(to_tsvector('simple', coalesce(keywords,'')), 'C'))," .
+                " setweight(to_tsvector('simple', coalesce(description,'')), 'B'))," .
                 " plainto_tsquery('simple', ?)" .
             ")";
 
