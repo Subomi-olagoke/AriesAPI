@@ -210,11 +210,21 @@ Route::middleware('auth:sanctum')->group(function () {
     // Library URL Report routes
     Route::post('/library-urls/{urlId}/report', [ReportController::class, 'reportLibraryUrl']);
 
-    // Library URL Comment routes
-    Route::get('/comments/library-url/{id}', [\App\Http\Controllers\CommentController::class, 'index']);
-    Route::get('/comments/library_url/{id}', [\App\Http\Controllers\CommentController::class, 'index']);
-    Route::post('/comments/library-url/{id}', [\App\Http\Controllers\CommentController::class, 'store']);
-    Route::post('/comments/library_url/{id}', [\App\Http\Controllers\CommentController::class, 'store']);
+    // Comment routes (posts + library URLs)
+    Route::get('/comments/{id}', [\App\Http\Controllers\CommentController::class, 'index'])
+        ->defaults('type', 'post');
+    Route::post('/comments/{id}', [\App\Http\Controllers\CommentController::class, 'store'])
+        ->defaults('type', 'post');
+
+    Route::get('/comments/library-url/{id}', [\App\Http\Controllers\CommentController::class, 'index'])
+        ->defaults('type', 'library-url');
+    Route::get('/comments/library_url/{id}', [\App\Http\Controllers\CommentController::class, 'index'])
+        ->defaults('type', 'library_url');
+    Route::post('/comments/library-url/{id}', [\App\Http\Controllers\CommentController::class, 'store'])
+        ->defaults('type', 'library-url');
+    Route::post('/comments/library_url/{id}', [\App\Http\Controllers\CommentController::class, 'store'])
+        ->defaults('type', 'library_url');
+
     Route::delete('/comments/{id}', [\App\Http\Controllers\CommentController::class, 'destroy']);
 
     // Add library URL to readlist
