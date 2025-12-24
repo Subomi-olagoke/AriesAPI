@@ -14,84 +14,153 @@ class SearchController extends Controller
     public function search(Request $request)
     {
         $request->validate([
-            'query' => 'required|string|min:2'
+            'query' => 'required|string|min:2',
+            'type' => 'sometimes|string', // comma separated list: user,library,readlist
+            'limit' => 'sometimes|integer|min:3|max:20',
         ]);
 
-        $query = $request->input('query');
+        $query = trim($request->input('query'));
+        $perTypeLimit = min(20, max(3, (int)$request->input('limit', 10)));
+
+        // Determine which result types to include
+        $requestedTypes = collect(explode(',', (string)$request->input('type', '')))
+            ->filter()
+            ->map(fn($t) => strtolower(trim($t)))
+            ->intersect(['user', 'library', 'readlist']);
+        if ($requestedTypes->isEmpty()) {
+            $requestedTypes = collect(['user', 'library', 'readlist']);
+        }
+
         $results = [];
 
-        // Search Users
-        $users = User::where(function($q) use ($query) {
-            $q->where('username', 'ILIKE', "%{$query}%")
-              ->orWhere('first_name', 'ILIKE', "%{$query}%")
-              ->orWhere('last_name', 'ILIKE', "%{$query}%")
-              ->orWhereRaw("CONCAT(first_name, ' ', last_name) ILIKE ?", ["%{$query}%"]);
-        })
-        ->where('is_banned', false)
-        ->limit(10)
-        ->get(['id', 'username', 'first_name', 'last_name', 'avatar', 'role', 'email', 'setup_completed'])
-        ->map(function($user) {
-            return [
-                'id' => $user->id,
-                'username' => $user->username,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
-                'avatar' => $user->avatar,
-                'role' => $user->role,
-                'email' => $user->email,
-                'setup_completed' => $user->setup_completed,
-                'type' => 'user'
-            ];
+        // --- Users (relevance ranked) ---
+        if ($requestedTypes->contains('user')) {
+            $userVector = "to_tsvector('simple', coalesce(username,'') || ' ' || coalesce(first_name,'') || ' ' || coalesce(last_name,'') || ' ' || coalesce(email,''))";
+            $userRank = "ts_rank(" .
+                "(setweight(to_tsvector('simple', coalesce(username,'')), 'A') || " .
+                " setweight(to_tsvector('simple', coalesce(first_name,'') || ' ' || coalesce(last_name,'')), 'A') || " .
+                " setweight(to_tsvector('simple', coalesce(email,'')), 'B'))," .
+                " plainto_tsquery('simple', ?)" .
+            ")";
+
+            $users = User::select(['id', 'username', 'first_name', 'last_name', 'avatar', 'role', 'email', 'setup_completed'])
+                ->selectRaw("$userRank as rank", [$query])
+                ->where('is_banned', false)
+                ->where(function($q) use ($query, $userVector) {
+                    // Prefer full-text match, fall back to ILIKE
+                    $q->whereRaw("$userVector @@ plainto_tsquery('simple', ?)", [$query])
+                      ->orWhere(function($inner) use ($query) {
+                          $inner->where('username', 'ILIKE', "%{$query}%")
+                                ->orWhere('first_name', 'ILIKE', "%{$query}%")
+                                ->orWhere('last_name', 'ILIKE', "%{$query}%")
+                                ->orWhereRaw("CONCAT(first_name, ' ', last_name) ILIKE ?", ["%{$query}%"])
+                                ->orWhere('email', 'ILIKE', "%{$query}%");
+                      });
+                })
+                ->orderByDesc('rank')
+                ->orderBy('username')
+                ->limit($perTypeLimit)
+                ->get()
+                ->map(function($user) {
+                    return [
+                        'id' => $user->id,
+                        'username' => $user->username,
+                        'first_name' => $user->first_name,
+                        'last_name' => $user->last_name,
+                        'avatar' => $user->avatar,
+                        'role' => $user->role,
+                        'email' => $user->email,
+                        'setup_completed' => $user->setup_completed,
+                        'type' => 'user',
+                        // Pass rank to allow client-side ordering if needed
+                        'score' => $user->rank ?? 0,
+                    ];
+                });
+
+            $results = array_merge($results, $users->toArray());
+        }
+
+        // --- Libraries (relevance ranked) ---
+        if ($requestedTypes->contains('library')) {
+            $libraryVector = "to_tsvector('simple', coalesce(name,'') || ' ' || coalesce(description,'') || ' ' || coalesce(keywords,''))";
+            $libraryRank = "ts_rank(" .
+                "(setweight(to_tsvector('simple', coalesce(name,'')), 'A') || " .
+                " setweight(to_tsvector('simple', coalesce(description,'')), 'B') || " .
+                " setweight(to_tsvector('simple', coalesce(keywords,'')), 'C'))," .
+                " plainto_tsquery('simple', ?)" .
+            ")";
+
+            $libraries = DB::table('open_libraries')
+                ->select(['id', 'name', 'description', 'thumbnail_url', 'cover_image_url', 'type'])
+                ->selectRaw("$libraryRank as rank", [$query])
+                ->whereNull('deleted_at')
+                ->where('is_approved', true)
+                ->where(function($q) use ($query, $libraryVector) {
+                    $q->whereRaw("$libraryVector @@ plainto_tsquery('simple', ?)", [$query])
+                      ->orWhere('name', 'ILIKE', "%{$query}%")
+                      ->orWhere('description', 'ILIKE', "%{$query}%");
+                })
+                ->orderByDesc('rank')
+                ->orderByDesc('created_at')
+                ->limit($perTypeLimit)
+                ->get()
+                ->map(function($library) {
+                    return [
+                        'id' => (string)$library->id,
+                        'title' => $library->name,
+                        'body' => $library->description,
+                        'thumbnail_url' => $library->thumbnail_url,
+                        'cover_image_url' => $library->cover_image_url,
+                        'library_type' => $library->type,
+                        'type' => 'library',
+                        'score' => $library->rank ?? 0,
+                    ];
+                });
+
+            $results = array_merge($results, $libraries->toArray());
+        }
+
+        // --- Readlists (relevance ranked) ---
+        if ($requestedTypes->contains('readlist')) {
+            $readlistVector = "to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(description,''))";
+            $readlistRank = "ts_rank(" .
+                "(setweight(to_tsvector('simple', coalesce(title,'')), 'A') || " .
+                " setweight(to_tsvector('simple', coalesce(description,'')), 'B'))," .
+                " plainto_tsquery('simple', ?)" .
+            ")";
+
+            $readlists = DB::table('readlists')
+                ->select(['id', 'title', 'description', 'image_url', 'user_id'])
+                ->selectRaw("$readlistRank as rank", [$query])
+                ->where('is_public', true)
+                ->where(function($q) use ($query, $readlistVector) {
+                    $q->whereRaw("$readlistVector @@ plainto_tsquery('simple', ?)", [$query])
+                      ->orWhere('title', 'ILIKE', "%{$query}%")
+                      ->orWhere('description', 'ILIKE', "%{$query}%");
+                })
+                ->orderByDesc('rank')
+                ->orderByDesc('created_at')
+                ->limit($perTypeLimit)
+                ->get()
+                ->map(function($readlist) {
+                    return [
+                        'id' => (string)$readlist->id,
+                        'title' => $readlist->title,
+                        'body' => $readlist->description,
+                        'image_url' => $readlist->image_url,
+                        'user_id' => $readlist->user_id,
+                        'type' => 'readlist',
+                        'score' => $readlist->rank ?? 0,
+                    ];
+                });
+
+            $results = array_merge($results, $readlists->toArray());
+        }
+
+        // Order combined results by score descending (fallback to original order)
+        usort($results, function($a, $b) {
+            return ($b['score'] ?? 0) <=> ($a['score'] ?? 0);
         });
-
-        // Search Libraries
-        $libraries = DB::table('open_libraries')
-            ->where(function($q) use ($query) {
-                $q->where('name', 'ILIKE', "%{$query}%")
-                  ->orWhere('description', 'ILIKE', "%{$query}%");
-            })
-            ->whereNull('deleted_at')
-            ->where('is_approved', true)
-            ->limit(10)
-            ->get(['id', 'name', 'description', 'thumbnail_url', 'cover_image_url', 'type'])
-            ->map(function($library) {
-                return [
-                    'id' => (string)$library->id,
-                    'title' => $library->name,
-                    'body' => $library->description,
-                    'thumbnail_url' => $library->thumbnail_url,
-                    'cover_image_url' => $library->cover_image_url,
-                    'library_type' => $library->type,
-                    'type' => 'library'
-                ];
-            });
-
-        // Search Readlists
-        $readlists = DB::table('readlists')
-            ->where(function($q) use ($query) {
-                $q->where('title', 'ILIKE', "%{$query}%")
-                  ->orWhere('description', 'ILIKE', "%{$query}%");
-            })
-            ->where('is_public', true)
-            ->limit(10)
-            ->get(['id', 'title', 'description', 'image_url', 'user_id'])
-            ->map(function($readlist) {
-                return [
-                    'id' => (string)$readlist->id,
-                    'title' => $readlist->title,
-                    'body' => $readlist->description,
-                    'image_url' => $readlist->image_url,
-                    'user_id' => $readlist->user_id,
-                    'type' => 'readlist'
-                ];
-            });
-
-        // Combine all results
-        $results = array_merge(
-            $users->toArray(),
-            $libraries->toArray(),
-            $readlists->toArray()
-        );
 
         return response()->json([
             'success' => true,

@@ -30,6 +30,18 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
+// Update user setup completion status
+Route::patch('/user/setup-completed', function (Request $request) {
+    $user = $request->user();
+    $user->setup_completed = $request->input('setup_completed', true);
+    $user->save();
+    
+    return response()->json([
+        'message' => 'Setup completion status updated',
+        'user' => $user
+    ], 200);
+})->middleware('auth:sanctum');
+
 // Authentication routes - use stateless middleware to avoid CSRF issues
 Route::middleware(['api.stateless'])->group(function () {
     Route::post('/register', [AuthManager::class, 'register']);

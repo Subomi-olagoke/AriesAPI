@@ -52,6 +52,7 @@ class User extends Authenticatable {
         'alex_points',
         'point_level',
         'points_to_next_level',
+        'setup_completed',
     ];
 
     protected $hidden = [

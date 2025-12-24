@@ -61,3 +61,4 @@ FROM information_schema.columns
 WHERE table_name = 'comments'
 ORDER BY ordinal_position;
 
+

@@ -23,7 +23,10 @@ class LibraryFollowController extends Controller
     {
         try {
             $user = Auth::user();
-            $perPage = (int) $request->get('per_page', 50);
+            // Temporary: raise default page size so older libraries appear without pagination in the client.
+            $perPage = (int) $request->get('per_page', 500);
+            // Guard against runaway values while keeping the larger default.
+            $perPage = max(1, min($perPage, 500));
             $search = $request->get('search');
             
             $query = OpenLibrary::query()->whereNull('deleted_at');

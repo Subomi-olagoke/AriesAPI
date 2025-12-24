@@ -763,20 +763,20 @@ class OpenLibraryController extends Controller
                 elseif ($content->content_type === LibraryUrl::class) {
                     $contentItem = LibraryUrl::with('creator')->find($content->content_id);
                     if ($contentItem) {
-                    $formattedContents[] = [
-                        'id' => $contentItem->id,
-                        'title' => $contentItem->title,
-                        'url' => $contentItem->url,
-                        'description' => $contentItem->summary,
-                        'notes' => $contentItem->notes,
-                        'type' => 'url',
-                        'relevance_score' => $content->relevance_score,
+                        $formattedContents[] = [
+                            'id' => $contentItem->id,
+                            'title' => $contentItem->title,
+                            'url' => $contentItem->url,
+                            'description' => $contentItem->summary,
+                            'notes' => $contentItem->notes,
+                            'type' => 'url',
+                            'relevance_score' => $content->relevance_score,
                         'created_at' => $contentItem->created_at ? $contentItem->created_at->toIso8601String() : now()->toIso8601String(),
-                        'added_by' => $contentItem->creator ? [
-                            'id' => $contentItem->creator->id,
-                            'username' => $contentItem->creator->username
-                        ] : null
-                    ];
+                            'added_by' => $contentItem->creator ? [
+                                'id' => $contentItem->creator->id,
+                                'username' => $contentItem->creator->username
+                            ] : null
+                        ];
                     }
                 }
             }
