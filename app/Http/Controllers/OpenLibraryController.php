@@ -200,6 +200,58 @@ class OpenLibraryController extends Controller
     }
     
     /**
+     * Get separate entries (URLs) added by the user.
+     */
+    public function getUserEntries()
+    {
+        try {
+            $userId = Auth::id();
+            
+            if (!$userId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+            
+            $entries = LibraryUrl::where('added_by', $userId)
+                ->with(['library' => function($q) {
+                    $q->select('id', 'name', 'thumbnail_url');
+                }])
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($entry) {
+                    return [
+                        'id' => $entry->id,
+                        'url' => $entry->url,
+                        'title' => $entry->title,
+                        'summary' => $entry->summary,
+                        'notes' => $entry->notes,
+                        'type' => $entry->type,
+                        'createdAt' => $entry->created_at,
+                        'library' => $entry->library ? [
+                            'id' => $entry->library->id,
+                            'name' => $entry->library->name,
+                            'thumbnailUrl' => $entry->library->thumbnail_url
+                        ] : null
+                    ];
+                });
+            
+            return response()->json([
+                'success' => true,
+                'entries' => $entries
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error fetching user entries: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching user entries: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
      * Get personalized library sections for the feed.
      * Returns libraries organized into sections:
      * - For You: Personalized based on user's followed libraries
