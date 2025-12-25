@@ -266,11 +266,17 @@ class OpenLibraryController extends Controller
                 ], 401);
             }
             
-            // Get libraries the user has contributed URLs to
-            $urlContributions = DB::table('library_urls')
-                ->select('library_id', DB::raw('COUNT(*) as url_count'), DB::raw('MAX(created_at) as last_interaction'))
-                ->where('added_by', $userId)
-                ->groupBy('library_id');
+            
+            // Get libraries the user has contributed URLs to via library_content
+            // Join library_content with library_urls to find user's URL contributions
+            $urlContributions = DB::table('library_content')
+                ->join('library_urls', function($join) {
+                    $join->on('library_content.content_id', '=', 'library_urls.id')
+                         ->where('library_content.content_type', '=', 'url');
+                })
+                ->select('library_content.library_id', DB::raw('COUNT(*) as url_count'), DB::raw('MAX(library_content.created_at) as last_interaction'))
+                ->where('library_urls.created_by', $userId)
+                ->groupBy('library_content.library_id');
             
             // Get libraries the user follows
             $followedLibraries = DB::table('library_follows')
