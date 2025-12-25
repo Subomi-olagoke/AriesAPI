@@ -228,6 +228,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/readlists/{readlistId}/library-url', [ReadlistController::class, 'addLibraryUrlToReadlist']);
     Route::post('/readlist/{readlistId}/library-url', [ReadlistController::class, 'addLibraryUrlToReadlist']);
     
+    // Add raw URL to readlist
+    Route::post('/readlists/{id}/url', [ReadlistController::class, 'addUrl']);
+    Route::post('/readlist/{id}/url', [ReadlistController::class, 'addUrl']);
+    
     // AlexPoints routes
     Route::prefix('alex-points')->group(function () {
         Route::get('/summary', [\App\Http\Controllers\AlexPointsController::class, 'summary']);
