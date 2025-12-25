@@ -690,8 +690,9 @@ class OpenLibraryController extends Controller
                 }
             }
             
-            // ========== SECTION 4: MORE TO EXPLORE ==========
-            // Discovery - other libraries not yet shown
+            
+            // ========== SECTION 4: CATEGORIZED DISCOVERY SECTIONS ==========
+            // Group libraries by keywords and create topic-based sections
             $exploreLibraries = $allLibraries->filter(function ($lib) use ($usedLibraryIds, $followedLibraryIds, $createdLibraryIds) {
                 return !in_array($lib->id, $usedLibraryIds) 
                     && !in_array($lib->id, $followedLibraryIds)
@@ -699,16 +700,104 @@ class OpenLibraryController extends Controller
             })->values();
             
             if ($exploreLibraries->isNotEmpty()) {
-                $formattedExplore = $exploreLibraries->map($formatLibrary)->values()->toArray();
+                // Group libraries by keywords
+                $keywordGroups = [];
+                foreach ($exploreLibraries as $library) {
+                    if (!empty($library->keywords) && is_array($library->keywords)) {
+                        foreach ($library->keywords as $keyword) {
+                            // Normalize keyword (capitalize first letter, trim)
+                            $normalizedKeyword = ucfirst(trim(strtolower($keyword)));
+                            if (!isset($keywordGroups[$normalizedKeyword])) {
+                                $keywordGroups[$normalizedKeyword] = [];
+                            }
+                            // Only add if not already in this keyword group
+                            if (!in_array($library->id, array_column($keywordGroups[$normalizedKeyword], 'id'))) {
+                                $keywordGroups[$normalizedKeyword][] = $library;
+                            }
+                        }
+                    }
+                }
                 
-                $sections[] = [
-                    'id' => 'more_to_explore',
-                    'title' => 'More to Explore',
-                    'type' => 'discovery',
-                    'source_library_id' => null,
-                    'source_library_name' => null,
-                    'libraries' => $formattedExplore
+                // Sort keyword groups by library count (most popular first)
+                uasort($keywordGroups, function($a, $b) {
+                    return count($b) - count($a);
+                });
+                
+                // Take top 7 keyword groups with at least 3 libraries each
+                $topKeywordGroups = array_filter($keywordGroups, function($libs) {
+                    return count($libs) >= 3;
+                });
+                $topKeywordGroups = array_slice($topKeywordGroups, 0, 7, true);
+                
+                // Section title templates for variety
+                $titleTemplates = [
+                    'Libraries on %s',
+                    'Explore %s',
+                    'Dive into %s',
+                    'Discover %s',
+                    '%s Collections',
+                    'You Might Like %s',
+                    'Trending in %s'
                 ];
+                
+                $templateIndex = 0;
+                $categorizedUsedIds = [];
+                
+                foreach ($topKeywordGroups as $keyword => $libraries) {
+                    // Filter out libraries already used in other categorized sections
+                    $availableLibraries = array_filter($libraries, function($lib) use ($categorizedUsedIds) {
+                        return !in_array($lib->id, $categorizedUsedIds);
+                    });
+                    
+                    // Skip if not enough libraries left
+                    if (count($availableLibraries) < 3) {
+                        continue;
+                    }
+                    
+                    // Take up to 10 libraries per section
+                    $sectionLibraries = array_slice($availableLibraries, 0, 10);
+                    $formattedCategorized = array_map($formatLibrary, $sectionLibraries);
+                    
+                    // Track used library IDs
+                    $categorizedUsedIds = array_merge(
+                        $categorizedUsedIds, 
+                        array_column($sectionLibraries, 'id')
+                    );
+                    
+                    // Create section with varied title
+                    $template = $titleTemplates[$templateIndex % count($titleTemplates)];
+                    $sectionTitle = sprintf($template, $keyword);
+                    
+                    $sections[] = [
+                        'id' => 'category_' . strtolower(str_replace(' ', '_', $keyword)),
+                        'title' => $sectionTitle,
+                        'type' => 'discovery',
+                        'source_library_id' => null,
+                        'source_library_name' => null,
+                        'libraries' => array_values($formattedCategorized)
+                    ];
+                    
+                    $templateIndex++;
+                }
+                
+                // If we have leftover libraries that don't fit any popular category,
+                // add a generic "More to Explore" section
+                $remainingLibraries = $exploreLibraries->filter(function($lib) use ($categorizedUsedIds) {
+                    return !in_array($lib->id, $categorizedUsedIds);
+                })->values();
+                
+                if ($remainingLibraries->count() >= 5) {
+                    $formattedRemaining = $remainingLibraries->take(15)->map($formatLibrary)->values()->toArray();
+                    
+                    $sections[] = [
+                        'id' => 'more_to_explore',
+                        'title' => 'More to Explore',
+                        'type' => 'discovery',
+                        'source_library_id' => null,
+                        'source_library_name' => null,
+                        'libraries' => $formattedRemaining
+                    ];
+                }
             }
             
             return response()->json([
