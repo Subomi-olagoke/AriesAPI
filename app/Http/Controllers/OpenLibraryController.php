@@ -252,6 +252,154 @@ class OpenLibraryController extends Controller
     }
     
     /**
+     * Get user's favorite libraries based on interaction frequency and recency.
+     */
+    public function getFavorites()
+    {
+        try {
+            $userId = Auth::id();
+            
+            if (!$userId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+            
+            // Get libraries the user has contributed URLs to
+            $urlContributions = DB::table('library_urls')
+                ->select('library_id', DB::raw('COUNT(*) as url_count'), DB::raw('MAX(created_at) as last_interaction'))
+                ->where('added_by', $userId)
+                ->groupBy('library_id');
+            
+            // Get libraries the user follows
+            $followedLibraries = DB::table('library_follows')
+                ->select('library_id', DB::raw('created_at as last_interaction'))
+                ->where('user_id', $userId);
+            
+            // Combine interactions and calculate scores
+            $libraryScores = [];
+            
+            // Process URL contributions
+            foreach ($urlContributions->get() as $contribution) {
+                $libraryId = $contribution->library_id;
+                $urlCount = $contribution->url_count;
+                $lastInteraction = $contribution->last_interaction;
+                
+                // Calculate recency factor (decay over time)
+                $daysSinceInteraction = now()->diffInDays($lastInteraction);
+                $recencyFactor = 1 / (1 + ($daysSinceInteraction / 30)); // Decay over 30 days
+                
+                // Score: URL count * 10 + recency bonus
+                $score = ($urlCount * 10) + ($recencyFactor * 5);
+                
+                $libraryScores[$libraryId] = [
+                    'score' => $score,
+                    'last_interaction' => $lastInteraction
+                ];
+            }
+            
+            // Process followed libraries (bonus points)
+            foreach ($followedLibraries->get() as $follow) {
+                $libraryId = $follow->library_id;
+                $lastInteraction = $follow->last_interaction;
+                
+                if (!isset($libraryScores[$libraryId])) {
+                    $libraryScores[$libraryId] = [
+                        'score' => 0,
+                        'last_interaction' => $lastInteraction
+                    ];
+                }
+                
+                // Following bonus: +15 points
+                $libraryScores[$libraryId]['score'] += 15;
+            }
+            
+            // Sort by score descending
+            uasort($libraryScores, function($a, $b) {
+                return $b['score'] <=> $a['score'];
+            });
+            
+            // Get top libraries (limit to 15)
+            $topLibraryIds = array_slice(array_keys($libraryScores), 0, 15);
+            
+            if (empty($topLibraryIds)) {
+                return response()->json([
+                    'success' => true,
+                    'libraries' => []
+                ]);
+            }
+            
+            // Fetch library details
+            $libraries = OpenLibrary::whereIn('id', $topLibraryIds)
+                ->with(['contents' => function($query) use ($userId) {
+                    $query->limit(3);
+                }])
+                ->get();
+            
+            // Check follow status
+            $followedLibraryIds = DB::table('library_follows')
+                ->where('user_id', $userId)
+                ->pluck('library_id')
+                ->toArray();
+            
+            // Format and sort libraries according to score
+            $formattedLibraries = collect($topLibraryIds)->map(function($libraryId) use ($libraries, $followedLibraryIds, $userId) {
+                $library = $libraries->firstWhere('id', $libraryId);
+                
+                if (!$library) {
+                    return null;
+                }
+                
+                return [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description,
+                    'type' => $library->type,
+                    'thumbnailUrl' => $library->thumbnail_url,
+                    'coverImageUrl' => $library->cover_image_url,
+                    'courseId' => null,
+                    'criteria' => null,
+                    'keywords' => null,
+                    'isApproved' => $library->is_approved ?? true,
+                    'approvalStatus' => $library->approval_status,
+                    'viewsCount' => $library->views_count,
+                    'isFollowing' => in_array($library->id, $followedLibraryIds),
+                    'followersCount' => $library->followers_count,
+                    'createdAt' => $library->created_at,
+                    'updatedAt' => $library->updated_at,
+                    'contents' => $library->contents ? $library->contents->map(function ($content) use ($userId) {
+                        return [
+                            'id' => $content->id,
+                            'title' => $content->title,
+                            'url' => $content->url,
+                            'summary' => $content->summary,
+                            'notes' => $content->notes,
+                            'type' => $content->type,
+                            'createdAt' => $content->created_at,
+                            'content' => null
+                        ];
+                    })->toArray() : [],
+                    'user' => null,
+                    'userId' => null
+                ];
+            })->filter()->values();
+            
+            return response()->json([
+                'success' => true,
+                'libraries' => $formattedLibraries
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error fetching favorite libraries: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching favorite libraries: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
      * Get personalized library sections for the feed.
      * Returns libraries organized into sections:
      * - For You: Personalized based on user's followed libraries
