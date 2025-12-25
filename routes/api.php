@@ -216,14 +216,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/comments/{id}', [\App\Http\Controllers\CommentController::class, 'store'])
         ->defaults('type', 'post');
 
-    Route::get('/comments/library-url/{id}', [\App\Http\Controllers\CommentController::class, 'index'])
-        ->defaults('type', 'library-url');
-    Route::get('/comments/library_url/{id}', [\App\Http\Controllers\CommentController::class, 'index'])
-        ->defaults('type', 'library_url');
-    Route::post('/comments/library-url/{id}', [\App\Http\Controllers\CommentController::class, 'store'])
-        ->defaults('type', 'library-url');
-    Route::post('/comments/library_url/{id}', [\App\Http\Controllers\CommentController::class, 'store'])
-        ->defaults('type', 'library_url');
+    Route::get('/comments/{type}/{id}', [\App\Http\Controllers\CommentController::class, 'index'])
+        ->where('type', 'library[-_]url');
+        
+    Route::post('/comments/{type}/{id}', [\App\Http\Controllers\CommentController::class, 'store'])
+        ->where('type', 'library[-_]url');
 
     Route::delete('/comments/{id}', [\App\Http\Controllers\CommentController::class, 'destroy']);
 
