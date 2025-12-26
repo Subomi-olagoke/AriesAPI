@@ -145,9 +145,15 @@ class OpenLibraryController extends Controller
                 ->get();
             
             // Get library IDs where user has contributed URLs
-            $contributedLibraryIds = LibraryUrl::where('added_by', $userId)
+            // We need to join library_content with library_urls to find contributions
+            $contributedLibraryIds = DB::table('library_content')
+                ->join('library_urls', function($join) {
+                    $join->on('library_content.content_id', '=', 'library_urls.id')
+                         ->where('library_content.content_type', '=', 'url');
+                })
+                ->where('library_urls.created_by', $userId)
                 ->distinct()
-                ->pluck('library_id');
+                ->pluck('library_content.library_id');
             
             // Get contributed libraries (excluding ones already created by user)
             $contributedLibraries = OpenLibrary::whereIn('id', $contributedLibraryIds)
@@ -163,12 +169,19 @@ class OpenLibraryController extends Controller
             
             $formattedLibraries = $allLibraries->map(function ($library) use ($userId) {
                 // Count user's contributions to this library
-                $contributionCount = LibraryUrl::where('library_id', $library->id)
-                    ->where('added_by', $userId)
+                $contributionCount = DB::table('library_content')
+                    ->join('library_urls', function($join) {
+                        $join->on('library_content.content_id', '=', 'library_urls.id')
+                             ->where('library_content.content_type', '=', 'url');
+                    })
+                    ->where('library_content.library_id', $library->id)
+                    ->where('library_urls.created_by', $userId)
                     ->count();
                 
                 // Count total content in library
-                $contentCount = LibraryUrl::where('library_id', $library->id)->count();
+                $contentCount = DB::table('library_content')
+                    ->where('library_id', $library->id)
+                    ->count();
                 
                 return [
                     'id' => $library->id,
