@@ -4,6 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\OpenLibrary;
 use App\Models\LibraryUrl;
+use App\Models\Vote;
+use App\Models\Post;
+use App\Models\Course;
+use App\Models\Comment;
 use App\Services\OpenLibraryService;
 use App\Services\UrlFetchService;
 use App\Services\AlexPointsService;
@@ -188,8 +192,10 @@ class OpenLibraryController extends Controller
                     'name' => $library->name,
                     'description' => $library->description,
                     'type' => $library->type,
-                    'thumbnailUrl' => $library->thumbnail_url,
-                    'coverImageUrl' => $library->cover_image_url,
+                    'thumbnail_url' => $library->thumbnail_url,
+                    'cover_image_url' => $library->cover_image_url,
+                    'thumbnailUrl' => $library->thumbnail_url, // camelCase for iOS compatibility
+                    'coverImageUrl' => $library->cover_image_url, // camelCase for iOS compatibility
                     'isCreator' => $library->creator_id === $userId,
                     'contributionCount' => $contributionCount,
                     'contentCount' => $contentCount,
@@ -947,7 +953,33 @@ class OpenLibraryController extends Controller
             foreach ($contents as $content) {
                 $libraryUrl = LibraryUrl::with('creator')->find($content->content_id);
                 if ($libraryUrl) {
-                    // Get like count
+                    // Get vote counts
+                    $upvotesCount = DB::table('votes')
+                        ->where('voteable_type', LibraryUrl::class)
+                        ->where('voteable_id', $libraryUrl->id)
+                        ->where('vote_type', 'up')
+                        ->count();
+                    
+                    $downvotesCount = DB::table('votes')
+                        ->where('voteable_type', LibraryUrl::class)
+                        ->where('voteable_id', $libraryUrl->id)
+                        ->where('vote_type', 'down')
+                        ->count();
+                    
+                    // Get comment count
+                    $commentsCount = DB::table('comments')
+                        ->where('commentable_type', LibraryUrl::class)
+                        ->where('commentable_id', $libraryUrl->id)
+                        ->count();
+                    
+                    // Check user's vote
+                    $userVote = DB::table('votes')
+                        ->where('user_id', $user->id)
+                        ->where('voteable_type', LibraryUrl::class)
+                        ->where('voteable_id', $libraryUrl->id)
+                        ->first();
+                    
+                    // Get like count (for backward compatibility)
                     $likeCount = DB::table('likes')
                         ->where('likeable_type', LibraryUrl::class)
                         ->where('likeable_id', $libraryUrl->id)
@@ -966,6 +998,10 @@ class OpenLibraryController extends Controller
                         'url' => $libraryUrl->url,
                         'summary' => $libraryUrl->summary,
                         'notes' => $libraryUrl->notes,
+                        'upvotes_count' => $upvotesCount,
+                        'downvotes_count' => $downvotesCount,
+                        'comments_count' => $commentsCount,
+                        'user_vote' => $userVote ? $userVote->vote_type : null,
                         'like_count' => $likeCount,
                         'user_liked' => $userLiked,
                         'created_by' => $libraryUrl->creator ? [
@@ -1071,6 +1107,36 @@ class OpenLibraryController extends Controller
                 elseif ($content->content_type === LibraryUrl::class) {
                     $contentItem = LibraryUrl::with('creator')->find($content->content_id);
                     if ($contentItem) {
+                        // Get vote counts
+                        $upvotesCount = DB::table('votes')
+                            ->where('voteable_type', LibraryUrl::class)
+                            ->where('voteable_id', $contentItem->id)
+                            ->where('vote_type', 'up')
+                            ->count();
+                        
+                        $downvotesCount = DB::table('votes')
+                            ->where('voteable_type', LibraryUrl::class)
+                            ->where('voteable_id', $contentItem->id)
+                            ->where('vote_type', 'down')
+                            ->count();
+                        
+                        // Get comment count
+                        $commentsCount = DB::table('comments')
+                            ->where('commentable_type', LibraryUrl::class)
+                            ->where('commentable_id', $contentItem->id)
+                            ->count();
+                        
+                        // Get user's vote if logged in
+                        $userVote = null;
+                        if ($user) {
+                            $vote = DB::table('votes')
+                                ->where('user_id', $user->id)
+                                ->where('voteable_type', LibraryUrl::class)
+                                ->where('voteable_id', $contentItem->id)
+                                ->first();
+                            $userVote = $vote ? $vote->vote_type : null;
+                        }
+                        
                         $formattedContents[] = [
                             'id' => $contentItem->id,
                             'title' => $contentItem->title,
@@ -1079,11 +1145,15 @@ class OpenLibraryController extends Controller
                             'notes' => $contentItem->notes,
                             'type' => 'url',
                             'relevance_score' => $content->relevance_score,
-                        'created_at' => $contentItem->created_at ? $contentItem->created_at->toIso8601String() : now()->toIso8601String(),
+                            'created_at' => $contentItem->created_at ? $contentItem->created_at->toIso8601String() : now()->toIso8601String(),
                             'added_by' => $contentItem->creator ? [
                                 'id' => $contentItem->creator->id,
                                 'username' => $contentItem->creator->username
-                            ] : null
+                            ] : null,
+                            'upvotes_count' => $upvotesCount,
+                            'downvotes_count' => $downvotesCount,
+                            'comments_count' => $commentsCount,
+                            'user_vote' => $userVote
                         ];
                     }
                 }

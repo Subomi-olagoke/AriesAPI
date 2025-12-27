@@ -9,9 +9,11 @@ use App\Models\Course;
 use App\Models\Comment;
 use App\Models\OpenLibrary;
 use App\Models\LibraryUrl;
+use App\Models\Vote;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use App\Notifications\LikeNotification;
 use App\Services\AlexPointsService;
 
@@ -272,42 +274,153 @@ class LikeController {
     }
 
     /**
-     * Vote on a library URL (upvote/downvote)
+     * Vote on a library URL (upvote/downvote) - Reddit Style with Toggle
+     * 
+     * Behavior:
+     * - If no vote exists: Create new vote
+     * - If same vote exists: Remove vote (toggle off)
+     * - If opposite vote exists: Switch to new vote
      */
     public function voteLibraryUrl(Request $request, $urlId)
     {
         $user = $request->user();
         $voteType = $request->input('vote_type'); // 'up' or 'down'
         
+        // Validate vote type
+        if (!in_array($voteType, ['up', 'down'])) {
+            return response()->json([
+                'message' => 'Invalid vote type. Must be "up" or "down"'
+            ], 400);
+        }
+        
         $libraryUrl = LibraryUrl::findOrFail($urlId);
         
-        // For simplicity, we'll use the likes table with a vote_type concept
-        // In a production app, you might want a separate votes table
-        $usePolymorphic = Schema::hasColumn('likes', 'likeable_type');
-        
-        if ($usePolymorphic) {
-            // Remove any existing vote by this user
-            Like::where('user_id', $user->id)
-                ->where('likeable_type', LibraryUrl::class)
-                ->where('likeable_id', $urlId)
-                ->delete();
+        try {
+            DB::beginTransaction();
             
-            // Record the vote as a "like" (upvote counts as like)
-            if ($voteType === 'up') {
-                $like = new Like();
-                $like->user_id = $user->id;
-                $like->likeable_type = LibraryUrl::class;
-                $like->likeable_id = $urlId;
-                $like->save();
+            // Check for existing vote
+            $existingVote = Vote::where('user_id', $user->id)
+                ->where('voteable_type', LibraryUrl::class)
+                ->where('voteable_id', $urlId)
+                ->first();
+            
+            $action = '';
+            
+            if ($existingVote) {
+                if ($existingVote->vote_type === $voteType) {
+                    // Same vote - REMOVE (toggle off)
+                    $existingVote->delete();
+                    $action = 'removed';
+                } else {
+                    // Opposite vote - SWITCH
+                    $existingVote->vote_type = $voteType;
+                    $existingVote->save();
+                    $action = 'switched';
+                }
+            } else {
+                // No existing vote - CREATE
+                Vote::create([
+                    'user_id' => $user->id,
+                    'voteable_type' => LibraryUrl::class,
+                    'voteable_id' => $urlId,
+                    'vote_type' => $voteType
+                ]);
+                $action = 'created';
+                
+                // Award points to the user who added the URL (if different from voter)
+                try {
+                    if ($libraryUrl->user_id && $libraryUrl->user_id !== $user->id) {
+                        $contentOwner = User::find($libraryUrl->user_id);
+                        if ($contentOwner && $voteType === 'up') {
+                            $this->alexPointsService->addPoints(
+                                $contentOwner,
+                                'receive_upvote',
+                                LibraryUrl::class,
+                                $urlId,
+                                "Received an upvote on library content"
+                            );
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Failed to award points for upvote: ' . $e->getMessage());
+                }
+            }
+            
+            // Calculate current vote counts
+            $upvotes = Vote::where('voteable_type', LibraryUrl::class)
+                ->where('voteable_id', $urlId)
+                ->where('vote_type', 'up')
+                ->count();
+                
+            $downvotes = Vote::where('voteable_type', LibraryUrl::class)
+                ->where('voteable_id', $urlId)
+                ->where('vote_type', 'down')
+                ->count();
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => "Vote {$action}",
+                'action' => $action,
+                'vote_type' => $voteType,
+                'upvotes_count' => $upvotes,
+                'downvotes_count' => $downvotes,
+                'net_score' => $upvotes - $downvotes,
+                'user_vote' => $action === 'removed' ? null : $voteType
+            ], 200);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Vote failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Vote failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get vote counts and user's vote state for a library URL
+     */
+    public function getLibraryUrlVotes(Request $request, $urlId)
+    {
+        $user = $request->user();
+        
+        try {
+            $upvotes = Vote::where('voteable_type', LibraryUrl::class)
+                ->where('voteable_id', $urlId)
+                ->where('vote_type', 'up')
+                ->count();
+                
+            $downvotes = Vote::where('voteable_type', LibraryUrl::class)
+                ->where('voteable_id', $urlId)
+                ->where('vote_type', 'down')
+                ->count();
+            
+            // Get user's vote if exists
+            $userVote = null;
+            if ($user) {
+                $vote = Vote::where('user_id', $user->id)
+                    ->where('voteable_type', LibraryUrl::class)
+                    ->where('voteable_id', $urlId)
+                    ->first();
+                    
+                $userVote = $vote ? $vote->vote_type : null;
             }
             
             return response()->json([
-                'message' => 'Vote recorded',
-                'vote_type' => $voteType
-            ], 200);
+                'success' => true,
+                'upvotes_count' => $upvotes,
+                'downvotes_count' => $downvotes,
+                'net_score' => $upvotes - $downvotes,
+                'user_vote' => $userVote
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to get vote counts: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to get vote counts'
+            ], 500);
         }
-        
-        return response()->json(['message' => 'Vote functionality not available'], 400);
     }
 
 }

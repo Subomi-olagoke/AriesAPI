@@ -206,8 +206,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/library-urls/{urlId}/like', [LikeController::class, 'likeLibraryUrl']);
     Route::get('/library-urls/{urlId}/like-count', [LikeController::class, 'libraryUrlLikeCount']);
     
-    // Library URL Vote routes (upvote/downvote)
+    // Library URL Vote routes (upvote/downvote) - Reddit Style
     Route::post('/library-urls/{urlId}/vote', [LikeController::class, 'voteLibraryUrl']);
+    Route::get('/library-urls/{urlId}/votes', [LikeController::class, 'getLibraryUrlVotes']);
 
     // Library URL Report routes
     Route::post('/library-urls/{urlId}/report', [ReportController::class, 'reportLibraryUrl']);
