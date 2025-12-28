@@ -204,6 +204,16 @@ class OpenLibraryController extends Controller
                 ];
             })->values();
             
+            // Debug logging
+            \Log::info('User Libraries Response:', [
+                'userId' => $userId,
+                'createdCount' => $createdLibraries->count(),
+                'contributedIds' => $contributedLibraryIds->toArray(),
+                'contributedCount' => $contributedLibraries->count(),
+                'totalCount' => $formattedLibraries->count(),
+                'firstLibrary' => $formattedLibraries->first()
+            ]);
+            
             return response()->json([
                 'success' => true,
                 'libraries' => $formattedLibraries
@@ -526,15 +536,7 @@ class OpenLibraryController extends Controller
             }
             
             // Helper function to format library for iOS
-            $formatLibrary = function ($library) {
-                // Debug: Log what we're receiving
-                \Log::info('Formatting library for sections:', [
-                    'id' => $library->id,
-                    'name' => $library->name,
-                    'thumbnail_url' => $library->thumbnail_url ?? 'NULL',
-                    'cover_image_url' => $library->cover_image_url ?? 'NULL'
-                ]);
-                
+            $formatLibrary = function($library) {
                 return [
                     'id' => $library->id,
                     'name' => $library->name,
