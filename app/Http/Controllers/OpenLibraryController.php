@@ -527,6 +527,14 @@ class OpenLibraryController extends Controller
             
             // Helper function to format library for iOS
             $formatLibrary = function ($library) {
+                // Debug: Log what we're receiving
+                \Log::info('Formatting library for sections:', [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'thumbnail_url' => $library->thumbnail_url ?? 'NULL',
+                    'cover_image_url' => $library->cover_image_url ?? 'NULL'
+                ]);
+                
                 return [
                     'id' => $library->id,
                     'name' => $library->name,
