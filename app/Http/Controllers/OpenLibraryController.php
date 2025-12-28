@@ -145,8 +145,11 @@ class OpenLibraryController extends Controller
             
             // Get libraries created by the user
             $createdLibraries = OpenLibrary::where('creator_id', $userId)
+                ->whereNull('deleted_at') // Exclude deleted libraries
                 ->orderBy('created_at', 'desc')
                 ->get();
+            
+            Log::info("User {$userId} created libraries count: " . $createdLibraries->count());
             
             // Get library IDs where user has contributed URLs
             // We need to join library_content with library_urls to find contributions
@@ -157,19 +160,31 @@ class OpenLibraryController extends Controller
                 })
                 ->where('library_urls.created_by', $userId)
                 ->distinct()
-                ->pluck('library_content.library_id');
+                ->pluck('library_content.library_id')
+                ->toArray();
+            
+            Log::info("User {$userId} contributed library IDs: " . json_encode($contributedLibraryIds));
             
             // Get contributed libraries (excluding ones already created by user)
-            $contributedLibraries = OpenLibrary::whereIn('id', $contributedLibraryIds)
-                ->where(function($query) use ($userId) {
-                    $query->whereNull('creator_id')
-                        ->orWhere('creator_id', '!=', $userId);
-                })
-                ->orderBy('created_at', 'desc')
-                ->get();
+            // Only query if there are contributed library IDs
+            $contributedLibraries = collect();
+            if (!empty($contributedLibraryIds)) {
+                $contributedLibraries = OpenLibrary::whereIn('id', $contributedLibraryIds)
+                    ->whereNull('deleted_at') // Exclude deleted libraries
+                    ->where(function($query) use ($userId) {
+                        $query->whereNull('creator_id')
+                            ->orWhere('creator_id', '!=', $userId);
+                    })
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+            }
             
-            // Merge and format the libraries
+            Log::info("User {$userId} contributed libraries count: " . $contributedLibraries->count());
+            
+            // Merge and format the libraries - ensure we only return user's libraries
             $allLibraries = $createdLibraries->merge($contributedLibraries)->unique('id');
+            
+            Log::info("User {$userId} total libraries (created + contributed): " . $allLibraries->count());
             
             $formattedLibraries = $allLibraries->map(function ($library) use ($userId) {
                 // Count user's contributions to this library
@@ -203,16 +218,6 @@ class OpenLibraryController extends Controller
                     'updatedAt' => $library->updated_at,
                 ];
             })->values();
-            
-            // Debug logging
-            \Log::info('User Libraries Response:', [
-                'userId' => $userId,
-                'createdCount' => $createdLibraries->count(),
-                'contributedIds' => $contributedLibraryIds->toArray(),
-                'contributedCount' => $contributedLibraries->count(),
-                'totalCount' => $formattedLibraries->count(),
-                'firstLibrary' => $formattedLibraries->first()
-            ]);
             
             return response()->json([
                 'success' => true,
@@ -536,7 +541,7 @@ class OpenLibraryController extends Controller
             }
             
             // Helper function to format library for iOS
-            $formatLibrary = function($library) {
+            $formatLibrary = function ($library) {
                 return [
                     'id' => $library->id,
                     'name' => $library->name,
@@ -803,6 +808,15 @@ class OpenLibraryController extends Controller
                     $template = $titleTemplates[$templateIndex % count($titleTemplates)];
                     $sectionTitle = sprintf($template, $keyword);
                     
+                    Log::info("Creating category section '{$sectionTitle}' with " . count($formattedCategorized) . " libraries");
+                    if (count($formattedCategorized) > 0) {
+                        Log::info("First library in '{$sectionTitle}': " . json_encode([
+                            'name' => $formattedCategorized[0]['name'],
+                            'thumbnailUrl' => $formattedCategorized[0]['thumbnailUrl'] ?? 'NULL',
+                            'coverImageUrl' => $formattedCategorized[0]['coverImageUrl'] ?? 'NULL'
+                        ]));
+                    }
+                    
                     $sections[] = [
                         'id' => 'category_' . strtolower(str_replace(' ', '_', $keyword)),
                         'title' => $sectionTitle,
@@ -821,8 +835,19 @@ class OpenLibraryController extends Controller
                     return !in_array($lib->id, $categorizedUsedIds);
                 })->values();
                 
-                if ($remainingLibraries->count() >= 5) {
+                Log::info("Remaining libraries for 'More to Explore': " . $remainingLibraries->count());
+                
+                if ($remainingLibraries->count() >= 1) {
                     $formattedRemaining = $remainingLibraries->take(15)->map($formatLibrary)->values()->toArray();
+                    
+                    Log::info("Creating 'More to Explore' section with " . count($formattedRemaining) . " libraries");
+                    if (count($formattedRemaining) > 0) {
+                        Log::info("First library in More to Explore: " . json_encode([
+                            'name' => $formattedRemaining[0]['name'],
+                            'thumbnailUrl' => $formattedRemaining[0]['thumbnailUrl'],
+                            'coverImageUrl' => $formattedRemaining[0]['coverImageUrl']
+                        ]));
+                    }
                     
                     $sections[] = [
                         'id' => 'more_to_explore',
