@@ -11,6 +11,7 @@ use App\Models\Comment;
 use App\Services\OpenLibraryService;
 use App\Services\UrlFetchService;
 use App\Services\AlexPointsService;
+use App\Services\AiLibraryCategorizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -23,15 +24,17 @@ class OpenLibraryController extends Controller
     protected $libraryService;
     protected $urlFetchService;
     protected $alexPointsService;
+    protected $aiCategorizer;
     
     /**
      * Create a new controller instance.
      */
-    public function __construct(OpenLibraryService $libraryService, UrlFetchService $urlFetchService, AlexPointsService $alexPointsService)
+    public function __construct(OpenLibraryService $libraryService, UrlFetchService $urlFetchService, AlexPointsService $alexPointsService, AiLibraryCategorizer $aiCategorizer)
     {
         $this->libraryService = $libraryService;
         $this->urlFetchService = $urlFetchService;
         $this->alexPointsService = $alexPointsService;
+        $this->aiCategorizer = $aiCategorizer;
     }
     
     /**
@@ -1687,6 +1690,186 @@ class OpenLibraryController extends Controller
             Log::error('Removing content from library failed: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Removing content from library failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Smart add URL - AI automatically categorizes and adds to appropriate library
+     */
+    public function smartAddUrl(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'url' => 'required|url',
+            'notes' => 'nullable|string'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $url = $request->input('url');
+        $notes = $request->input('notes');
+
+        try {
+            // Step 1: Fetch and summarize URL content
+            $urlData = $this->urlFetchService->fetchAndSummarize($url);
+            
+            if (!$urlData || !isset($urlData['title']) || !isset($urlData['summary'])) {
+                return response()->json([
+                    'message' => 'Failed to fetch URL content or content is not suitable for categorization'
+                ], 400);
+            }
+
+            $title = $urlData['title'];
+            $summary = $urlData['summary'];
+
+            // Step 2: Get all approved libraries for categorization
+            $query = OpenLibrary::select([
+                'id', 'name', 'description', 'keywords', 'criteria', 'thumbnail_url', 'cover_image_url'
+            ])->where('approved', true);
+
+            $libraries = $query->whereNull('deleted_at')->get()->map(function ($library) {
+                return [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description ?? '',
+                    'keywords' => is_array($library->keywords) ? $library->keywords : [],
+                    'criteria' => is_array($library->criteria) ? $library->criteria : []
+                ];
+            })->toArray();
+
+            if (empty($libraries)) {
+                return response()->json([
+                    'message' => 'No libraries available for categorization'
+                ], 404);
+            }
+
+            // Step 3: Use AI to categorize
+            $categorizationResult = $this->aiCategorizer->categorize($url, $title, $summary, $libraries);
+
+            if (!isset($categorizationResult['library_id'])) {
+                return response()->json([
+                    'message' => 'AI categorization failed to determine appropriate library'
+                ], 500);
+            }
+
+            $selectedLibraryId = $categorizationResult['library_id'];
+            $confidence = $categorizationResult['confidence'] ?? 0;
+            $reasoning = $categorizationResult['reasoning'] ?? 'No reasoning provided';
+            $alternatives = $categorizationResult['alternatives'] ?? [];
+
+            // Step 4: Check if URL already exists
+            $existingUrl = LibraryUrl::where('url', $url)->first();
+
+            if (!$existingUrl) {
+                // Create new URL entry
+                $existingUrl = LibraryUrl::create([
+                    'url' => $url,
+                    'title' => $title,
+                    'summary' => $summary,
+                    'notes' => $notes,
+                    'submitted_by' => Auth::id()
+                ]);
+            }
+
+            // Step 5: Check if already in the selected library
+            $existing = DB::table('library_content')
+                ->where('library_id', $selectedLibraryId)
+                ->where('content_id', $existingUrl->id)
+                ->where('content_type', LibraryUrl::class)
+                ->first();
+
+            if ($existing) {
+                // Get library details for response
+                $library = OpenLibrary::find($selectedLibraryId);
+                
+                return response()->json([
+                    'message' => 'URL already exists in this library',
+                    'selectedLibrary' => [
+                        'id' => $library->id,
+                        'name' => $library->name,
+                        'description' => $library->description,
+                        'thumbnailUrl' => $library->thumbnail_url,
+                        'coverImageUrl' => $library->cover_image_url
+                    ],
+                    'confidence' => $confidence,
+                    'reasoning' => $reasoning,
+                    'item' => $existingUrl
+                ], 200);
+            }
+
+            // Step 6: Add to the selected library
+            DB::table('library_content')->insert([
+                'library_id' => $selectedLibraryId,
+                'content_id' => $existingUrl->id,
+                'content_type' => LibraryUrl::class,
+                'relevance_score' => max(0.5, $confidence), // Use AI confidence as relevance score
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            // Step 7: Award points for adding content
+            $userId = Auth::id();
+            if ($userId) {
+                $this->alexPointsService->awardPoints(
+                    $userId,
+                    5, // Points for adding URL
+                    'contributed_url',
+                    "Added URL to library via smart categorization"
+                );
+            }
+
+            // Step 8: Get the full library details for response
+            $library = OpenLibrary::find($selectedLibraryId);
+
+            // Map alternatives to include full library details
+            $alternativeLibraries = collect($alternatives)->map(function ($alt) {
+                $lib = OpenLibrary::find($alt['library_id']);
+                return $lib ? [
+                    'library' => [
+                        'id' => $lib->id,
+                        'name' => $lib->name,
+                        'description' => $lib->description,
+                        'thumbnailUrl' => $lib->thumbnail_url
+                    ],
+                    'confidence' => $alt['confidence']
+                ] : null;
+            })->filter()->values()->toArray();
+
+            return response()->json([
+                'message' => 'URL successfully categorized and added',
+                'selectedLibrary' => [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description,
+                    'thumbnailUrl' => $library->thumbnail_url,
+                    'coverImageUrl' => $library->cover_image_url
+                ],
+                'confidence' => $confidence,
+                'reasoning' => $reasoning,
+                'alternatives' => $alternativeLibraries,
+                'item' => [
+                    'id' => $existingUrl->id,
+                    'url' => $existingUrl->url,
+                    'title' => $existingUrl->title,
+                    'summary' => $existingUrl->summary,
+                    'notes' => $existingUrl->notes,
+                    'relevance_score' => max(0.5, $confidence)
+                ]
+            ], 201);
+
+        } catch (\Exception $e) {
+            Log::error('Smart add URL failed: ' . $e->getMessage(), [
+                'url' => $url,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Failed to categorize and add URL: ' . $e->getMessage()
             ], 500);
         }
     }

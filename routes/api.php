@@ -164,6 +164,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/library/{id}/urls', [OpenLibraryController::class, 'addUrl']); 
     Route::post('/libraries/{id}/url', [OpenLibraryController::class, 'addUrl']);
     Route::post('/library/{id}/url', [OpenLibraryController::class, 'addUrl']);
+    
+    // Smart URL addition with AI categorization
+    Route::post('/libraries/smart-add', [OpenLibraryController::class, 'smartAddUrl']);
+    Route::post('/library/smart-add', [OpenLibraryController::class, 'smartAddUrl']);
+    
     Route::delete('/libraries/{id}/urls', [OpenLibraryController::class, 'removeUrl']);
     Route::delete('/library/{id}/urls', [OpenLibraryController::class, 'removeUrl']);
     Route::delete('/libraries/{id}/url', [OpenLibraryController::class, 'removeUrl']);
