@@ -1182,16 +1182,18 @@ class OpenLibraryController extends Controller
             $library->increment('views_count');
             
             // Get follow status and followers count in one query
-            $followData = DB::table('library_follows')
+            // Use separate queries to avoid SQL injection and UUID quoting issues
+            $followersCount = DB::table('library_follows')
                 ->where('library_id', $library->id)
-                ->select(
-                    DB::raw('count(*) as followers_count'),
-                    $userId ? DB::raw("max(case when user_id = {$userId} then 1 else 0 end) as is_following") : DB::raw('0 as is_following')
-                )
-                ->first();
+                ->count();
             
-            $isFollowing = $followData && $followData->is_following > 0;
-            $followersCount = $followData ? $followData->followers_count : 0;
+            $isFollowing = false;
+            if ($userId) {
+                $isFollowing = DB::table('library_follows')
+                    ->where('library_id', $library->id)
+                    ->where('user_id', $userId)
+                    ->exists();
+            }
             
             // Get content with appropriate relationships - OPTIMIZED to avoid N+1 queries
             $contents = DB::table('library_content')
