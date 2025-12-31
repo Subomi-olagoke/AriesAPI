@@ -1783,7 +1783,7 @@ class OpenLibraryController extends Controller
             // Step 2: Get all approved libraries for categorization
             $query = OpenLibrary::select([
                 'id', 'name', 'description', 'keywords', 'criteria', 'thumbnail_url', 'cover_image_url'
-            ])->where('approved', true);
+            ])->where('is_approved', true);
 
             $libraries = $query->whereNull('deleted_at')->get()->map(function ($library) {
                 return [
