@@ -1866,12 +1866,13 @@ class OpenLibraryController extends Controller
             ]);
 
             // Step 7: Award points for adding content
-            $userId = Auth::id();
-            if ($userId) {
-                $this->alexPointsService->awardPoints(
-                    $userId,
-                    5, // Points for adding URL
+            $user = Auth::user();
+            if ($user) {
+                $this->alexPointsService->addPoints(
+                    $user,
                     'contributed_url',
+                    'library_url',
+                    $existingUrl->id,
                     "Added URL to library via smart categorization"
                 );
             }

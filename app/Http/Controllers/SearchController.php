@@ -33,29 +33,35 @@ class SearchController extends Controller
 
         $results = [];
 
-        // --- Users (relevance ranked) ---
+        // --- Users (relevance ranked with fuzzy matching) ---
         if ($requestedTypes->contains('user')) {
+            // Use the new GIN index on tsvector for fast full-text search
             $userVector = "to_tsvector('simple', coalesce(username,'') || ' ' || coalesce(first_name,'') || ' ' || coalesce(last_name,'') || ' ' || coalesce(email,''))";
-            $userRank = "ts_rank(" .
-                "(setweight(to_tsvector('simple', coalesce(username,'')), 'A') || " .
-                " setweight(to_tsvector('simple', coalesce(first_name,'') || ' ' || coalesce(last_name,'')), 'A') || " .
-                " setweight(to_tsvector('simple', coalesce(email,'')), 'B'))," .
-                " plainto_tsquery('simple', ?)" .
-            ")";
+            
+            // Enhanced ranking: exact matches get highest score, then fuzzy matches
+            $userRank = "CASE " .
+                "WHEN LOWER(username) = LOWER(?) THEN 10 " .
+                "WHEN LOWER(username) LIKE LOWER(?) THEN 8 " .
+                "WHEN CONCAT(LOWER(first_name), ' ', LOWER(last_name)) LIKE LOWER(?) THEN 7 " .
+                "ELSE ts_rank(" .
+                    "(setweight(to_tsvector('simple', coalesce(username,'')), 'A') || " .
+                    " setweight(to_tsvector('simple', coalesce(first_name,'') || ' ' || coalesce(last_name,'')), 'A') || " .
+                    " setweight(to_tsvector('simple', coalesce(email,'')), 'B'))," .
+                    " plainto_tsquery('simple', ?)" .
+                ") " .
+                "END";
 
             $users = User::select(['id', 'username', 'first_name', 'last_name', 'avatar', 'role', 'email', 'setup_completed'])
-                ->selectRaw("$userRank as rank", [$query])
+                ->selectRaw("$userRank as rank", [$query, $query.'%', '%'.$query.'%', $query])
                 ->where('is_banned', false)
                 ->where(function($q) use ($query, $userVector) {
-                    // Prefer full-text match, fall back to ILIKE
+                    // Use trigram indexes for fuzzy ILIKE matching
                     $q->whereRaw("$userVector @@ plainto_tsquery('simple', ?)", [$query])
-                      ->orWhere(function($inner) use ($query) {
-                          $inner->where('username', 'ILIKE', "%{$query}%")
-                                ->orWhere('first_name', 'ILIKE', "%{$query}%")
-                                ->orWhere('last_name', 'ILIKE', "%{$query}%")
-                                ->orWhereRaw("CONCAT(first_name, ' ', last_name) ILIKE ?", ["%{$query}%"])
-                                ->orWhere('email', 'ILIKE', "%{$query}%");
-                      });
+                      ->orWhere('username', 'ILIKE', "%{$query}%")
+                      ->orWhere('first_name', 'ILIKE', "%{$query}%")
+                      ->orWhere('last_name', 'ILIKE', "%{$query}%")
+                      ->orWhereRaw("CONCAT(first_name, ' ', last_name) ILIKE ?", ["%{$query}%"])
+                      ->orWhere('email', 'ILIKE', "%{$query}%");
                 })
                 ->orderByDesc('rank')
                 ->orderBy('username')
@@ -72,7 +78,6 @@ class SearchController extends Controller
                         'email' => $user->email,
                         'setup_completed' => $user->setup_completed,
                         'type' => 'user',
-                        // Pass rank to allow client-side ordering if needed
                         'score' => $user->rank ?? 0,
                     ];
                 });
@@ -80,28 +85,36 @@ class SearchController extends Controller
             $results = array_merge($results, $users->toArray());
         }
 
-        // --- Libraries (relevance ranked) ---
+        // --- Libraries (relevance ranked with exact match boost) ---
         if ($requestedTypes->contains('library')) {
-            // Note: keywords column may be JSON; avoid parsing issues by excluding it from the vector
+            // Use the new GIN index on tsvector for fast full-text search
             $libraryVector = "to_tsvector('simple', coalesce(name,'') || ' ' || coalesce(description,''))";
-            $libraryRank = "ts_rank(" .
-                "(setweight(to_tsvector('simple', coalesce(name,'')), 'A') || " .
-                " setweight(to_tsvector('simple', coalesce(description,'')), 'B'))," .
-                " plainto_tsquery('simple', ?)" .
-            ")";
+            
+            // Enhanced ranking: exact name matches first, then fuzzy matches
+            $libraryRank = "CASE " .
+                "WHEN LOWER(name) = LOWER(?) THEN 10 " .
+                "WHEN LOWER(name) LIKE LOWER(?) THEN 8 " .
+                "WHEN LOWER(description) LIKE LOWER(?) THEN 6 " .
+                "ELSE ts_rank(" .
+                    "(setweight(to_tsvector('simple', coalesce(name,'')), 'A') || " .
+                    " setweight(to_tsvector('simple', coalesce(description,'')), 'B'))," .
+                    " plainto_tsquery('simple', ?)" .
+                ") " .
+                "END";
 
             $libraries = DB::table('open_libraries')
                 ->select(['id', 'name', 'description', 'thumbnail_url', 'cover_image_url', 'type'])
-                ->selectRaw("$libraryRank as rank", [$query])
+                ->selectRaw("$libraryRank as rank", [$query, $query.'%', '%'.$query.'%', $query])
                 ->whereNull('deleted_at')
                 ->where('is_approved', true)
                 ->where(function($q) use ($query, $libraryVector) {
+                    // Use GIN indexes for both full-text and trigram search
                     $q->whereRaw("$libraryVector @@ plainto_tsquery('simple', ?)", [$query])
                       ->orWhere('name', 'ILIKE', "%{$query}%")
                       ->orWhere('description', 'ILIKE', "%{$query}%");
                 })
                 ->orderByDesc('rank')
-                ->orderByDesc('created_at')
+                ->orderByDesc('views_count')  // Popular libraries rank higher
                 ->limit($perTypeLimit)
                 ->get()
                 ->map(function($library) {
@@ -120,20 +133,29 @@ class SearchController extends Controller
             $results = array_merge($results, $libraries->toArray());
         }
 
-        // --- Readlists (relevance ranked) ---
+        // --- Readlists (relevance ranked with exact match boost) ---
         if ($requestedTypes->contains('readlist')) {
+            // Use the new GIN index on tsvector for fast full-text search
             $readlistVector = "to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(description,''))";
-            $readlistRank = "ts_rank(" .
-                "(setweight(to_tsvector('simple', coalesce(title,'')), 'A') || " .
-                " setweight(to_tsvector('simple', coalesce(description,'')), 'B'))," .
-                " plainto_tsquery('simple', ?)" .
-            ")";
+            
+            // Enhanced ranking: exact title matches first, then fuzzy matches
+            $readlistRank = "CASE " .
+                "WHEN LOWER(title) = LOWER(?) THEN 10 " .
+                "WHEN LOWER(title) LIKE LOWER(?) THEN 8 " .
+                "WHEN LOWER(description) LIKE LOWER(?) THEN 6 " .
+                "ELSE ts_rank(" .
+                    "(setweight(to_tsvector('simple', coalesce(title,'')), 'A') || " .
+                    " setweight(to_tsvector('simple', coalesce(description,'')), 'B'))," .
+                    " plainto_tsquery('simple', ?)" .
+                ") " .
+                "END";
 
             $readlists = DB::table('readlists')
                 ->select(['id', 'title', 'description', 'image_url', 'user_id'])
-                ->selectRaw("$readlistRank as rank", [$query])
+                ->selectRaw("$readlistRank as rank", [$query, $query.'%', '%'.$query.'%', $query])
                 ->where('is_public', true)
                 ->where(function($q) use ($query, $readlistVector) {
+                    // Use GIN indexes for both full-text and trigram search
                     $q->whereRaw("$readlistVector @@ plainto_tsquery('simple', ?)", [$query])
                       ->orWhere('title', 'ILIKE', "%{$query}%")
                       ->orWhere('description', 'ILIKE', "%{$query}%");
