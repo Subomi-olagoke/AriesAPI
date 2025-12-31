@@ -573,8 +573,61 @@ class OpenLibraryController extends Controller
                 ];
             };
             
+            // ========== CURATED SECTIONS MAPPING ==========
+            $curatedSections = [
+                'Technology & AI' => ['github', 'artificial intelligence', 'ai bubble', 'ai utilities', 'ai products', 'learning ai', 'machine learning', 'software engineering', 'product design', 'cybersecurity', 'quantum studies', 'quantum', 'chips', 'microprocessors', 'hugging face', 'nvidia'],
+                'Science and Environment' => ['biology', 'microbiology', 'neuroscience', 'human anatomy', 'anatomy', 'dna', 'genomics', 'veterinary', 'animal science', 'clinical medicine', 'surgery', 'cancer', 'autism', 'medical conditions', 'medical research', 'pharmacology', 'pharmacy', 'nursing', 'dentistry', 'dermatology', 'skin care', 'mental health', 'psychology', 'astronomy', 'astrophysics', 'oceanography', 'geology', 'meteorology', 'climate', 'natural disasters', 'disasters', 'space', 'rocket', 'solar engineering', 'aviation', 'wildlife', 'nature'],
+                'History and Society' => ['ww1', 'ww2', 'world war', 'cold war', 'europe', 'european politics', 'european culture', 'asia', 'asian politics', 'uk politics', 'middle east', 'migration', 'immigration', 'global conflicts', 'conflicts', 'global finance', 'economics', 'economies', 'entrepreneurship', 'business', 'management', 'ngo', 'legal', 'law', 'black culture', 'anthropology', 'theology', 'philosophy', 'journalism', 'languages'],
+                'Arts, Crafts, Media & Creativity' => ['graphic design', 'painting', 'art', 'filmmaking', 'photography', 'vfx', 'visual effects', 'ballet', 'classical music', 'music', 'poetry', 'creativity', 'fashion', 'make up', 'makeup', 'shoes', 'sneakers', 'watches', 'home decors', 'decors', 'jewelleries', 'jewelry', 'flowers', 'floristry', 'cakes', 'baking', 'pastry', 'pottery', 'fiber', 'textiles', 'crocheting', 'knitting', 'wood', 'woodworks'],
+                'Travel and Food' => ['travels', 'tourism', 'mountain', 'extreme sports', 'polo', 'cars', 'automobiles', 'global cuisines', 'cuisines', 'european food', 'asian cuisines', 'cakes', 'baking', 'pastry'],
+                'Specialized Knowledge & Research' => ['arxiv', 'science', 'tech research', 'research', 'engineering', 'systems', 'quantum studies', 'probability', 'statistics', 'machine learning', 'neuroscience', 'pharmacology', 'pharmacy', 'biology', 'microbiology', 'dna', 'genomics', 'climate', 'oceanography', 'nano science', 'nano tech', 'geology', 'solar engineering', 'maths', 'mathematics'],
+                'Hobbies & Crafts' => ['crocheting', 'knitting', 'pottery', 'fiber', 'textiles', 'painting', 'art', 'home decors', 'baking', 'pastry', 'gardening', 'floristry', 'disc jockeying', 'dj'],
+                'Entertainment & Pop Culture' => ['movies', 'cinema', 'anime', 'manga', 'youtube videos', 'youtube', 'disc jockeying', 'dj', 'mobile games', 'games'],
+                'Sports & Fitness' => ['f1', 'formula 1', 'boxing', 'mma', 'basketball', 'tennis', 'extreme sports', 'weight loss', 'fitness'],
+                'Mysteries & Curiosities' => ['unsolved mysteries', 'mysteries', 'astrology', 'it\'s interesting', 'interesting', 'youtube videos', 'youtube'],
+                'Crypto' => ['solana', 'base', 'eth', 'ethereum', 'prediction markets', 'crypto', 'blockchain', 'cryptocurrency'],
+                'Finance & Investment' => ['global finance', 'quant trading', 'trading', 'stocks', 'investing', 'equity', 'entrepreneurship', 'economics', 'economies', 'startups', 'african startups'],
+                'Philosophy & Thought' => ['philosophy', 'theology', 'psychology', 'creativity', 'anthropology'],
+                'Books' => ['book review', 'book', 'literature', 'poetry', 'reading'],
+                'World News and Geopolitics' => ['politics', 'political science', 'uk politics', 'asia', 'asian politics', 'europe', 'european politics', 'global conflicts', 'geopolitics', 'news']
+            ];
+            
+            // Fuzzy matching function
+            $matchLibraryToSection = function($libraryName, $keywords) {
+                $name = strtolower($libraryName);
+                foreach ($keywords as $keyword) {
+                    if (stripos($name, strtolower($keyword)) !== false) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            
             $sections = [];
             $usedLibraryIds = [];
+            
+            // Add curated sections first
+            foreach ($curatedSections as $sectionTitle => $keywords) {
+                $matchingLibraries = $allLibraries->filter(function ($lib) use ($matchLibraryToSection, $keywords, $followedLibraryIds) {
+                    if (in_array($lib->id, $followedLibraryIds)) return false;
+                    return $matchLibraryToSection($lib->name, $keywords);
+                })->take(10);
+                
+                if ($matchingLibraries->count() >= 3) {
+                    $formattedLibraries = $matchingLibraries->map($formatLibrary)->values()->toArray();
+                    $usedLibraryIds = array_merge($usedLibraryIds, $matchingLibraries->pluck('id')->toArray());
+                    
+                    $sections[] = [
+                        'id' => 'curated_' . strtolower(str_replace([' ', '&'], ['_', 'and'], $sectionTitle)),
+                        'title' => $sectionTitle,
+                        'type' => 'curated',
+                        'source_library_id' => null,
+                        'source_library_name' => null,
+                        'libraries' => $formattedLibraries
+                    ];
+                }
+            }
+            
             
             // ========== SECTION 1: FOR YOU ==========
             // Personalized recommendations based on followed libraries' keywords/categories
