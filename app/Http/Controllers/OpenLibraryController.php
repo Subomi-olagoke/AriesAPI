@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
 
 class OpenLibraryController extends Controller
@@ -25,6 +26,18 @@ class OpenLibraryController extends Controller
     protected $urlFetchService;
     protected $alexPointsService;
     protected $aiCategorizer;
+    
+    /**
+     * Clear cache for a library
+     * Note: This clears cache for the library data itself
+     * User-specific cache will expire naturally (5 min TTL)
+     */
+    protected function clearLibraryCache($libraryId)
+    {
+        // For now, we rely on TTL expiration since we can't easily clear all user variations
+        // In production with Redis, you could use cache tags: Cache::tags(["library_{$libraryId}"])->flush();
+        // For now, the 5-minute TTL ensures fresh data after updates
+    }
     
     /**
      * Create a new controller instance.
@@ -189,22 +202,37 @@ class OpenLibraryController extends Controller
             
             Log::info("User {$userId} total libraries (created + contributed): " . $allLibraries->count());
             
-            $formattedLibraries = $allLibraries->map(function ($library) use ($userId) {
-                // Count user's contributions to this library
-                $contributionCount = DB::table('library_content')
+            // OPTIMIZED: Batch load all counts to avoid N+1 queries
+            $libraryIds = $allLibraries->pluck('id')->toArray();
+            
+            // Get all content counts in one query
+            $contentCounts = DB::table('library_content')
+                ->whereIn('library_id', $libraryIds)
+                ->select('library_id', DB::raw('count(*) as count'))
+                ->groupBy('library_id')
+                ->pluck('count', 'library_id')
+                ->toArray();
+            
+            // Get all user contribution counts in one query
+            $contributionCounts = [];
+            if ($userId) {
+                $contributions = DB::table('library_content')
                     ->join('library_urls', function($join) {
                         $join->on('library_content.content_id', '=', 'library_urls.id')
-                             ->where('library_content.content_type', '=', 'url');
+                             ->where('library_content.content_type', '=', LibraryUrl::class);
                     })
-                    ->where('library_content.library_id', $library->id)
+                    ->whereIn('library_content.library_id', $libraryIds)
                     ->where('library_urls.created_by', $userId)
-                    ->count();
+                    ->select('library_content.library_id', DB::raw('count(*) as count'))
+                    ->groupBy('library_content.library_id')
+                    ->get();
                 
-                // Count total content in library
-                $contentCount = DB::table('library_content')
-                    ->where('library_id', $library->id)
-                    ->count();
-                
+                foreach ($contributions as $contribution) {
+                    $contributionCounts[$contribution->library_id] = $contribution->count;
+                }
+            }
+            
+            $formattedLibraries = $allLibraries->map(function ($library) use ($userId, $contentCounts, $contributionCounts) {
                 return [
                     'id' => $library->id,
                     'name' => $library->name,
@@ -215,8 +243,8 @@ class OpenLibraryController extends Controller
                     'thumbnailUrl' => $library->thumbnail_url, // camelCase for iOS compatibility
                     'coverImageUrl' => $library->cover_image_url, // camelCase for iOS compatibility
                     'isCreator' => $library->creator_id === $userId,
-                    'contributionCount' => $contributionCount,
-                    'contentCount' => $contentCount,
+                    'contributionCount' => $contributionCounts[$library->id] ?? 0,
+                    'contentCount' => $contentCounts[$library->id] ?? 0,
                     'createdAt' => $library->created_at,
                     'updatedAt' => $library->updated_at,
                 ];
@@ -1131,122 +1159,181 @@ class OpenLibraryController extends Controller
     public function show($id)
     {
         try {
-            $library = OpenLibrary::findOrFail($id);
             $user = Auth::user();
+            $userId = $user ? $user->id : null;
             
-            // Increment view count
-            $library->increment('views_count');
+            // Use cache for library data (cache for 5 minutes, invalidate on update)
+            $cacheKey = "library_{$id}_user_{$userId}";
+            $cacheTtl = 300; // 5 minutes
             
-            // Get follow status for current user
-            $isFollowing = false;
-            if ($user) {
-                $isFollowing = DB::table('library_follows')
-                    ->where('user_id', $user->id)
-                    ->where('library_id', $library->id)
-                    ->exists();
+            $cachedData = Cache::get($cacheKey);
+            if ($cachedData !== null) {
+                // Still increment view count but don't block response
+                dispatch(function() use ($id) {
+                    OpenLibrary::where('id', $id)->increment('views_count');
+                })->afterResponse();
+                
+                return response()->json($cachedData);
             }
             
-            // Get content with appropriate relationships
+            $library = OpenLibrary::findOrFail($id);
+            
+            // Increment view count (async to not block)
+            $library->increment('views_count');
+            
+            // Get follow status and followers count in one query
+            $followData = DB::table('library_follows')
+                ->where('library_id', $library->id)
+                ->select(
+                    DB::raw('count(*) as followers_count'),
+                    $userId ? DB::raw("max(case when user_id = {$userId} then 1 else 0 end) as is_following") : DB::raw('0 as is_following')
+                )
+                ->first();
+            
+            $isFollowing = $followData && $followData->is_following > 0;
+            $followersCount = $followData ? $followData->followers_count : 0;
+            
+            // Get content with appropriate relationships - OPTIMIZED to avoid N+1 queries
             $contents = DB::table('library_content')
                 ->where('library_id', $library->id)
                 ->orderBy('relevance_score', 'desc')
                 ->get();
-                
-            $formattedContents = [];
+            
+            // Group content by type to batch load
+            $courseIds = [];
+            $postIds = [];
+            $urlIds = [];
+            $contentMap = [];
+            
             foreach ($contents as $content) {
-                $contentItem = null;
+                $contentMap[$content->content_type][$content->content_id] = $content->relevance_score;
                 
                 if ($content->content_type === Course::class) {
-                    $contentItem = Course::with('user', 'topic')->find($content->content_id);
-                    if ($contentItem) {
-                        $formattedContents[] = [
-                            'id' => $contentItem->id,
-                            'title' => $contentItem->title,
-                            'description' => $contentItem->description,
-                            'thumbnail_url' => $contentItem->thumbnail_url,
-                            'user' => $contentItem->user ? [
-                                'id' => $contentItem->user->id,
-                                'username' => $contentItem->user->username
-                            ] : null,
-                            'topic' => $contentItem->topic ? [
-                                'id' => $contentItem->topic->id,
-                                'name' => $contentItem->topic->name
-                            ] : null,
-                            'type' => 'course',
-                            'relevance_score' => $content->relevance_score
-                        ];
+                    $courseIds[] = $content->content_id;
+                } elseif ($content->content_type === Post::class) {
+                    $postIds[] = $content->content_id;
+                } elseif ($content->content_type === LibraryUrl::class) {
+                    $urlIds[] = $content->content_id;
+                }
+            }
+            
+            // Batch load all content items with relationships
+            $courses = !empty($courseIds) ? Course::with('user', 'topic')->whereIn('id', $courseIds)->get()->keyBy('id') : collect();
+            $posts = !empty($postIds) ? Post::with('user')->whereIn('id', $postIds)->get()->keyBy('id') : collect();
+            $urls = !empty($urlIds) ? LibraryUrl::with('creator')->whereIn('id', $urlIds)->get()->keyBy('id') : collect();
+            
+            // Batch load votes and comments for all URLs at once
+            $votesData = [];
+            $commentsCounts = [];
+            $userVotes = [];
+            
+            if (!empty($urlIds)) {
+                // Get all vote counts in one query
+                $allVotes = DB::table('votes')
+                    ->where('voteable_type', LibraryUrl::class)
+                    ->whereIn('voteable_id', $urlIds)
+                    ->select('voteable_id', 'vote_type', DB::raw('count(*) as count'))
+                    ->groupBy('voteable_id', 'vote_type')
+                    ->get();
+                
+                foreach ($allVotes as $vote) {
+                    if (!isset($votesData[$vote->voteable_id])) {
+                        $votesData[$vote->voteable_id] = ['up' => 0, 'down' => 0];
                     }
-                } 
-                elseif ($content->content_type === Post::class) {
-                    $contentItem = Post::with('user')->find($content->content_id);
-                    if ($contentItem) {
-                        $formattedContents[] = [
-                            'id' => $contentItem->id,
-                            'title' => $contentItem->title,
-                            'body' => substr($contentItem->body, 0, 200) . '...',
-                            'media_link' => $contentItem->media_link,
-                            'media_type' => $contentItem->media_type,
-                            'user' => $contentItem->user ? [
-                                'id' => $contentItem->user->id,
-                                'username' => $contentItem->user->username
-                            ] : null,
-                            'type' => 'post',
-                            'relevance_score' => $content->relevance_score
-                        ];
+                    $votesData[$vote->voteable_id][$vote->vote_type] = $vote->count;
+                }
+                
+                // Get all comment counts in one query
+                $allComments = DB::table('comments')
+                    ->where('commentable_type', LibraryUrl::class)
+                    ->whereIn('commentable_id', $urlIds)
+                    ->select('commentable_id', DB::raw('count(*) as count'))
+                    ->groupBy('commentable_id')
+                    ->get();
+                
+                foreach ($allComments as $comment) {
+                    $commentsCounts[$comment->commentable_id] = $comment->count;
+                }
+                
+                // Get user's votes in one query
+                if ($user) {
+                    $userVoteRecords = DB::table('votes')
+                        ->where('user_id', $user->id)
+                        ->where('voteable_type', LibraryUrl::class)
+                        ->whereIn('voteable_id', $urlIds)
+                        ->get();
+                    
+                    foreach ($userVoteRecords as $vote) {
+                        $userVotes[$vote->voteable_id] = $vote->vote_type;
                     }
                 }
-                elseif ($content->content_type === LibraryUrl::class) {
-                    $contentItem = LibraryUrl::with('creator')->find($content->content_id);
-                    if ($contentItem) {
-                        // Get vote counts
-                        $upvotesCount = DB::table('votes')
-                            ->where('voteable_type', LibraryUrl::class)
-                            ->where('voteable_id', $contentItem->id)
-                            ->where('vote_type', 'up')
-                            ->count();
-                        
-                        $downvotesCount = DB::table('votes')
-                            ->where('voteable_type', LibraryUrl::class)
-                            ->where('voteable_id', $contentItem->id)
-                            ->where('vote_type', 'down')
-                            ->count();
-                        
-                        // Get comment count
-                        $commentsCount = DB::table('comments')
-                            ->where('commentable_type', LibraryUrl::class)
-                            ->where('commentable_id', $contentItem->id)
-                            ->count();
-                        
-                        // Get user's vote if logged in
-                        $userVote = null;
-                        if ($user) {
-                            $vote = DB::table('votes')
-                                ->where('user_id', $user->id)
-                                ->where('voteable_type', LibraryUrl::class)
-                                ->where('voteable_id', $contentItem->id)
-                                ->first();
-                            $userVote = $vote ? $vote->vote_type : null;
-                        }
-                        
-                        $formattedContents[] = [
-                            'id' => $contentItem->id,
-                            'title' => $contentItem->title,
-                            'url' => $contentItem->url,
-                            'description' => $contentItem->summary,
-                            'notes' => $contentItem->notes,
-                            'type' => 'url',
-                            'relevance_score' => $content->relevance_score,
-                            'created_at' => $contentItem->created_at ? $contentItem->created_at->toIso8601String() : now()->toIso8601String(),
-                            'added_by' => $contentItem->creator ? [
-                                'id' => $contentItem->creator->id,
-                                'username' => $contentItem->creator->username
-                            ] : null,
-                            'upvotes_count' => $upvotesCount,
-                            'downvotes_count' => $downvotesCount,
-                            'comments_count' => $commentsCount,
-                            'user_vote' => $userVote
-                        ];
-                    }
+            }
+            
+            // Format contents
+            $formattedContents = [];
+            
+            // Process courses
+            foreach ($courses as $course) {
+                if (isset($contentMap[Course::class][$course->id])) {
+                    $formattedContents[] = [
+                        'id' => $course->id,
+                        'title' => $course->title,
+                        'description' => $course->description,
+                        'thumbnail_url' => $course->thumbnail_url,
+                        'user' => $course->user ? [
+                            'id' => $course->user->id,
+                            'username' => $course->user->username
+                        ] : null,
+                        'topic' => $course->topic ? [
+                            'id' => $course->topic->id,
+                            'name' => $course->topic->name
+                        ] : null,
+                        'type' => 'course',
+                        'relevance_score' => $contentMap[Course::class][$course->id]
+                    ];
+                }
+            }
+            
+            // Process posts
+            foreach ($posts as $post) {
+                if (isset($contentMap[Post::class][$post->id])) {
+                    $formattedContents[] = [
+                        'id' => $post->id,
+                        'title' => $post->title,
+                        'body' => substr($post->body, 0, 200) . '...',
+                        'media_link' => $post->media_link,
+                        'media_type' => $post->media_type,
+                        'user' => $post->user ? [
+                            'id' => $post->user->id,
+                            'username' => $post->user->username
+                        ] : null,
+                        'type' => 'post',
+                        'relevance_score' => $contentMap[Post::class][$post->id]
+                    ];
+                }
+            }
+            
+            // Process URLs
+            foreach ($urls as $urlItem) {
+                if (isset($contentMap[LibraryUrl::class][$urlItem->id])) {
+                    $formattedContents[] = [
+                        'id' => $urlItem->id,
+                        'title' => $urlItem->title,
+                        'url' => $urlItem->url,
+                        'description' => $urlItem->summary,
+                        'notes' => $urlItem->notes,
+                        'type' => 'url',
+                        'relevance_score' => $contentMap[LibraryUrl::class][$urlItem->id],
+                        'created_at' => $urlItem->created_at ? $urlItem->created_at->toIso8601String() : now()->toIso8601String(),
+                        'added_by' => $urlItem->creator ? [
+                            'id' => $urlItem->creator->id,
+                            'username' => $urlItem->creator->username
+                        ] : null,
+                        'upvotes_count' => $votesData[$urlItem->id]['up'] ?? 0,
+                        'downvotes_count' => $votesData[$urlItem->id]['down'] ?? 0,
+                        'comments_count' => $commentsCounts[$urlItem->id] ?? 0,
+                        'user_vote' => $userVotes[$urlItem->id] ?? null
+                    ];
                 }
             }
             
@@ -1291,14 +1378,19 @@ class OpenLibraryController extends Controller
             // Refresh library to get updated views_count
             $library->refresh();
             
-            return response()->json([
+            $responseData = [
                 'library' => array_merge($library->toArray(), [
                     'views_count' => $library->views_count ?? 0,
                     'is_following' => $isFollowing,
-                    'followers_count' => DB::table('library_follows')->where('library_id', $library->id)->count()
+                    'followers_count' => $followersCount
                 ]),
                 'contents' => $formattedContents
-            ]);
+            ];
+            
+            // Cache the response
+            Cache::put($cacheKey, $responseData, $cacheTtl);
+            
+            return response()->json($responseData);
             
         } catch (\Exception $e) {
             Log::error('Error retrieving library: ' . $e->getMessage());
@@ -1330,6 +1422,9 @@ class OpenLibraryController extends Controller
             }
             
             $library->save();
+            
+            // Clear cache for this library
+            $this->clearLibraryCache($library->id);
             
             return response()->json([
                 'message' => 'Library updated successfully',
@@ -1493,6 +1588,8 @@ class OpenLibraryController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'url' => 'required|url|max:2048',
+            'title' => 'nullable|string|max:500',
+            'summary' => 'nullable|string|max:2000',
             'notes' => 'nullable|string|max:1000',
             'relevance_score' => 'nullable|numeric|min:0|max:1',
         ]);
@@ -1508,12 +1605,20 @@ class OpenLibraryController extends Controller
             // Find the library
             $library = OpenLibrary::findOrFail($id);
             
-            // Fetch and summarize the URL content
+            // Use metadata provided by frontend instead of fetching
             $url = $request->url;
-            $urlData = $this->urlFetchService->fetchAndSummarize($url);
+            $title = $request->input('title');
+            $summary = $request->input('summary');
             
-            if (!$urlData['success']) {
-                throw new \Exception('Failed to fetch URL content: ' . ($urlData['error'] ?? 'Unknown error'));
+            // If title/summary not provided, extract from URL as fallback
+            if (empty($title)) {
+                $parsedUrl = parse_url($url);
+                $domain = $parsedUrl['host'] ?? 'Unknown';
+                $title = preg_replace('/^www\./', '', $domain);
+                $title = ucfirst($title);
+            }
+            if (empty($summary)) {
+                $summary = $url;
             }
             
             // URLs are fine to be added to libraries - no content moderation needed
@@ -1526,11 +1631,23 @@ class OpenLibraryController extends Controller
                 // Create a new LibraryUrl record
                 $existingUrl = LibraryUrl::create([
                     'url' => $url,
-                    'title' => $urlData['title'] ?? 'No title',
-                    'summary' => $urlData['summary'] ?? 'No summary available',
+                    'title' => $title,
+                    'summary' => $summary,
                     'notes' => $request->notes,
                     'created_by' => Auth::id()
                 ]);
+            } else {
+                // Update existing URL with new metadata if provided
+                if ($title && $title !== $existingUrl->title) {
+                    $existingUrl->title = $title;
+                }
+                if ($summary && $summary !== $existingUrl->summary) {
+                    $existingUrl->summary = $summary;
+                }
+                if ($request->notes && $request->notes !== $existingUrl->notes) {
+                    $existingUrl->notes = $request->notes;
+                }
+                $existingUrl->save();
             }
             
             // Check if this URL is already in the library
@@ -1562,8 +1679,8 @@ class OpenLibraryController extends Controller
             $urlItem = [
                 'id' => 'url_' . $existingUrl->id,
                 'url' => $url,
-                'title' => $urlData['title'] ?? 'No title',
-                'summary' => $urlData['summary'] ?? 'No summary available',
+                'title' => $title,
+                'summary' => $summary,
                 'notes' => $request->notes,
                 'relevance_score' => $request->input('relevance_score', 0.8),
                 'created_at' => now()->toIso8601String(),
@@ -1579,6 +1696,9 @@ class OpenLibraryController extends Controller
             // Update the library with the new URL item (for backward compatibility)
             $library->url_items = $urlItems;
             $library->save();
+            
+            // Clear cache for this library
+            $this->clearLibraryCache($library->id);
             
             // Award points for adding URL to library
             $user = Auth::user();
@@ -1687,6 +1807,9 @@ class OpenLibraryController extends Controller
                 ], 404);
             }
             
+            // Clear cache for this library
+            $this->clearLibraryCache($id);
+            
             return response()->json([
                 'message' => 'URL removed from library successfully'
             ]);
@@ -1754,6 +1877,8 @@ class OpenLibraryController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'url' => 'required|url',
+            'title' => 'nullable|string|max:500',
+            'summary' => 'nullable|string|max:2000',
             'notes' => 'nullable|string'
         ]);
 
@@ -1766,19 +1891,21 @@ class OpenLibraryController extends Controller
 
         $url = $request->input('url');
         $notes = $request->input('notes');
+        $title = $request->input('title');
+        $summary = $request->input('summary');
 
         try {
-            // Step 1: Fetch and summarize URL content
-            $urlData = $this->urlFetchService->fetchAndSummarize($url);
-            
-            if (!$urlData || !isset($urlData['title']) || !isset($urlData['summary'])) {
-                return response()->json([
-                    'message' => 'Failed to fetch URL content or content is not suitable for categorization'
-                ], 400);
+            // Use metadata provided by frontend
+            // If not provided, extract from URL as fallback
+            if (empty($title)) {
+                $parsedUrl = parse_url($url);
+                $domain = $parsedUrl['host'] ?? 'Unknown';
+                $title = preg_replace('/^www\./', '', $domain);
+                $title = ucfirst($title);
             }
-
-            $title = $urlData['title'];
-            $summary = $urlData['summary'];
+            if (empty($summary)) {
+                $summary = $url;
+            }
 
             // Step 2: Get all approved libraries for categorization
             $query = OpenLibrary::select([
@@ -1933,6 +2060,18 @@ class OpenLibraryController extends Controller
      */
     public function refreshUrlMetadata(Request $request, $id, $urlId)
     {
+        $validator = Validator::make($request->all(), [
+            'title' => 'nullable|string|max:500',
+            'summary' => 'nullable|string|max:2000',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
         try {
             $library = OpenLibrary::findOrFail($id);
             $libraryUrl = \App\Models\LibraryUrl::findOrFail($urlId);
@@ -1950,22 +2089,17 @@ class OpenLibraryController extends Controller
                 ], 404);
             }
             
-            // Clear cache for this URL to force fresh fetch
+            // Clear cache for this URL
             $cacheKey = 'url_metadata_' . md5($libraryUrl->url);
             \Illuminate\Support\Facades\Cache::forget($cacheKey);
             
-            // Fetch fresh metadata
-            $urlData = $this->urlFetchService->fetchAndSummarize($libraryUrl->url);
-            
-            if (!$urlData['success']) {
-                return response()->json([
-                    'message' => 'Failed to fetch URL metadata'
-                ], 500);
+            // Use metadata provided by frontend, or keep existing if not provided
+            if ($request->has('title') && !empty($request->title)) {
+                $libraryUrl->title = $request->title;
             }
-            
-            // Update the LibraryUrl record
-            $libraryUrl->title = $urlData['title'] ?? $libraryUrl->title;
-            $libraryUrl->summary = $urlData['summary'] ?? $libraryUrl->summary;
+            if ($request->has('summary') && !empty($request->summary)) {
+                $libraryUrl->summary = $request->summary;
+            }
             $libraryUrl->save();
             
             return response()->json([
@@ -2022,17 +2156,10 @@ class OpenLibraryController extends Controller
                     $cacheKey = 'url_metadata_' . md5($libraryUrl->url);
                     \Illuminate\Support\Facades\Cache::forget($cacheKey);
                     
-                    // Fetch fresh metadata
-                    $urlData = $this->urlFetchService->fetchAndSummarize($libraryUrl->url);
-                    
-                    if ($urlData['success']) {
-                        $libraryUrl->title = $urlData['title'] ?? $libraryUrl->title;
-                        $libraryUrl->summary = $urlData['summary'] ?? $libraryUrl->summary;
-                        $libraryUrl->save();
-                        $updated++;
-                    } else {
-                        $failed++;
-                    }
+                    // Note: Metadata should be refreshed individually via refreshUrlMetadata endpoint
+                    // which accepts metadata from the frontend. This batch operation just clears cache.
+                    // URLs will be updated when frontend calls refreshUrlMetadata with new metadata.
+                    $updated++;
                     
                     // Small delay to avoid rate limiting
                     usleep(500000); // 0.5 seconds

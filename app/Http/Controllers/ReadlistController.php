@@ -820,6 +820,8 @@ class ReadlistController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'url' => 'required|url|max:2048',
+            'title' => 'nullable|string|max:500',
+            'summary' => 'nullable|string|max:2000',
             'order' => 'nullable|integer|min:0',
             'notes' => 'nullable|string|max:1000',
         ]);
@@ -850,12 +852,20 @@ class ReadlistController extends Controller
             
             DB::beginTransaction();
             
-            // Fetch and summarize the URL content
+            // Use metadata provided by frontend instead of fetching
             $url = $request->url;
-            $urlData = $this->urlFetchService->fetchAndSummarize($url);
+            $title = $request->input('title');
+            $summary = $request->input('summary');
             
-            if (!$urlData['success']) {
-                throw new \Exception('Failed to fetch URL content: ' . ($urlData['error'] ?? 'Unknown error'));
+            // If title/summary not provided, extract from URL as fallback
+            if (empty($title)) {
+                $parsedUrl = parse_url($url);
+                $domain = $parsedUrl['host'] ?? 'Unknown';
+                $title = preg_replace('/^www\./', '', $domain);
+                $title = ucfirst($title);
+            }
+            if (empty($summary)) {
+                $summary = $url;
             }
             
             // If no order specified, add to the end
@@ -877,8 +887,8 @@ class ReadlistController extends Controller
                 'notes' => $request->notes,
                 'type' => 'url',
                 'url' => $url,
-                'title' => $urlData['title'] ?? 'No title',
-                'description' => $urlData['summary'] ?? 'No description'
+                'title' => $title,
+                'description' => $summary
             ]);
             
             $readlistItem->save();
@@ -889,8 +899,8 @@ class ReadlistController extends Controller
                 'message' => 'URL added to readlist',
                 'readlist_item' => $readlistItem,
                 'url_data' => [
-                    'title' => $urlData['title'] ?? 'No title',
-                    'summary' => $urlData['summary'] ?? 'No description',
+                    'title' => $title,
+                    'summary' => $summary,
                     'url' => $url
                 ]
             ], 201);
