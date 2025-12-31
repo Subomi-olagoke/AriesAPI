@@ -175,6 +175,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/library/{id}/url', [OpenLibraryController::class, 'removeUrl']);
     Route::delete('/libraries/{id}/content', [OpenLibraryController::class, 'removeContent']);
     Route::delete('/library/{id}/content', [OpenLibraryController::class, 'removeContent']);
+    
+    // URL metadata refresh routes
+    Route::post('/libraries/{id}/urls/{urlId}/refresh', [OpenLibraryController::class, 'refreshUrlMetadata']);
+    Route::post('/libraries/{id}/refresh-all-urls', [OpenLibraryController::class, 'refreshAllUrlMetadata']);
 
     // Library Follow routes
     Route::post('/libraries/{id}/follow', [LibraryFollowController::class, 'followToggle']);

@@ -28,15 +28,47 @@ class UrlFetchService
      */
     public function fetchAndSummarize(string $url)
     {
-        // Skip all analysis and return an empty result to avoid messing up JSON structure
-        return [
-            'success' => true,
-            'url' => $url,
-            'title' => parse_url($url, PHP_URL_HOST) ?? 'URL',
-            'content' => '',
-            'summary' => '',
-            'source' => 'direct'
-        ];
+        // Check cache first
+        $cacheKey = 'url_metadata_' . md5($url);
+        
+        if (Cache::has($cacheKey)) {
+            Log::info('Returning cached URL metadata', ['url' => $url]);
+            return Cache::get($cacheKey);
+        }
+        
+        try {
+            // Try Exa service first
+            $result = $this->fetchWithExaService($url);
+            
+            if ($result['success']) {
+                Cache::put($cacheKey, $result, $this->cacheExpiration);
+                return $result;
+            }
+            
+            Log::info('Exa service failed, falling back to direct fetch', ['url' => $url]);
+            
+            // Fall back to direct fetch + AI summarization
+            $result = $this->fetchAndSummarizeDirectly($url);
+            Cache::put($cacheKey, $result, $this->cacheExpiration);
+            
+            return $result;
+            
+        } catch (Exception $e) {
+            Log::error('URL fetch failed', [
+                'url' => $url,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Return minimal data as fallback
+            return [
+                'success' => true,
+                'url' => $url,
+                'title' => parse_url($url, PHP_URL_HOST) ?? 'URL',
+                'content' => '',
+                'summary' => '',
+                'source' => 'fallback'
+            ];
+        }
     }
 
     /**

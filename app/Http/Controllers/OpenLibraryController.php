@@ -1927,4 +1927,136 @@ class OpenLibraryController extends Controller
         }
     }
     
+    /**
+     * Refresh metadata for a specific URL in a library
+     */
+    public function refreshUrlMetadata(Request $request, $id, $urlId)
+    {
+        try {
+            $library = OpenLibrary::findOrFail($id);
+            $libraryUrl = \App\Models\LibraryUrl::findOrFail($urlId);
+            
+            // Verify this URL belongs to this library
+            $inLibrary = DB::table('library_content')
+                ->where('library_id', $library->id)
+                ->where('content_id', $libraryUrl->id)
+                ->where('content_type', \App\Models\LibraryUrl::class)
+                ->exists();
+            
+            if (!$inLibrary) {
+                return response()->json([
+                    'message' => 'URL not found in this library'
+                ], 404);
+            }
+            
+            // Clear cache for this URL to force fresh fetch
+            $cacheKey = 'url_metadata_' . md5($libraryUrl->url);
+            \Illuminate\Support\Facades\Cache::forget($cacheKey);
+            
+            // Fetch fresh metadata
+            $urlData = $this->urlFetchService->fetchAndSummarize($libraryUrl->url);
+            
+            if (!$urlData['success']) {
+                return response()->json([
+                    'message' => 'Failed to fetch URL metadata'
+                ], 500);
+            }
+            
+            // Update the LibraryUrl record
+            $libraryUrl->title = $urlData['title'] ?? $libraryUrl->title;
+            $libraryUrl->summary = $urlData['summary'] ?? $libraryUrl->summary;
+            $libraryUrl->save();
+            
+            return response()->json([
+                'message' => 'URL metadata refreshed successfully',
+                'url' => [
+                    'id' => $libraryUrl->id,
+                    'url' => $libraryUrl->url,
+                    'title' => $libraryUrl->title,
+                    'summary' => $libraryUrl->summary
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Refresh URL metadata failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to refresh URL metadata: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Refresh metadata for all URLs in a library
+     */
+    public function refreshAllUrlMetadata($id)
+    {
+        try {
+            $library = OpenLibrary::findOrFail($id);
+            
+            // Get all URLs in this library
+            $urls = DB::table('library_content')
+                ->where('library_id', $library->id)
+                ->where('content_type', \App\Models\LibraryUrl::class)
+                ->get();
+            
+            if ($urls->isEmpty()) {
+                return response()->json([
+                    'message' => 'No URLs found in this library'
+                ], 404);
+            }
+            
+            $updated = 0;
+            $failed = 0;
+            
+            foreach ($urls as $urlRelation) {
+                try {
+                    $libraryUrl = \App\Models\LibraryUrl::find($urlRelation->content_id);
+                    
+                    if (!$libraryUrl) {
+                        $failed++;
+                        continue;
+                    }
+                    
+                    // Clear cache
+                    $cacheKey = 'url_metadata_' . md5($libraryUrl->url);
+                    \Illuminate\Support\Facades\Cache::forget($cacheKey);
+                    
+                    // Fetch fresh metadata
+                    $urlData = $this->urlFetchService->fetchAndSummarize($libraryUrl->url);
+                    
+                    if ($urlData['success']) {
+                        $libraryUrl->title = $urlData['title'] ?? $libraryUrl->title;
+                        $libraryUrl->summary = $urlData['summary'] ?? $libraryUrl->summary;
+                        $libraryUrl->save();
+                        $updated++;
+                    } else {
+                        $failed++;
+                    }
+                    
+                    // Small delay to avoid rate limiting
+                    usleep(500000); // 0.5 seconds
+                    
+                } catch (\Exception $e) {
+                    Log::error('Failed to refresh URL: ' . $e->getMessage(), [
+                        'url_id' => $urlRelation->content_id
+                    ]);
+                    $failed++;
+                }
+            }
+            
+            return response()->json([
+                'message' => 'Metadata refresh completed',
+                'updated' => $updated,
+                'failed' => $failed,
+                'total' => $urls->count()
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Refresh all URL metadata failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to refresh URL metadata: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
 }
