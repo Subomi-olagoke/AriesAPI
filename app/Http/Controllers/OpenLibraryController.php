@@ -1240,9 +1240,11 @@ class OpenLibraryController extends Controller
                 $contentId = $content->content_id;
                 
                 // Store the relationship to verify content belongs to THIS library
+                // IMPORTANT: notes are stored in library_content, not in the content items themselves
                 $contentRelationships[$contentType][$contentId] = [
                     'relevance_score' => $content->relevance_score,
-                    'library_content_id' => $content->id // The library_content table row ID
+                    'library_content_id' => $content->id, // The library_content table row ID
+                    'notes' => $content->notes // Per-library notes from library_content table
                 ];
                 
                 if ($contentType === Course::class) {
@@ -1382,7 +1384,7 @@ class OpenLibraryController extends Controller
                         'title' => $urlItem->title,
                         'url' => $urlItem->url,
                         'description' => $urlItem->summary,
-                        'notes' => $urlItem->notes,
+                        'notes' => $contentRelationships[LibraryUrl::class][$urlItem->id]['notes'] ?? null, // Per-library notes from library_content
                         'type' => 'url',
                         'relevance_score' => $contentRelationships[LibraryUrl::class][$urlItem->id]['relevance_score'],
                         'created_at' => $urlItem->created_at ? $urlItem->created_at->toIso8601String() : now()->toIso8601String(),
@@ -1725,12 +1727,13 @@ class OpenLibraryController extends Controller
                 ], 400);
             }
             
-            // Add to library content table with the appropriate relevance score
+            // Add to library content table with the appropriate relevance score AND notes
             DB::table('library_content')->insert([
                 'library_id' => $library->id,
                 'content_id' => $existingUrl->id,
                 'content_type' => LibraryUrl::class,
                 'relevance_score' => $request->input('relevance_score', 0.8),
+                'notes' => $request->notes, // Store per-library notes here
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
