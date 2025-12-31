@@ -1205,24 +1205,56 @@ class OpenLibraryController extends Controller
             $courseIds = [];
             $postIds = [];
             $urlIds = [];
-            $contentMap = [];
             
+            // Build content relationships map - tracks which content belongs to THIS library
+            $contentRelationships = []; // Track which content belongs to this library
             foreach ($contents as $content) {
-                $contentMap[$content->content_type][$content->content_id] = $content->relevance_score;
+                $contentType = $content->content_type;
+                $contentId = $content->content_id;
                 
-                if ($content->content_type === Course::class) {
-                    $courseIds[] = $content->content_id;
-                } elseif ($content->content_type === Post::class) {
-                    $postIds[] = $content->content_id;
-                } elseif ($content->content_type === LibraryUrl::class) {
-                    $urlIds[] = $content->content_id;
+                // Store the relationship to verify content belongs to THIS library
+                $contentRelationships[$contentType][$contentId] = [
+                    'relevance_score' => $content->relevance_score,
+                    'library_content_id' => $content->id // The library_content table row ID
+                ];
+                
+                if ($contentType === Course::class) {
+                    $courseIds[] = $contentId;
+                } elseif ($contentType === Post::class) {
+                    $postIds[] = $contentId;
+                } elseif ($contentType === LibraryUrl::class) {
+                    $urlIds[] = $contentId;
                 }
             }
             
             // Batch load all content items with relationships
-            $courses = !empty($courseIds) ? Course::with('user', 'topic')->whereIn('id', $courseIds)->get()->keyBy('id') : collect();
-            $posts = !empty($postIds) ? Post::with('user')->whereIn('id', $postIds)->get()->keyBy('id') : collect();
-            $urls = !empty($urlIds) ? LibraryUrl::with('creator')->whereIn('id', $urlIds)->get()->keyBy('id') : collect();
+            // Only load items that are actually in this library's content list
+            $courses = !empty($courseIds) ? Course::with('user', 'topic')
+                ->whereIn('id', $courseIds)
+                ->get()
+                ->filter(function($course) use ($contentRelationships) {
+                    // Verify this course is actually linked to this library
+                    return isset($contentRelationships[Course::class][$course->id]);
+                })
+                ->keyBy('id') : collect();
+                
+            $posts = !empty($postIds) ? Post::with('user')
+                ->whereIn('id', $postIds)
+                ->get()
+                ->filter(function($post) use ($contentRelationships) {
+                    // Verify this post is actually linked to this library
+                    return isset($contentRelationships[Post::class][$post->id]);
+                })
+                ->keyBy('id') : collect();
+                
+            $urls = !empty($urlIds) ? LibraryUrl::with('creator')
+                ->whereIn('id', $urlIds)
+                ->get()
+                ->filter(function($url) use ($contentRelationships) {
+                    // Verify this URL is actually linked to this library
+                    return isset($contentRelationships[LibraryUrl::class][$url->id]);
+                })
+                ->keyBy('id') : collect();
             
             // Batch load votes and comments for all URLs at once
             $votesData = [];
@@ -1274,9 +1306,9 @@ class OpenLibraryController extends Controller
             // Format contents
             $formattedContents = [];
             
-            // Process courses
+            // Process courses - only include items verified to be in this library
             foreach ($courses as $course) {
-                if (isset($contentMap[Course::class][$course->id])) {
+                if (isset($contentRelationships[Course::class][$course->id])) {
                     $formattedContents[] = [
                         'id' => $course->id,
                         'title' => $course->title,
@@ -1291,14 +1323,14 @@ class OpenLibraryController extends Controller
                             'name' => $course->topic->name
                         ] : null,
                         'type' => 'course',
-                        'relevance_score' => $contentMap[Course::class][$course->id]
+                        'relevance_score' => $contentRelationships[Course::class][$course->id]['relevance_score']
                     ];
                 }
             }
             
-            // Process posts
+            // Process posts - only include items verified to be in this library
             foreach ($posts as $post) {
-                if (isset($contentMap[Post::class][$post->id])) {
+                if (isset($contentRelationships[Post::class][$post->id])) {
                     $formattedContents[] = [
                         'id' => $post->id,
                         'title' => $post->title,
@@ -1310,14 +1342,14 @@ class OpenLibraryController extends Controller
                             'username' => $post->user->username
                         ] : null,
                         'type' => 'post',
-                        'relevance_score' => $contentMap[Post::class][$post->id]
+                        'relevance_score' => $contentRelationships[Post::class][$post->id]['relevance_score']
                     ];
                 }
             }
             
-            // Process URLs
+            // Process URLs - only include items verified to be in this library
             foreach ($urls as $urlItem) {
-                if (isset($contentMap[LibraryUrl::class][$urlItem->id])) {
+                if (isset($contentRelationships[LibraryUrl::class][$urlItem->id])) {
                     $formattedContents[] = [
                         'id' => $urlItem->id,
                         'title' => $urlItem->title,
@@ -1325,7 +1357,7 @@ class OpenLibraryController extends Controller
                         'description' => $urlItem->summary,
                         'notes' => $urlItem->notes,
                         'type' => 'url',
-                        'relevance_score' => $contentMap[LibraryUrl::class][$urlItem->id],
+                        'relevance_score' => $contentRelationships[LibraryUrl::class][$urlItem->id]['relevance_score'],
                         'created_at' => $urlItem->created_at ? $urlItem->created_at->toIso8601String() : now()->toIso8601String(),
                         'added_by' => $urlItem->creator ? [
                             'id' => $urlItem->creator->id,
