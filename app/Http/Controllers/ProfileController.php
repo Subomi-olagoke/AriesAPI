@@ -216,15 +216,23 @@ class ProfileController extends Controller
         // Prepare educator profile data if user is an educator
         $educatorProfile = null;
         if ($user->role === User::ROLE_EDUCATOR && $user->profile) {
-            // Get ratings data
-            $ratingsReceived = $user->ratingsReceived()
-                ->with('user:id,username,first_name,last_name,avatar')
-                ->orderBy('created_at', 'desc')
-                ->limit(5)
-                ->get();
-                
-            $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
-            $ratingsCount = $user->ratingsReceived()->count();
+            // Check if educator_ratings table exists before querying
+            if (\Illuminate\Support\Facades\Schema::hasTable('educator_ratings')) {
+                // Get ratings data
+                $ratingsReceived = $user->ratingsReceived()
+                    ->with('user:id,username,first_name,last_name,avatar')
+                    ->orderBy('created_at', 'desc')
+                    ->limit(5)
+                    ->get();
+                    
+                $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
+                $ratingsCount = $user->ratingsReceived()->count();
+            } else {
+                // Table doesn't exist, use default values
+                $ratingsReceived = collect([]);
+                $averageRating = 0;
+                $ratingsCount = 0;
+            }
             
             // Format educator profile according to iOS structure
             $educatorProfile = [
@@ -404,15 +412,23 @@ class ProfileController extends Controller
         // Prepare educator profile data if user is an educator
         $educatorProfile = null;
         if ($user->role === User::ROLE_EDUCATOR && $profile) {
-            // Get ratings data
-            $ratingsReceived = $user->ratingsReceived()
-                ->with('user:id,username,first_name,last_name,avatar')
-                ->orderBy('created_at', 'desc')
-                ->limit(5)
-                ->get();
-                
-            $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
-            $ratingsCount = $user->ratingsReceived()->count();
+            // Check if educator_ratings table exists before querying
+            if (\Illuminate\Support\Facades\Schema::hasTable('educator_ratings')) {
+                // Get ratings data
+                $ratingsReceived = $user->ratingsReceived()
+                    ->with('user:id,username,first_name,last_name,avatar')
+                    ->orderBy('created_at', 'desc')
+                    ->limit(5)
+                    ->get();
+                    
+                $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
+                $ratingsCount = $user->ratingsReceived()->count();
+            } else {
+                // Table doesn't exist, use default values
+                $ratingsReceived = collect([]);
+                $averageRating = 0;
+                $ratingsCount = 0;
+            }
             
             // Format educator profile according to iOS structure
             $educatorProfile = [
@@ -508,15 +524,23 @@ class ProfileController extends Controller
         // Prepare educator profile data if user is an educator
         $educatorProfile = null;
         if ($user->role === User::ROLE_EDUCATOR && $profile) {
-            // Get ratings data
-            $ratingsReceived = $user->ratingsReceived()
-                ->with('user:id,username,first_name,last_name,avatar')
-                ->orderBy('created_at', 'desc')
-                ->limit(5)
-                ->get();
-                
-            $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
-            $ratingsCount = $user->ratingsReceived()->count();
+            // Check if educator_ratings table exists before querying
+            if (\Illuminate\Support\Facades\Schema::hasTable('educator_ratings')) {
+                // Get ratings data
+                $ratingsReceived = $user->ratingsReceived()
+                    ->with('user:id,username,first_name,last_name,avatar')
+                    ->orderBy('created_at', 'desc')
+                    ->limit(5)
+                    ->get();
+                    
+                $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
+                $ratingsCount = $user->ratingsReceived()->count();
+            } else {
+                // Table doesn't exist, use default values
+                $ratingsReceived = collect([]);
+                $averageRating = 0;
+                $ratingsCount = 0;
+            }
             
             // Format educator profile according to iOS structure
             $educatorProfile = [
@@ -606,15 +630,23 @@ class ProfileController extends Controller
         // Prepare educator profile data if user is an educator
         $educatorProfile = null;
         if ($user->role === User::ROLE_EDUCATOR) {
-            // Get ratings data
-            $ratingsReceived = $user->ratingsReceived()
-                ->with('user:id,username,first_name,last_name,avatar')
-                ->orderBy('created_at', 'desc')
-                ->limit(5)
-                ->get();
-                
-            $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
-            $ratingsCount = $user->ratingsReceived()->count();
+            // Check if educator_ratings table exists before querying
+            if (\Illuminate\Support\Facades\Schema::hasTable('educator_ratings')) {
+                // Get ratings data
+                $ratingsReceived = $user->ratingsReceived()
+                    ->with('user:id,username,first_name,last_name,avatar')
+                    ->orderBy('created_at', 'desc')
+                    ->limit(5)
+                    ->get();
+                    
+                $averageRating = $user->ratingsReceived()->avg('rating') ?? 0;
+                $ratingsCount = $user->ratingsReceived()->count();
+            } else {
+                // Table doesn't exist, use default values
+                $ratingsReceived = collect([]);
+                $averageRating = 0;
+                $ratingsCount = 0;
+            }
             
             // Format educator profile according to iOS structure
             $educatorProfile = [
