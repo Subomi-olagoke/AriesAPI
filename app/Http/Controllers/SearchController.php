@@ -106,7 +106,7 @@ class SearchController extends Controller
                 ->select(['id', 'name', 'description', 'thumbnail_url', 'cover_image_url', 'type'])
                 ->selectRaw("$libraryRank as rank", [$query, $query.'%', '%'.$query.'%', $query])
                 ->whereNull('deleted_at')
-                ->where('is_approved', true)
+                // Removed is_approved filter - now searches ALL libraries (approved, pending, rejected)
                 ->where(function($q) use ($query, $libraryVector) {
                     // Use GIN indexes for both full-text and trigram search
                     $q->whereRaw("$libraryVector @@ plainto_tsquery('simple', ?)", [$query])
@@ -153,7 +153,7 @@ class SearchController extends Controller
             $readlists = DB::table('readlists')
                 ->select(['id', 'title', 'description', 'image_url', 'user_id'])
                 ->selectRaw("$readlistRank as rank", [$query, $query.'%', '%'.$query.'%', $query])
-                ->where('is_public', true)
+                // Removed is_public filter - now searches ALL readlists (public and private)
                 ->where(function($q) use ($query, $readlistVector) {
                     // Use GIN indexes for both full-text and trigram search
                     $q->whereRaw("$readlistVector @@ plainto_tsquery('simple', ?)", [$query])
