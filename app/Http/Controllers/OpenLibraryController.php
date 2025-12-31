@@ -602,21 +602,48 @@ class OpenLibraryController extends Controller
             };
             
             // ========== CURATED SECTIONS MAPPING ==========
+            // Ordered as per user preference
             $curatedSections = [
+                // 1. Technology & AI
                 'Technology & AI' => ['github', 'artificial intelligence', 'ai bubble', 'ai utilities', 'ai products', 'learning ai', 'machine learning', 'software engineering', 'product design', 'cybersecurity', 'quantum studies', 'quantum', 'chips', 'microprocessors', 'hugging face', 'nvidia'],
+                
+                // 2. Science and Environment
                 'Science and Environment' => ['biology', 'microbiology', 'neuroscience', 'human anatomy', 'anatomy', 'dna', 'genomics', 'veterinary', 'animal science', 'clinical medicine', 'surgery', 'cancer', 'autism', 'medical conditions', 'medical research', 'pharmacology', 'pharmacy', 'nursing', 'dentistry', 'dermatology', 'skin care', 'mental health', 'psychology', 'astronomy', 'astrophysics', 'oceanography', 'geology', 'meteorology', 'climate', 'natural disasters', 'disasters', 'space', 'rocket', 'solar engineering', 'aviation', 'wildlife', 'nature'],
+                
+                // 3. History and Society
                 'History and Society' => ['ww1', 'ww2', 'world war', 'cold war', 'europe', 'european politics', 'european culture', 'asia', 'asian politics', 'uk politics', 'middle east', 'migration', 'immigration', 'global conflicts', 'conflicts', 'global finance', 'economics', 'economies', 'entrepreneurship', 'business', 'management', 'ngo', 'legal', 'law', 'black culture', 'anthropology', 'theology', 'philosophy', 'journalism', 'languages'],
+                
+                // 4. Arts, Crafts, Media & Creativity
                 'Arts, Crafts, Media & Creativity' => ['graphic design', 'painting', 'art', 'filmmaking', 'photography', 'vfx', 'visual effects', 'ballet', 'classical music', 'music', 'poetry', 'creativity', 'fashion', 'make up', 'makeup', 'shoes', 'sneakers', 'watches', 'home decors', 'decors', 'jewelleries', 'jewelry', 'flowers', 'floristry', 'cakes', 'baking', 'pastry', 'pottery', 'fiber', 'textiles', 'crocheting', 'knitting', 'wood', 'woodworks'],
+                
+                // 5. Travel and Food
                 'Travel and Food' => ['travels', 'tourism', 'mountain', 'extreme sports', 'polo', 'cars', 'automobiles', 'global cuisines', 'cuisines', 'european food', 'asian cuisines', 'cakes', 'baking', 'pastry'],
-                'Specialized Knowledge & Research' => ['arxiv', 'science', 'tech research', 'research', 'engineering', 'systems', 'quantum studies', 'probability', 'statistics', 'machine learning', 'neuroscience', 'pharmacology', 'pharmacy', 'biology', 'microbiology', 'dna', 'genomics', 'climate', 'oceanography', 'nano science', 'nano tech', 'geology', 'solar engineering', 'maths', 'mathematics'],
+                
+                // 6. Hobbies & Crafts
                 'Hobbies & Crafts' => ['crocheting', 'knitting', 'pottery', 'fiber', 'textiles', 'painting', 'art', 'home decors', 'baking', 'pastry', 'gardening', 'floristry', 'disc jockeying', 'dj'],
+                
+                // 7. Entertainment & Pop Culture
                 'Entertainment & Pop Culture' => ['movies', 'cinema', 'anime', 'manga', 'youtube videos', 'youtube', 'disc jockeying', 'dj', 'mobile games', 'games'],
+                
+                // 8. Sports & Fitness
                 'Sports & Fitness' => ['f1', 'formula 1', 'boxing', 'mma', 'basketball', 'tennis', 'extreme sports', 'weight loss', 'fitness'],
+                
+                // 9. Mysteries & Curiosities
                 'Mysteries & Curiosities' => ['unsolved mysteries', 'mysteries', 'astrology', 'it\'s interesting', 'interesting', 'youtube videos', 'youtube'],
+                
+                // 10. Crypto
                 'Crypto' => ['solana', 'base', 'eth', 'ethereum', 'prediction markets', 'crypto', 'blockchain', 'cryptocurrency'],
+                
+                // 11. Finance & Investment
                 'Finance & Investment' => ['global finance', 'quant trading', 'trading', 'stocks', 'investing', 'equity', 'entrepreneurship', 'economics', 'economies', 'startups', 'african startups'],
+                
+                // 12. Philosophy & Thought
                 'Philosophy & Thought' => ['philosophy', 'theology', 'psychology', 'creativity', 'anthropology'],
+                
+                // 13. Books
                 'Books' => ['book review', 'book', 'literature', 'poetry', 'reading'],
+                
+                // 14. World News and Geopolitics
                 'World News and Geopolitics' => ['politics', 'political science', 'uk politics', 'asia', 'asian politics', 'europe', 'european politics', 'global conflicts', 'geopolitics', 'news']
             ];
             
