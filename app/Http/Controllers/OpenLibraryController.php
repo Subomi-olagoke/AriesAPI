@@ -1840,50 +1840,11 @@ class OpenLibraryController extends Controller
                 'updated_at' => now()
             ]);
             
-            // For backward compatibility, also maintain the url_items field
-            // This can be removed in a future version after all clients are updated
-            $urlItem = [
-                'id' => 'url_' . $existingUrl->id,
-                'url' => $url,
-                'title' => $title,
-                'summary' => $summary,
-                'notes' => $request->notes,
-                'relevance_score' => $request->input('relevance_score', 0.8),
-                'created_at' => now()->toIso8601String(),
-                'updated_at' => now()->toIso8601String()
-            ];
-            
-            // Get current URL items or initialize empty array
-            $urlItems = $library->url_items ?? [];
-            
-            // Add new URL item
-            $urlItems[] = $urlItem;
-            
-            // Update the library with the new URL item (for backward compatibility)
-            $library->url_items = $urlItems;
-            $library->save();
-            
-            // Clear cache for this library
+            // Clear cache for this library (can be async in future)
             $this->clearLibraryCache($library->id);
             
-            // Award points for adding URL to library
-            $user = Auth::user();
-            if ($user) {
-                try {
-                    $this->alexPointsService->addPoints(
-                        $user,
-                        'add_url',
-                        LibraryUrl::class,
-                        $existingUrl->id,
-                        "Added URL to library: {$library->name}"
-                    );
-                } catch (\Exception $e) {
-                    // Log but don't fail the request if points fail
-                    Log::warning('Failed to award points for adding URL: ' . $e->getMessage());
-                }
-            }
-            
-            return response()->json([
+            // Prepare response data first (before async points)
+            $responseData = [
                 'message' => 'URL added to library successfully',
                 'item' => [
                     'id' => $existingUrl->id,
@@ -1896,7 +1857,36 @@ class OpenLibraryController extends Controller
                     'updated_at' => $existingUrl->updated_at,
                     'type' => 'url'
                 ]
-            ], 201);
+            ];
+            
+            // Award points asynchronously (don't block response)
+            $user = Auth::user();
+            if ($user) {
+                // Capture service instance for closure
+                $pointsService = $this->alexPointsService;
+                
+                // Dispatch async job or run in background
+                try {
+                    dispatch(function() use ($user,  $library, $existingUrl, $pointsService) {
+                        try {
+                            $pointsService->addPoints(
+                                $user,
+                                'add_url',
+                                LibraryUrl::class,
+                                $existingUrl->id,
+                                "Added URL to library: {$library->name}"
+                            );
+                        } catch (\Exception $e) {
+                            Log::warning('Failed to award points for adding URL: ' . $e->getMessage());
+                        }
+                    });
+                } catch (\Exception $e) {
+                    // If dispatch fails, just log it
+                    Log::warning('Failed to dispatch points job: ' . $e->getMessage());
+                }
+            }
+            
+            return response()->json($responseData, 201);
             
         } catch (\Exception $e) {
             Log::error('Adding URL to library failed: ' . $e->getMessage(), [
@@ -2173,24 +2163,17 @@ class OpenLibraryController extends Controller
                 'updated_at' => now()
             ]);
 
-            // Step 7: Award points for adding content
-            $user = Auth::user();
-            if ($user) {
-                $this->alexPointsService->addPoints(
-                    $user,
-                    'contributed_url',
-                    'library_url',
-                    $existingUrl->id,
-                    "Added URL to library via smart categorization"
-                );
-            }
-
-            // Step 8: Get the full library details for response
+            // Step 7: Get the full library details for response
             $library = OpenLibrary::find($selectedLibraryId);
 
-            // Map alternatives to include full library details
-            $alternativeLibraries = collect($alternatives)->map(function ($alt) {
-                $lib = OpenLibrary::find($alt['library_id']);
+            // Map alternatives to include full library details (batch load)
+            $alternativeIds = collect($alternatives)->pluck('library_id')->toArray();
+            $alternativeLibrariesMap = OpenLibrary::whereIn('id', $alternativeIds)
+                ->get()
+                ->keyBy('id');
+            
+            $alternativeLibraries = collect($alternatives)->map(function ($alt) use ($alternativeLibrariesMap) {
+                $lib = $alternativeLibrariesMap->get($alt['library_id']);
                 return $lib ? [
                     'library' => [
                         'id' => $lib->id,
@@ -2201,8 +2184,9 @@ class OpenLibraryController extends Controller
                     'confidence' => $alt['confidence']
                 ] : null;
             })->filter()->values()->toArray();
-
-            return response()->json([
+            
+            // Prepare response data
+            $responseData = [
                 'message' => 'URL successfully categorized and added',
                 'selectedLibrary' => [
                     'id' => $library->id,
@@ -2222,7 +2206,32 @@ class OpenLibraryController extends Controller
                     'notes' => $existingUrl->notes,
                     'relevance_score' => max(0.5, $confidence)
                 ]
-            ], 201);
+            ];
+
+            // Award points asynchronously (don't block response)
+            $user = Auth::user();
+            if ($user) {
+                $pointsService = $this->alexPointsService;
+                try {
+                    dispatch(function() use ($user, $existingUrl, $pointsService) {
+                        try {
+                            $pointsService->addPoints(
+                                $user,
+                                'contributed_url',
+                                'library_url',
+                                $existingUrl->id,
+                                "Added URL to library via smart categorization"
+                            );
+                        } catch (\Exception $e) {
+                            Log::warning('Failed to award points: ' . $e->getMessage());
+                        }
+                    });
+                } catch (\Exception $e) {
+                    Log::warning('Failed to dispatch points job: ' . $e->getMessage());
+                }
+            }
+
+            return response()->json($responseData, 201);
 
         } catch (\Exception $e) {
             Log::error('Smart add URL failed: ' . $e->getMessage(), [
