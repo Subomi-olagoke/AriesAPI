@@ -1509,6 +1509,13 @@ class OpenLibraryController extends Controller
     {
         $library = OpenLibrary::findOrFail($id);
         
+        // Check if user owns the library or is an admin
+        if (auth()->id() !== $library->user_id && !auth()->user()->isAdmin) {
+            return response()->json([
+                'message' => 'You do not have permission to delete this library'
+            ], 403);
+        }
+        
         try {
             // Delete all content associations first
             DB::table('library_content')
@@ -1828,6 +1835,14 @@ class OpenLibraryController extends Controller
         try {
             // Find the library
             $library = OpenLibrary::findOrFail($id);
+            
+            // Check if user owns the library or is an admin
+            if (auth()->id() !== $library->user_id && !auth()->user()->isAdmin) {
+                return response()->json([
+                    'message' => 'You do not have permission to modify this library'
+                ], 403);
+            }
+            
             $urlId = $request->url_id;
             
             // Handle both formats - numeric IDs (new) and string IDs with url_ prefix (old)
@@ -1902,6 +1917,13 @@ class OpenLibraryController extends Controller
             'content_id' => 'required|integer',
             'content_type' => 'required|in:course,post',
         ]);
+        
+        // Check if user owns the library or is an admin
+        if (auth()->id() !== $library->user_id && !auth()->user()->isAdmin) {
+            return response()->json([
+                'message' => 'You do not have permission to modify this library'
+            ], 403);
+        }
         
         try {
             $contentId = $request->content_id;

@@ -153,8 +153,8 @@ class CommentController extends Controller
             $user = Auth::user();
             $comment = Comment::findOrFail($id);
             
-            // Only allow user to delete their own comments
-            if ($comment->user_id !== $user->id) {
+            // Only allow user to delete their own comments or admins to delete any comment
+            if ($comment->user_id !== $user->id && !$user->isAdmin) {
                 return response()->json([
                     'message' => 'Unauthorized'
                 ], 403);

@@ -469,8 +469,8 @@ class ReadlistController extends Controller
                 ], 404);
             }
             
-            // Check if user owns the readlist
-            if (auth()->id() !== $readlist->user_id) {
+            // Check if user owns the readlist or is an admin
+            if (auth()->id() !== $readlist->user_id && !auth()->user()->isAdmin) {
                 return response()->json([
                     'message' => 'You do not have permission to delete this readlist'
                 ], 403);
@@ -622,8 +622,8 @@ class ReadlistController extends Controller
                 ], 404);
             }
             
-            // Check if user owns the readlist
-            if (auth()->id() !== $readlist->user_id) {
+            // Check if user owns the readlist or is an admin
+            if (auth()->id() !== $readlist->user_id && !auth()->user()->isAdmin) {
                 return response()->json([
                     'message' => 'You do not have permission to modify this readlist'
                 ], 403);
