@@ -1189,19 +1189,8 @@ class OpenLibraryController extends Controller
             $user = Auth::user();
             $userId = $user ? $user->id : null;
             
-            // Use cache for library data (cache for 5 minutes, invalidate on update)
-            $cacheKey = "library_{$id}_user_{$userId}";
-            $cacheTtl = 300; // 5 minutes
-            
-            $cachedData = Cache::get($cacheKey);
-            if ($cachedData !== null) {
-                // Still increment view count but don't block response
-                dispatch(function() use ($id) {
-                    OpenLibrary::where('id', $id)->increment('views_count');
-                })->afterResponse();
-                
-                return response()->json($cachedData);
-            }
+            // Caching removed to ensure real-time updates for votes and comments
+            // attempts to cache caused stale data when returning from content detail view
             
             $library = OpenLibrary::findOrFail($id);
             
@@ -1451,7 +1440,7 @@ class OpenLibraryController extends Controller
             ];
             
             // Cache the response
-            Cache::put($cacheKey, $responseData, $cacheTtl);
+            // Cache::put($cacheKey, $responseData, $cacheTtl);
             
             return response()->json($responseData);
             
