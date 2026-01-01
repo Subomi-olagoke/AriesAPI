@@ -144,6 +144,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/libraries/favorites', [OpenLibraryController::class, 'getFavorites']);
     Route::get('/libraries/sections', [OpenLibraryController::class, 'getSections']);
     Route::get('/library/sections', [OpenLibraryController::class, 'getSections']);
+    Route::get('/libraries/recently-viewed', [OpenLibraryController::class, 'recentlyViewed']);
+    Route::get('/library/recently-viewed', [OpenLibraryController::class, 'recentlyViewed']);
     Route::get('/libraries', [OpenLibraryController::class, 'index']);
     Route::get('/library', [OpenLibraryController::class, 'index']);
     Route::post('/libraries', [OpenLibraryController::class, 'store']);

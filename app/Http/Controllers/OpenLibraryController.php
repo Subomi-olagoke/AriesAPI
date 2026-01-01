@@ -145,6 +145,104 @@ class OpenLibraryController extends Controller
     }
     
     /**
+     * Get recently viewed libraries (last 8 hours).
+     */
+    public function recentlyViewed()
+    {
+        try {
+            $userId = Auth::id();
+            
+            if (!$userId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+            
+            // Get libraries viewed in the last 8 hours
+            $eightHoursAgo = now()->subHours(8);
+            
+            $recentViews = DB::table('library_views')
+                ->where('user_id', $userId)
+                ->where('viewed_at', '>=', $eightHoursAgo)
+                ->orderBy('viewed_at', 'desc')
+                ->limit(10) // Limit to 10 most recent
+                ->get();
+            
+            if ($recentViews->isEmpty()) {
+                return response()->json([
+                    'libraries' => []
+                ]);
+            }
+            
+            $libraryIds = $recentViews->pluck('library_id')->toArray();
+            
+            // Fetch the libraries with their details
+            $libraries = OpenLibrary::whereIn('id', $libraryIds)
+                ->whereNull('deleted_at')
+                ->get()
+                ->keyBy('id');
+            
+            // Get follower counts for all libraries in one query
+            $followerCounts = DB::table('library_follows')
+                ->whereIn('library_id', $libraryIds)
+                ->select('library_id', DB::raw('count(*) as count'))
+                ->groupBy('library_id')
+                ->pluck('count', 'library_id')
+                ->toArray();
+            
+            // Get content counts for all libraries in one query
+            $contentCounts = DB::table('library_content')
+                ->whereIn('library_id', $libraryIds)
+                ->select('library_id', DB::raw('count(*) as count'))
+                ->groupBy('library_id')
+                ->pluck('count', 'library_id')
+                ->toArray();
+            
+            // Check follow status for all libraries in one query
+            $followedLibraryIds = DB::table('library_follows')
+                ->where('user_id', $userId)
+                ->whereIn('library_id', $libraryIds)
+                ->pluck('library_id')
+                ->toArray();
+            
+            // Format libraries maintaining the view order
+            $formattedLibraries = $recentViews->map(function ($view) use ($libraries, $userId, $followerCounts, $contentCounts, $followedLibraryIds) {
+                $library = $libraries->get($view->library_id);
+                
+                if (!$library) {
+                    return null;
+                }
+                
+                return [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description,
+                    'type' => $library->type,
+                    'thumbnail_url' => $library->thumbnail_url,
+                    'cover_image_url' => $library->cover_image_url,
+                    'thumbnailUrl' => $library->thumbnail_url,
+                    'coverImageUrl' => $library->cover_image_url,
+                    'followers_count' => $followerCounts[$library->id] ?? 0,
+                    'content_count' => $contentCounts[$library->id] ?? 0,
+                    'is_following' => in_array($library->id, $followedLibraryIds),
+                    'viewed_at' => $view->viewed_at,
+                ];
+            })->filter()->values();
+            
+            return response()->json([
+                'libraries' => $formattedLibraries
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error retrieving recently viewed libraries: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Error retrieving recently viewed libraries: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
      * Get libraries created by or contributed to by the authenticated user.
      */
     public function getUserLibraries()
@@ -1196,6 +1294,14 @@ class OpenLibraryController extends Controller
             
             // Increment view count (async to not block)
             $library->increment('views_count');
+            
+            // Track library view for recently viewed feature
+            if ($userId) {
+                DB::table('library_views')->updateOrInsert(
+                    ['user_id' => $userId, 'library_id' => $library->id],
+                    ['viewed_at' => now(), 'updated_at' => now()]
+                );
+            }
             
             // Get follow status and followers count in one query
             // Use separate queries to avoid SQL injection and UUID quoting issues
