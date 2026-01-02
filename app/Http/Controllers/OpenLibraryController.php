@@ -51,6 +51,30 @@ class OpenLibraryController extends Controller
     }
     
     /**
+     * Update library view timestamps for all users who have viewed this library recently.
+     * This makes the library appear at the top of their "recently viewed" section.
+     * 
+     * @param int $libraryId
+     * @return void
+     */
+    protected function updateLibraryViewsForContentChange($libraryId)
+    {
+        try {
+            // Update viewed_at for all users who have this library in their recently viewed
+            // This moves the library to the top of their recently viewed list
+            DB::table('library_views')
+                ->where('library_id', $libraryId)
+                ->update([
+                    'viewed_at' => now(),
+                    'updated_at' => now()
+                ]);
+        } catch (\Exception $e) {
+            // Log but don't fail the main operation
+            Log::warning('Failed to update library views for content change: ' . $e->getMessage());
+        }
+    }
+    
+    /**
      * Display a listing of libraries.
      */
     public function index()
@@ -1733,6 +1757,21 @@ class OpenLibraryController extends Controller
                 'updated_at' => now()
             ]);
             
+            // OPTIMIZATION: Update library views asynchronously (don't block response)
+            $libraryId = $library->id;
+            dispatch(function() use ($libraryId) {
+                try {
+                    DB::table('library_views')
+                        ->where('library_id', $libraryId)
+                        ->update([
+                            'viewed_at' => now(),
+                            'updated_at' => now()
+                        ]);
+                } catch (\Exception $e) {
+                    Log::warning('Failed to update library views: ' . $e->getMessage());
+                }
+            });
+            
             return response()->json([
                 'message' => 'Content added to library successfully'
             ]);
@@ -1774,6 +1813,8 @@ class OpenLibraryController extends Controller
             $url = $request->url;
             $title = $request->input('title');
             $summary = $request->input('summary');
+            $notes = $request->notes;
+            $relevanceScore = $request->input('relevance_score', 0.8);
             
             // If title/summary not provided, extract from URL as fallback
             if (empty($title)) {
@@ -1786,64 +1827,79 @@ class OpenLibraryController extends Controller
                 $summary = $url;
             }
             
-            // URLs are fine to be added to libraries - no content moderation needed
-            // Libraries are curated spaces where admins and users can add educational resources
+            // OPTIMIZATION: Use transaction for atomicity
+            DB::beginTransaction();
             
-            // First, check if this URL already exists in our database
-            $existingUrl = LibraryUrl::where('url', $url)->first();
-            
-            if (!$existingUrl) {
-                // Create a new LibraryUrl record
-                $existingUrl = LibraryUrl::create([
-                    'url' => $url,
-                    'title' => $title,
-                    'summary' => $summary,
-                    'notes' => $request->notes,
-                    'created_by' => Auth::id()
-                ]);
-            } else {
-                // Update existing URL with new metadata if provided
-                if ($title && $title !== $existingUrl->title) {
-                    $existingUrl->title = $title;
+            try {
+                // OPTIMIZATION: Combined query - check if URL exists AND if it's already in library
+                $existingInLibrary = DB::table('library_content')
+                    ->join('library_urls', 'library_content.content_id', '=', 'library_urls.id')
+                    ->where('library_content.library_id', $library->id)
+                    ->where('library_content.content_type', LibraryUrl::class)
+                    ->where('library_urls.url', $url)
+                    ->exists();
+                    
+                if ($existingInLibrary) {
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => 'URL already exists in this library'
+                    ], 400);
                 }
-                if ($summary && $summary !== $existingUrl->summary) {
-                    $existingUrl->summary = $summary;
-                }
-                if ($request->notes && $request->notes !== $existingUrl->notes) {
-                    $existingUrl->notes = $request->notes;
-                }
-                $existingUrl->save();
-            }
-            
-            // Check if this URL is already in the library
-            $existing = DB::table('library_content')
-                ->where('library_id', $library->id)
-                ->where('content_id', $existingUrl->id)
-                ->where('content_type', LibraryUrl::class)
-                ->first();
                 
-            if ($existing) {
-                return response()->json([
-                    'message' => 'URL already exists in this library',
-                    'item' => $existingUrl
-                ], 400);
+                // Check if URL exists globally (for reuse)
+                $existingUrl = LibraryUrl::where('url', $url)->first();
+                
+                if (!$existingUrl) {
+                    // Create a new LibraryUrl record
+                    $existingUrl = LibraryUrl::create([
+                        'url' => $url,
+                        'title' => $title,
+                        'summary' => $summary,
+                        'notes' => $notes,
+                        'created_by' => Auth::id()
+                    ]);
+                } else {
+                    // OPTIMIZATION: Only update if values actually changed
+                    $needsUpdate = false;
+                    $updates = [];
+                    
+                    if ($title && $title !== $existingUrl->title) {
+                        $updates['title'] = $title;
+                        $needsUpdate = true;
+                    }
+                    if ($summary && $summary !== $existingUrl->summary) {
+                        $updates['summary'] = $summary;
+                        $needsUpdate = true;
+                    }
+                    if ($notes && $notes !== $existingUrl->notes) {
+                        $updates['notes'] = $notes;
+                        $needsUpdate = true;
+                    }
+                    
+                    if ($needsUpdate) {
+                        $existingUrl->update($updates);
+                    }
+                }
+            
+                // Add to library content table with the appropriate relevance score AND notes
+                DB::table('library_content')->insert([
+                    'library_id' => $library->id,
+                    'content_id' => $existingUrl->id,
+                    'content_type' => LibraryUrl::class,
+                    'relevance_score' => $relevanceScore,
+                    'notes' => $notes,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                
+                DB::commit();
+                
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
             }
             
-            // Add to library content table with the appropriate relevance score AND notes
-            DB::table('library_content')->insert([
-                'library_id' => $library->id,
-                'content_id' => $existingUrl->id,
-                'content_type' => LibraryUrl::class,
-                'relevance_score' => $request->input('relevance_score', 0.8),
-                'notes' => $request->notes, // Store per-library notes here
-                'created_at' => now(),
-                'updated_at' => now()
-            ]);
-            
-            // Clear cache for this library (can be async in future)
-            $this->clearLibraryCache($library->id);
-            
-            // Prepare response data first (before async points)
+            // Prepare response data FIRST (before any async operations)
             $responseData = [
                 'message' => 'URL added to library successfully',
                 'item' => [
@@ -1852,40 +1908,46 @@ class OpenLibraryController extends Controller
                     'title' => $existingUrl->title,
                     'summary' => $existingUrl->summary,
                     'notes' => $existingUrl->notes,
-                    'relevance_score' => $request->input('relevance_score', 0.8),
+                    'relevance_score' => $relevanceScore,
                     'created_at' => $existingUrl->created_at,
                     'updated_at' => $existingUrl->updated_at,
                     'type' => 'url'
                 ]
             ];
             
-            // Award points asynchronously (don't block response)
+            // OPTIMIZATION: Move ALL non-critical operations to async (don't block response)
             $user = Auth::user();
-            if ($user) {
-                // Capture service instance for closure
-                $pointsService = $this->alexPointsService;
-                
-                // Dispatch async job or run in background
-                try {
-                    dispatch(function() use ($user,  $library, $existingUrl, $pointsService) {
-                        try {
-                            $pointsService->addPoints(
-                                $user,
-                                'add_url',
-                                LibraryUrl::class,
-                                $existingUrl->id,
-                                "Added URL to library: {$library->name}"
-                            );
-                        } catch (\Exception $e) {
-                            Log::warning('Failed to award points for adding URL: ' . $e->getMessage());
-                        }
-                    });
-                } catch (\Exception $e) {
-                    // If dispatch fails, just log it
-                    Log::warning('Failed to dispatch points job: ' . $e->getMessage());
-                }
-            }
+            $libraryId = $library->id;
+            $urlId = $existingUrl->id;
+            $libraryName = $library->name;
             
+            dispatch(function() use ($user, $libraryId, $urlId, $libraryName) {
+                try {
+                    // Update library views for all users who have viewed this library
+                    DB::table('library_views')
+                        ->where('library_id', $libraryId)
+                        ->update([
+                            'viewed_at' => now(),
+                            'updated_at' => now()
+                        ]);
+                    
+                    // Award points
+                    if ($user) {
+                        $pointsService = app(AlexPointsService::class);
+                        $pointsService->addPoints(
+                            $user,
+                            'add_url',
+                            LibraryUrl::class,
+                            $urlId,
+                            "Added URL to library: {$libraryName}"
+                        );
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Failed to complete async operations after URL add: ' . $e->getMessage());
+                }
+            });
+            
+            // Return response immediately (not waiting for points or view updates)
             return response()->json($responseData, 201);
             
         } catch (\Exception $e) {
@@ -2162,6 +2224,20 @@ class OpenLibraryController extends Controller
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
+            
+            // OPTIMIZATION: Update library views asynchronously (don't block response)
+            dispatch(function() use ($selectedLibraryId) {
+                try {
+                    DB::table('library_views')
+                        ->where('library_id', $selectedLibraryId)
+                        ->update([
+                            'viewed_at' => now(),
+                            'updated_at' => now()
+                        ]);
+                } catch (\Exception $e) {
+                    Log::warning('Failed to update library views: ' . $e->getMessage());
+                }
+            });
 
             // Step 7: Get the full library details for response
             $library = OpenLibrary::find($selectedLibraryId);

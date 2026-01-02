@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\Comment;
 use App\Models\LibraryUrl;
 use App\Models\Post;
+use App\Models\User;
 use App\Services\AlexPointsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use App\Notifications\CommentNotification;
+use App\Notifications\MentionNotification;
 
 class CommentController extends Controller
 {
@@ -119,6 +122,18 @@ class CommentController extends Controller
                 Log::warning('Failed to award points for comment: ' . $e->getMessage());
             }
             
+            // Send comment notification to content owner
+            $contentOwner = null;
+            if (isset($commentable->user_id) && $commentable->user_id !== $user->id) {
+                $contentOwner = User::find($commentable->user_id);
+                if ($contentOwner) {
+                    $contentOwner->notify(new CommentNotification($user, $comment, $commentableType, $id));
+                }
+            }
+            
+            // Detect and send mention notifications
+            $this->processMentions($request->body, $user, $comment, $commentableType, $id);
+            
             // Load user relationship
             $comment->load('user:id,username,first_name,last_name,avatar');
             
@@ -188,7 +203,31 @@ class CommentController extends Controller
                 return null;
         }
     }
+    
+    /**
+     * Process mentions in comment text and send notifications
+     */
+    private function processMentions($commentText, $commenter, $comment, $commentableType, $commentableId)
+    {
+        // Find all @username mentions in the comment
+        preg_match_all('/@(\w+)/', $commentText, $matches);
+        
+        if (!empty($matches[1])) {
+            $usernames = array_unique($matches[1]);
+            
+            foreach ($usernames as $username) {
+                // Find user by username
+                $mentionedUser = User::where('username', $username)->first();
+                
+                // Send notification if user exists and is not the commenter
+                if ($mentionedUser && $mentionedUser->id !== $commenter->id) {
+                    $mentionedUser->notify(new MentionNotification($commenter, $comment, $commentableType, $commentableId));
+                }
+            }
+        }
+    }
 }
+
 
 
 

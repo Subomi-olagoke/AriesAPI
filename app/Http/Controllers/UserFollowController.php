@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use App\Models\User;
 use App\Services\AlexPointsService;
+use App\Notifications\FollowNotification;
 
 class UserFollowController extends Controller
 {
@@ -68,6 +69,9 @@ class UserFollowController extends Controller
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
+            
+            // Send notification to the user being followed
+            $userToFollow->notify(new FollowNotification($currentUser));
             
             // Award points for following a user
             try {

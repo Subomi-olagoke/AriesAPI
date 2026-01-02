@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Notifications\LibraryFollowNotification;
 
 class LibraryFollowController extends Controller
 {
@@ -98,6 +99,14 @@ class LibraryFollowController extends Controller
                         'updated_at' => now()
                     ]);
                     
+                    // Send notification to library creator
+                    if ($library->user_id && $library->user_id !== $user->id) {
+                        $creator = User::find($library->user_id);
+                        if ($creator) {
+                            $creator->notify(new LibraryFollowNotification($user, $library));
+                        }
+                    }
+                    
                     // Award points for following a library
                     try {
                         $this->alexPointsService->addPoints(
@@ -127,6 +136,14 @@ class LibraryFollowController extends Controller
                         'created_at' => now(),
                         'updated_at' => now()
                     ]);
+                    
+                    // Send notification to library creator
+                    if ($library->user_id && $library->user_id !== $user->id) {
+                        $creator = User::find($library->user_id);
+                        if ($creator) {
+                            $creator->notify(new LibraryFollowNotification($user, $library));
+                        }
+                    }
                     
                     // Award points for following a library
                     try {
