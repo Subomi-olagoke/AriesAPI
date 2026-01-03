@@ -1534,8 +1534,11 @@ class OpenLibraryController extends Controller
                 }
             }
             
-            // Sort by relevance
+            // Sort by relevance, then by creation date (newest first)
             usort($formattedContents, function($a, $b) {
+                if ($a['relevance_score'] == $b['relevance_score']) {
+                    return $b['created_at'] <=> $a['created_at'];
+                }
                 return $b['relevance_score'] <=> $a['relevance_score'];
             });
             
@@ -1848,10 +1851,24 @@ class OpenLibraryController extends Controller
                 }
             });
             
-            return response()->json([
-                'message' => 'Content added to library successfully'
-            ]);
+            // Clear cache for this library
+            $this->clearLibraryCache($id);
             
+            // Prepare the item for response
+            $newItem = [
+                'id' => $content->id,
+                'title' => $content->title ?? $content->name,
+                'description' => $content->description ?? $content->body,
+                'type' => $request->content_type,
+                'relevance_score' => $request->input('relevance_score', 0.5),
+                'created_at' => now(),
+                'updated_at' => now()
+            ];
+
+            return response()->json([
+                'message' => 'Content added to library successfully',
+                'item' => $newItem
+            ], 201);
         } catch (\Exception $e) {
             Log::error('Adding content to library failed: ' . $e->getMessage());
             return response()->json([
@@ -2043,6 +2060,9 @@ class OpenLibraryController extends Controller
                     Log::warning('Failed to complete async operations after URL add: ' . $e->getMessage());
                 }
             });
+            
+            // Clear cache immediately
+            $this->clearLibraryCache($library->id);
             
             // Return response immediately (not waiting for points or view updates)
             return response()->json($responseData, 201);
@@ -2426,6 +2446,9 @@ class OpenLibraryController extends Controller
                 }
             }
 
+            // Clear cache for the selected library
+            $this->clearLibraryCache($selectedLibraryId);
+            
             return response()->json($responseData, 201);
 
         } catch (\Exception $e) {
