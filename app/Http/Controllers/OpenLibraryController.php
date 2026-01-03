@@ -40,32 +40,36 @@ class OpenLibraryController extends Controller
         try {
             // Get Redis connection from cache store (uses database 1)
             $redis = Cache::store('redis')->getRedis();
-            $prefix = config('cache.prefix');
+            
+            // Laravel uses TWO prefixes: redis prefix + cache prefix
+            $redisPrefix = config('database.redis.options.prefix', '');
+            $cachePrefix = config('cache.prefix', '');
+            $fullPrefix = $redisPrefix . $cachePrefix;
+            
+            Log::info("🔍 Using prefix: '{$fullPrefix}' (redis: '{$redisPrefix}', cache: '{$cachePrefix}')");
             
             // Clear all user-specific sections caches
-            // Pattern: {prefix}library_sections_v2_*
-            $sectionPattern = $prefix . 'library_sections_v2_*';
+            $sectionPattern = $fullPrefix . 'library_sections_v2_*';
             $sectionKeys = $redis->keys($sectionPattern);
             if (!empty($sectionKeys)) {
                 $redis->del($sectionKeys);
-                Log::info("🗑️ Cleared " . count($sectionKeys) . " section cache keys (pattern: {$sectionPattern})");
+                Log::info("🗑️ Cleared " . count($sectionKeys) . " section cache keys");
             } else {
-                Log::info("ℹ️ No section cache keys found (pattern: {$sectionPattern})");
+                Log::info("ℹ️ No section cache keys found (tried pattern: {$sectionPattern})");
             }
             
-            // Clear library structure cache (6hr shared cache)
+            // Clear library structure cache
             Cache::forget("lib_struct:{$libraryId}");
             Log::info("🗑️ Cleared lib_struct:{$libraryId}");
             
             // Clear all user-specific caches for this library
-            // Pattern: {prefix}lib_user:{libraryId}:*
-            $userPattern = $prefix . "lib_user:{$libraryId}:*";
+            $userPattern = $fullPrefix . "lib_user:{$libraryId}:*";
             $userKeys = $redis->keys($userPattern);
             if (!empty($userKeys)) {
                 $redis->del($userKeys);
-                Log::info("🗑️ Cleared " . count($userKeys) . " user-specific cache keys (pattern: {$userPattern})");
+                Log::info("🗑️ Cleared " . count($userKeys) . " user-specific cache keys");
             } else {
-                Log::info("ℹ️ No user-specific cache keys found (pattern: {$userPattern})");
+                Log::info("ℹ️ No user-specific cache keys found (tried pattern: {$userPattern})");
             }
             
             Log::info("✅ Cache clearing complete for library {$libraryId}");
