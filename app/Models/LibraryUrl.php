@@ -20,6 +20,7 @@ class LibraryUrl extends Model
         'title',
         'summary',
         'notes',
+        'thumbnail_url',
         'created_by'
     ];
 

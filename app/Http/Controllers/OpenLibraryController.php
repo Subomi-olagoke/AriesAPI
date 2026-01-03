@@ -12,6 +12,7 @@ use App\Services\OpenLibraryService;
 use App\Services\UrlFetchService;
 use App\Services\AlexPointsService;
 use App\Services\AiLibraryCategorizer;
+use App\Services\UrlMetadataService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -1809,7 +1810,7 @@ class OpenLibraryController extends Controller
      * Add a URL to a library with automatic content fetching and summarization.
      * Stores URLs inline with other content types.
      */
-    public function addUrl(Request $request, $id)
+    public function addUrl(Request $request, $id, UrlMetadataService $metadataService)
     {
         $validator = Validator::make($request->all(), [
             'url' => 'required|url|max:2048',
@@ -1830,14 +1831,29 @@ class OpenLibraryController extends Controller
             // Find the library
             $library = OpenLibrary::findOrFail($id);
             
-            // Use metadata provided by frontend instead of fetching
             $url = $request->url;
             $title = $request->input('title');
             $summary = $request->input('summary');
             $notes = $request->notes;
             $relevanceScore = $request->input('relevance_score', 0.8);
+            $thumbnailUrl = null;
             
-            // If title/summary not provided, extract from URL as fallback
+            // If title/summary missing, fetch rich metadata
+            if (empty($title) || empty($summary)) {
+                $metadata = $metadataService->fetchMetadata($url);
+                
+                if (empty($title)) {
+                    $title = $metadata['title'] ?? null;
+                }
+                
+                if (empty($summary)) {
+                    $summary = $metadata['description'] ?? null;
+                }
+                
+                $thumbnailUrl = $metadata['thumbnail_url'] ?? null;
+            }
+            
+            // Fallbacks if metadata fetch failed or returned empty
             if (empty($title)) {
                 $parsedUrl = parse_url($url);
                 $domain = $parsedUrl['host'] ?? 'Unknown';
@@ -1877,6 +1893,7 @@ class OpenLibraryController extends Controller
                         'title' => $title,
                         'summary' => $summary,
                         'notes' => $notes,
+                        'thumbnail_url' => $thumbnailUrl,
                         'created_by' => Auth::id()
                     ]);
                 } else {
@@ -1894,6 +1911,11 @@ class OpenLibraryController extends Controller
                     }
                     if ($notes && $notes !== $existingUrl->notes) {
                         $updates['notes'] = $notes;
+                        $needsUpdate = true;
+                    }
+                    // Only update thumbnail if we have a new one and the old one was empty
+                    if ($thumbnailUrl && empty($existingUrl->thumbnail_url)) {
+                        $updates['thumbnail_url'] = $thumbnailUrl;
                         $needsUpdate = true;
                     }
                     
@@ -2127,7 +2149,7 @@ class OpenLibraryController extends Controller
     /**
      * Smart add URL - AI automatically categorizes and adds to appropriate library
      */
-    public function smartAddUrl(Request $request)
+    public function smartAddUrl(Request $request, UrlMetadataService $metadataService)
     {
         $validator = Validator::make($request->all(), [
             'url' => 'required|url',
@@ -2147,10 +2169,26 @@ class OpenLibraryController extends Controller
         $notes = $request->input('notes');
         $title = $request->input('title');
         $summary = $request->input('summary');
+        $thumbnailUrl = null;
 
         try {
             // Use metadata provided by frontend
-            // If not provided, extract from URL as fallback
+            // If not provided, use service to fetch rich metadata
+            if (empty($title) || empty($summary)) {
+                $metadata = $metadataService->fetchMetadata($url);
+                
+                if (empty($title)) {
+                    $title = $metadata['title'] ?? null;
+                }
+                
+                if (empty($summary)) {
+                    $summary = $metadata['description'] ?? null;
+                }
+                
+                $thumbnailUrl = $metadata['thumbnail_url'] ?? null;
+            }
+
+            // Fallback if metadata fetch failed
             if (empty($title)) {
                 $parsedUrl = parse_url($url);
                 $domain = $parsedUrl['host'] ?? 'Unknown';
@@ -2206,8 +2244,14 @@ class OpenLibraryController extends Controller
                     'title' => $title,
                     'summary' => $summary,
                     'notes' => $notes,
-                    'submitted_by' => Auth::id()
+                    'thumbnail_url' => $thumbnailUrl,
+                    'created_by' => Auth::id()
                 ]);
+            } else {
+                // Update thumbnail if missing
+                if (empty($existingUrl->thumbnail_url) && $thumbnailUrl) {
+                    $existingUrl->update(['thumbnail_url' => $thumbnailUrl]);
+                }
             }
 
             // Step 5: Check if already in the selected library
