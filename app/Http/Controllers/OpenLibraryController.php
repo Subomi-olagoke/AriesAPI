@@ -1490,9 +1490,9 @@ class OpenLibraryController extends Controller
                 }
                 
                 // Get user's votes in one query
-                if ($user) {
+                if ($userId) {
                     $userVoteRecords = DB::table('votes')
-                        ->where('user_id', $user->id)
+                        ->where('user_id', $userId)
                         ->where('voteable_type', LibraryUrl::class)
                         ->whereIn('voteable_id', $urlIds)
                         ->get();
