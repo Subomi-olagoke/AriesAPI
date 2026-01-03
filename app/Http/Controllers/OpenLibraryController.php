@@ -116,19 +116,9 @@ class OpenLibraryController extends Controller
                     'type' => $library->type,
                     'thumbnailUrl' => $library->thumbnail_url,
                     'coverImageUrl' => $library->cover_image_url,
-                    'courseId' => $library->course_id,
-                    'criteria' => $library->criteria,
-                    'keywords' => $library->keywords,
                     'isApproved' => $library->is_approved,
                     'approvalStatus' => $library->approval_status,
-                    'approvalDate' => $library->approval_date,
-                    'approvedBy' => $library->approved_by,
-                    'rejectionReason' => $library->rejection_reason,
-                    'coverPrompt' => $library->cover_prompt,
-                    'aiGenerated' => $library->ai_generated,
-                    'aiGenerationDate' => $library->ai_generation_date,
-                    'aiModelUsed' => $library->ai_model_used,
-                    'hasAiCover' => $library->has_ai_cover,
+                    'courseId' => $library->course_id,
                     'createdAt' => $library->created_at,
                     'updatedAt' => $library->updated_at,
                     'contents' => $library->contents ? $library->contents->map(function ($content) {
@@ -138,8 +128,6 @@ class OpenLibraryController extends Controller
                             'contentId' => $content->content_id,
                             'contentType' => $content->content_type,
                             'relevanceScore' => $content->relevance_score,
-                            'createdAt' => $content->created_at,
-                            'updatedAt' => $content->updated_at,
                             'contentData' => $content->content ? [
                                 'id' => $content->content->id,
                                 'title' => $content->content->title ?? null,
@@ -147,21 +135,15 @@ class OpenLibraryController extends Controller
                                 'mediaType' => $content->content->media_type ?? null,
                                 'mediaLink' => $content->content->media_link ?? null,
                                 'mediaThumbnail' => $content->content->media_thumbnail ?? null,
-                                'visibility' => $content->content->visibility ?? null,
                                 'user' => $content->content->user ? [
                                     'id' => $content->content->user->id,
-                                    'firstName' => $content->content->user->first_name,
-                                    'lastName' => $content->content->user->last_name,
                                     'username' => $content->content->user->username,
                                     'avatar' => $content->content->user->avatar,
-                                    'isVerified' => $content->content->user->is_verified ?? false,
-                                    'role' => $content->content->user->role,
-                                    'alex_points' => $content->content->user->alex_points
                                 ] : null
                             ] : null
                         ];
                     }) : [],
-                    'user' => null,
+                    'user' => null, // Deprecated, kept for schema compatibility check if needed
                     'userId' => null
                 ];
             });
@@ -1537,43 +1519,6 @@ class OpenLibraryController extends Controller
                 }
             }
             
-            // OPTIMIZATION: Legacy url_items loop commented out - remove after migration completes
-            // This O(n²) loop was causing 60% performance hit
-            /*
-            // For backward compatibility, also add URLs from the url_items array
-            // This ensures we don't miss any URLs that were added before the migration
-            $urlItems = $library->url_items ?? [];
-            
-            foreach ($urlItems as $urlItem) {
-                // Check if this URL is already included (based on the URL itself)
-                $url = $urlItem['url'] ?? '';
-                $alreadyIncluded = false;
-                
-                foreach ($formattedContents as $content) {
-                    if ($content['type'] === 'url' && isset($content['url']) && $content['url'] === $url) {
-                        $alreadyIncluded = true;
-                        break;
-                    }
-                }
-                
-                // Only add if not already included
-                if (!$alreadyIncluded && !empty($url)) {
-                    // For legacy url_items, we don't have creator info, so set added_by to null
-                    $formattedContents[] = [
-                        'id' => $urlItem['id'] ?? uniqid('url_'),
-                        'title' => $urlItem['title'] ?? 'No title',
-                        'url' => $url,
-                        'description' => $urlItem['summary'] ?? $urlItem['description'] ?? '',
-                        'notes' => $urlItem['notes'] ?? '',
-                        'type' => 'url',
-                        'relevance_score' => $urlItem['relevance_score'] ?? 0.5,
-                        'created_at' => $urlItem['created_at'] ?? now()->toIso8601String(),
-                        'added_by' => null // Legacy items don't have creator info
-                    ];
-                }
-            }
-            */
-            
             // Sort all contents by relevance score
             usort($formattedContents, function($a, $b) {
                 return $b['relevance_score'] <=> $a['relevance_score'];
@@ -1583,11 +1528,27 @@ class OpenLibraryController extends Controller
             $library->refresh();
             
             $responseData = [
-                'library' => array_merge($library->toArray(), [
+                'library' => [
+                    'id' => $library->id,
+                    'name' => $library->name,
+                    'description' => $library->description,
+                    'type' => $library->type,
+                    'thumbnail_url' => $library->thumbnail_url,
+                    'cover_image_url' => $library->cover_image_url,
                     'views_count' => $library->views_count ?? 0,
                     'is_following' => $isFollowing,
-                    'followers_count' => $followersCount
-                ]),
+                    'followers_count' => $followersCount,
+                    'course_id' => $library->course_id,
+                    'is_approved' => $library->is_approved,
+                    'approval_status' => $library->approval_status,
+                    'created_at' => $library->created_at,
+                    'updated_at' => $library->updated_at,
+                    'creator' => $library->creator ? [
+                        'id' => $library->creator->id,
+                        'username' => $library->creator->username,
+                        'avatar' => $library->creator->avatar
+                    ] : null
+                ],
                 'contents' => $formattedContents
             ];
             
