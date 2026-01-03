@@ -1334,13 +1334,9 @@ class OpenLibraryController extends Controller
             $user = Auth::user();
             $userId = $user ? $user->id : null;
             
-            // PERFORMANCE: Cache library details for 1 hour per user
-            // Cache key includes user ID to handle personalized data (follow status, votes)
-            $cacheKey = "library_{$id}_user_" . ($userId ?? 'guest');
-            
-            return Cache::remember($cacheKey, 3600, function () use ($id, $userId) {
-                return $this->fetchLibraryDetails($id, $userId);
-            });
+            // PERFORMANCE: Cache is handled internally by fetchLibraryDetails (Split caching: Structure + User Data)
+            // We don't need a wrapper cache here as it would mask our granular invalidation logic
+            return $this->fetchLibraryDetails($id, $userId);
             
         } catch (\Exception $e) {
             Log::error('Show library failed: ' . $e->getMessage());
