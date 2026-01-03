@@ -31,7 +31,10 @@ class SearchController extends Controller
             $requestedTypes = collect(['user', 'library', 'readlist']);
         }
 
-        $results = [];
+        // OPTIMIZATION: Cache search results for 10 minutes
+        $cacheKey = "search_" . md5($query . '_' . $requestedTypes->sort()->implode(',') . '_' . $perTypeLimit);
+        $results = \Illuminate\Support\Facades\Cache::remember($cacheKey, 600, function() use ($query, $perTypeLimit, $requestedTypes) {
+            $results = [];
 
         // --- Users (relevance ranked with fuzzy matching) ---
         if ($requestedTypes->contains('user')) {
@@ -183,6 +186,9 @@ class SearchController extends Controller
         usort($results, function($a, $b) {
             return ($b['score'] ?? 0) <=> ($a['score'] ?? 0);
         });
+
+            return $results;
+        }); // Close Cache::remember
 
         return response()->json([
             'success' => true,
