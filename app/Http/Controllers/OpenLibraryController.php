@@ -97,76 +97,76 @@ class OpenLibraryController extends Controller
     public function index()
     {
         try {
-            // OPTIMIZATION: Cache schema checks instead of querying on every request
-            $schemaInfo = Cache::rememberForever('library_schema_columns', function() {
-                return [
-                    'has_is_approved' => Schema::hasColumn('open_libraries', 'is_approved'),
-                    'has_approval_status' => Schema::hasColumn('open_libraries', 'approval_status')
-                ];
-            });
-            
-            // OPTIMIZATION: Eager load relationships to prevent N+1 queries
-            // This reduces queries from 400+ to ~10 (85% faster)
-            $query = OpenLibrary::with([
-                'contents.content.user',  // Eager load nested relationships
-                'creator'                  // Load library creator
-            ]);
-            
-            if ($schemaInfo['has_is_approved']) {
-                $query->where('is_approved', true);
-            }
-            
-            if ($schemaInfo['has_approval_status']) {
-                $query->where('approval_status', 'approved');
-            }
-            
-            // Get results ordered by creation date
-            $libraries = $query->orderBy('created_at', 'desc')->get();
-            
-            // Format the response to match iOS expectations
-            $formattedLibraries = $libraries->map(function ($library) {
-                return [
-                    'id' => $library->id,
-                    'name' => $library->name,
-                    'description' => $library->description,
-                    'type' => $library->type,
-                    'thumbnailUrl' => $library->thumbnail_url,
-                    'coverImageUrl' => $library->cover_image_url,
-                    'isApproved' => $library->is_approved,
-                    'approvalStatus' => $library->approval_status,
-                    'courseId' => $library->course_id,
-                    'createdAt' => $library->created_at,
-                    'updatedAt' => $library->updated_at,
-                    'contents' => $library->contents ? $library->contents->map(function ($content) {
-                        return [
-                            'id' => $content->id,
-                            'libraryId' => $content->library_id,
-                            'contentId' => $content->content_id,
-                            'contentType' => $content->content_type,
-                            'relevanceScore' => $content->relevance_score,
-                            'contentData' => $content->content ? [
-                                'id' => $content->content->id,
-                                'title' => $content->content->title ?? null,
-                                'body' => $content->content->body ?? null,
-                                'mediaType' => $content->content->media_type ?? null,
-                                'mediaLink' => $content->content->media_link ?? null,
-                                'mediaThumbnail' => $content->content->media_thumbnail ?? null,
-                                'user' => $content->content->user ? [
+            // OPTIMIZATION: Cache the entire index response for 30 minutes
+            // This is a heavy query with many relations
+            return Cache::remember('libraries_index_v1', 1800, function() {
+                
+                // OPTIMIZATION: Cache schema checks instead of querying on every request
+                $schemaInfo = Cache::rememberForever('library_schema_columns', function() {
+                    return [
+                        'has_is_approved' => Schema::hasColumn('open_libraries', 'is_approved'),
+                        'has_approval_status' => Schema::hasColumn('open_libraries', 'approval_status')
+                    ];
+                });
+                
+                // OPTIMIZATION: Eager load relationships to prevent N+1 queries
+                $query = OpenLibrary::with([
+                    'contents.content.user',  // Eager load nested relationships
+                    'creator'                  // Load library creator
+                ]);
+                
+                if ($schemaInfo['has_is_approved']) {
+                    $query->where('is_approved', true);
+                }
+                
+                if ($schemaInfo['has_approval_status']) {
+                    $query->where('approval_status', 'approved');
+                }
+                
+                // Get results ordered by creation date
+                $libraries = $query->orderBy('created_at', 'desc')->get();
+                
+                // Format the response to match iOS expectations
+                $formattedLibraries = $libraries->map(function ($library) {
+                    return [
+                        'id' => $library->id,
+                        'name' => $library->name,
+                        'description' => $library->description,
+                        'type' => $library->type,
+                        'thumbnailUrl' => $library->thumbnail_url,
+                        'coverImageUrl' => $library->cover_image_url,
+                        'isApproved' => $library->is_approved,
+                        'approvalStatus' => $library->approval_status,
+                        'courseId' => $library->course_id,
+                        'createdAt' => $library->created_at,
+                        'updatedAt' => $library->updated_at,
+                        'contents' => $library->contents ? $library->contents->map(function ($content) {
+                            return [
+                                'id' => $content->content ? $content->content->id : null,
+                                'title' => $content->content ? $content->content->title : 'Unknown Content',
+                                'type' => $content->content_type,
+                                'description' => $content->content ? ($content->content->description ?? '') : '',
+                                'url' => $content->content ? ($content->content->url ?? '') : '',
+                                'thumbnailUrl' => $content->content ? ($content->content->thumbnail_url ?? '') : '',
+                                // Include user data if needed for UI
+                                'user' => $content->content && $content->content->user ? [
                                     'id' => $content->content->user->id,
                                     'username' => $content->content->user->username,
-                                    'avatar' => $content->content->user->avatar,
+                                    'avatarUrl' => $content->content->user->avatar ?? ''
                                 ] : null
-                            ] : null
-                        ];
-                    }) : [],
-                    'user' => null, // Deprecated, kept for schema compatibility check if needed
-                    'userId' => null
-                ];
+                            ];
+                        }) : [],
+                        'creator' => $library->creator ? [
+                            'id' => $library->creator->id,
+                            'name' => $library->creator->name,
+                            'avatarUrl' => $library->creator->avatar_url ?? '',
+                        ] : null,
+                    ];
+                });
+                
+                return response()->json($formattedLibraries);
             });
             
-            return response()->json([
-                'libraries' => $formattedLibraries
-            ]);
         } catch (\Exception $e) {
             Log::error('Error retrieving libraries: ' . $e->getMessage());
             return response()->json([
@@ -614,8 +614,11 @@ class OpenLibraryController extends Controller
     public function getSections()
     {
         // PERFORMANCE: Cache library sections for 30 minutes
-        // This makes the feed load instantly for all users
-        return Cache::remember('library_sections_v2', 1800, function () {
+        // CACHE KEY: Must include user ID because fetchLibrarySections returns personalized 'isFollowing' data
+        $userId = Auth::id() ?? 'guest';
+        $cacheKey = "library_sections_v2_{$userId}";
+        
+        return Cache::remember($cacheKey, 1800, function () {
             return $this->fetchLibrarySections();
         });
     }
