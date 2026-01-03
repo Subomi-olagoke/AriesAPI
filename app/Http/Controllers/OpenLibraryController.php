@@ -38,13 +38,13 @@ class OpenLibraryController extends Controller
         // Clear library sections cache (affects all users)
         Cache::forget('library_sections_v2');
         
-        // Clear library detail cache for all users
-        // We use a wildcard pattern to clear all user-specific caches
-        // Format: library_{id}_user_{userId}
-        $pattern = "library_{$libraryId}_user_*";
+        // Clear library structure cache (6hr shared cache)
+        Cache::forget("lib_struct:{$libraryId}");
         
-        // Get all cache keys matching the pattern and delete them
-        // This ensures all users get fresh data after library update
+        // Clear all user-specific caches for this library
+        // Pattern: lib_user:{libraryId}:*
+        $pattern = "lib_user:{$libraryId}:*";
+        
         try {
             $redis = Cache::getRedis();
             $keys = $redis->keys($pattern);
@@ -1353,69 +1353,77 @@ class OpenLibraryController extends Controller
 
     /**
      * Internal method to fetch library details (called by cache or directly)
+     * OPTIMIZED: Split caching - structure (6hr) + user data (1hr) for ultra-fast loading
      */
     private function fetchLibraryDetails($id, $userId)
     {
         try {
+            // STEP 1: Get library structure (cached 6 hours, shared across all users)
+            $libraryStructure = Cache::remember("lib_struct:{$id}", 21600, function () use ($id) {
+                return $this->fetchLibraryStructure($id);
+            });
             
-            // Caching removed to ensure real-time updates for votes and comments
-            // attempts to cache caused stale data when returning from content detail view
-            
-            // OPTIMIZATION: Eager load relationships to prevent N+1 queries
-            // This reduces queries by 75% for library detail view
-            $library = OpenLibrary::with([
-                'contents.content.user',  // Eager load content and users
-               'creator'                   // Load library creator
-            ])->findOrFail($id);
-            
-            // Increment view count (async to not block)
-            $library->increment('views_count');
-            
-            // Track library view for recently viewed feature
-            if ($userId) {
-                DB::table('library_views')->updateOrInsert(
-                    ['user_id' => $userId, 'library_id' => $library->id],
-                    ['viewed_at' => now(), 'updated_at' => now()]
-                );
+            if (!$libraryStructure) {
+                return response()->json(['message' => 'Library not found'], 404);
             }
             
-            // Get follow status and followers count in one query
-            // Use separate queries to avoid SQL injection and UUID quoting issues
-            $followersCount = DB::table('library_follows')
-                ->where('library_id', $library->id)
-                ->count();
+            // STEP 2: Get user-specific data (cached 1 hour per user)
+            $userCacheKey = "lib_user:{$id}:" . ($userId ?? 'guest');
+            $userData = Cache::remember($userCacheKey, 3600, function () use ($id, $userId, $libraryStructure) {
+                return $this->fetchUserLibraryData($id, $userId, $libraryStructure);
+            });
             
-            $isFollowing = false;
-            if ($userId) {
-                $isFollowing = DB::table('library_follows')
-                    ->where('library_id', $library->id)
-                    ->where('user_id', $userId)
-                    ->exists();
-            }
+            // STEP 3: Merge structure + user data
+            $responseData = array_merge($libraryStructure, $userData);
             
-            // Get content with appropriate relationships - OPTIMIZED to avoid N+1 queries
+            // Increment view count (async, doesn't block response)
+            dispatch(function () use ($id, $userId) {
+                DB::table('open_libraries')->where('id', $id)->increment('views_count');
+                if ($userId) {
+                    DB::table('library_views')->updateOrInsert(
+                        ['user_id' => $userId, 'library_id' => $id],
+                        ['viewed_at' => now(), 'updated_at' => now()]
+                    );
+                }
+            })->afterResponse();
+            
+            return response()->json($responseData);
+            
+        } catch (\Exception $e) {
+            Log::error('Error retrieving library: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Error retrieving library: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Fetch library structure (content list, metadata) - cached 6 hours, shared
+     */
+    private function fetchLibraryStructure($id)
+    {
+        try {
+            $library = OpenLibrary::with('creator')->findOrFail($id);
+            
+            // Get all content for this library
             $contents = DB::table('library_content')
-                ->where('library_id', $library->id)
+                ->where('library_id', $id)
                 ->orderBy('relevance_score', 'desc')
                 ->get();
             
-            // Group content by type to batch load
+            // Group content by type
             $courseIds = [];
             $postIds = [];
             $urlIds = [];
+            $contentRelationships = [];
             
-            // Build content relationships map - tracks which content belongs to THIS library
-            $contentRelationships = []; // Track which content belongs to this library
             foreach ($contents as $content) {
                 $contentType = $content->content_type;
                 $contentId = $content->content_id;
                 
-                // Store the relationship to verify content belongs to THIS library
-                // IMPORTANT: notes are stored in library_content, not in the content items themselves
                 $contentRelationships[$contentType][$contentId] = [
                     'relevance_score' => $content->relevance_score,
-                    'library_content_id' => $content->id, // The library_content table row ID
-                    'notes' => $content->notes // Per-library notes from library_content table
+                    'notes' => $content->notes
                 ];
                 
                 if ($contentType === Course::class) {
@@ -1427,86 +1435,22 @@ class OpenLibraryController extends Controller
                 }
             }
             
-            // Batch load all content items with relationships
-            // Only load items that are actually in this library's content list
+            // Batch load all content (FAST: 2 queries instead of N+1)
             $courses = !empty($courseIds) ? Course::with('user', 'topic')
                 ->whereIn('id', $courseIds)
-                ->get()
-                ->filter(function($course) use ($contentRelationships) {
-                    // Verify this course is actually linked to this library
-                    return isset($contentRelationships[Course::class][$course->id]);
-                })
-                ->keyBy('id') : collect();
+                ->get()->keyBy('id') : collect();
                 
             $posts = !empty($postIds) ? Post::with('user')
                 ->whereIn('id', $postIds)
-                ->get()
-                ->filter(function($post) use ($contentRelationships) {
-                    // Verify this post is actually linked to this library
-                    return isset($contentRelationships[Post::class][$post->id]);
-                })
-                ->keyBy('id') : collect();
+                ->get()->keyBy('id') : collect();
                 
             $urls = !empty($urlIds) ? LibraryUrl::with('creator')
                 ->whereIn('id', $urlIds)
-                ->get()
-                ->filter(function($url) use ($contentRelationships) {
-                    // Verify this URL is actually linked to this library
-                    return isset($contentRelationships[LibraryUrl::class][$url->id]);
-                })
-                ->keyBy('id') : collect();
+                ->get()->keyBy('id') : collect();
             
-            // Batch load votes and comments for all URLs at once
-            $votesData = [];
-            $commentsCounts = [];
-            $userVotes = [];
-            
-            if (!empty($urlIds)) {
-                // Get all vote counts in one query
-                $allVotes = DB::table('votes')
-                    ->where('voteable_type', LibraryUrl::class)
-                    ->whereIn('voteable_id', $urlIds)
-                    ->select('voteable_id', 'vote_type', DB::raw('count(*) as count'))
-                    ->groupBy('voteable_id', 'vote_type')
-                    ->get();
-                
-                foreach ($allVotes as $vote) {
-                    if (!isset($votesData[$vote->voteable_id])) {
-                        $votesData[$vote->voteable_id] = ['up' => 0, 'down' => 0];
-                    }
-                    $votesData[$vote->voteable_id][$vote->vote_type] = $vote->count;
-                }
-                
-                // Get all comment counts in one query
-                $allComments = DB::table('comments')
-                    ->where('commentable_type', LibraryUrl::class)
-                    ->whereIn('commentable_id', $urlIds)
-                    ->select('commentable_id', DB::raw('count(*) as count'))
-                    ->groupBy('commentable_id')
-                    ->get();
-                
-                foreach ($allComments as $comment) {
-                    $commentsCounts[$comment->commentable_id] = $comment->count;
-                }
-                
-                // Get user's votes in one query
-                if ($userId) {
-                    $userVoteRecords = DB::table('votes')
-                        ->where('user_id', $userId)
-                        ->where('voteable_type', LibraryUrl::class)
-                        ->whereIn('voteable_id', $urlIds)
-                        ->get();
-                    
-                    foreach ($userVoteRecords as $vote) {
-                        $userVotes[$vote->voteable_id] = $vote->vote_type;
-                    }
-                }
-            }
-            
-            // Format contents
+            // Format content (without user-specific data like votes)
             $formattedContents = [];
             
-            // Process courses - only include items verified to be in this library
             foreach ($courses as $course) {
                 if (isset($contentRelationships[Course::class][$course->id])) {
                     $formattedContents[] = [
@@ -1528,7 +1472,6 @@ class OpenLibraryController extends Controller
                 }
             }
             
-            // Process posts - only include items verified to be in this library
             foreach ($posts as $post) {
                 if (isset($contentRelationships[Post::class][$post->id])) {
                     $formattedContents[] = [
@@ -1547,7 +1490,6 @@ class OpenLibraryController extends Controller
                 }
             }
             
-            // Process URLs - only include items verified to be in this library
             foreach ($urls as $urlItem) {
                 if (isset($contentRelationships[LibraryUrl::class][$urlItem->id])) {
                     $formattedContents[] = [
@@ -1555,7 +1497,7 @@ class OpenLibraryController extends Controller
                         'title' => $urlItem->title,
                         'url' => $urlItem->url,
                         'description' => $urlItem->summary,
-                        'notes' => $contentRelationships[LibraryUrl::class][$urlItem->id]['notes'] ?? null, // Per-library notes from library_content
+                        'notes' => $contentRelationships[LibraryUrl::class][$urlItem->id]['notes'] ?? null,
                         'type' => 'url',
                         'relevance_score' => $contentRelationships[LibraryUrl::class][$urlItem->id]['relevance_score'],
                         'created_at' => $urlItem->created_at ? $urlItem->created_at->toIso8601String() : now()->toIso8601String(),
@@ -1563,23 +1505,25 @@ class OpenLibraryController extends Controller
                             'id' => $urlItem->creator->id,
                             'username' => $urlItem->creator->username
                         ] : null,
-                        'upvotes_count' => $votesData[$urlItem->id]['up'] ?? 0,
-                        'downvotes_count' => $votesData[$urlItem->id]['down'] ?? 0,
-                        'comments_count' => $commentsCounts[$urlItem->id] ?? 0,
-                        'user_vote' => $userVotes[$urlItem->id] ?? null
+                        // Placeholder for user-specific data (filled in later)
+                        'upvotes_count' => 0,
+                        'downvotes_count' => 0,
+                        'comments_count' => 0
                     ];
                 }
             }
             
-            // Sort all contents by relevance score
+            // Sort by relevance
             usort($formattedContents, function($a, $b) {
                 return $b['relevance_score'] <=> $a['relevance_score'];
             });
             
-            // Refresh library to get updated views_count
-            $library->refresh();
+            // Get followers count
+            $followersCount = DB::table('library_follows')
+                ->where('library_id', $id)
+                ->count();
             
-            $responseData = [
+            return [
                 'library' => [
                     'id' => $library->id,
                     'name' => $library->name,
@@ -1588,7 +1532,6 @@ class OpenLibraryController extends Controller
                     'thumbnail_url' => $library->thumbnail_url,
                     'cover_image_url' => $library->cover_image_url,
                     'views_count' => $library->views_count ?? 0,
-                    'is_following' => $isFollowing,
                     'followers_count' => $followersCount,
                     'course_id' => $library->course_id,
                     'is_approved' => $library->is_approved,
@@ -1601,20 +1544,97 @@ class OpenLibraryController extends Controller
                         'avatar' => $library->creator->avatar
                     ] : null
                 ],
-                'contents' => $formattedContents
+                'contents' => $formattedContents,
+                '_url_ids' => $urlIds // Pass to user data fetcher
             ];
             
-            // Cache the response
-            // Cache::put($cacheKey, $responseData, $cacheTtl);
-            
-            return response()->json($responseData);
-            
         } catch (\Exception $e) {
-            Log::error('Error retrieving library: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Error retrieving library: ' . $e->getMessage()
-            ], 500);
+            Log::error('Error fetching library structure: ' . $e->getMessage());
+            return null;
         }
+    }
+    
+    /**
+     * Fetch user-specific library data (votes, follows) - cached 1 hour per user
+     */
+    private function fetchUserLibraryData($id, $userId, $libraryStructure)
+    {
+        $urlIds = $libraryStructure['_url_ids'] ?? [];
+        
+        // Get user's follow status
+        $isFollowing = false;
+        if ($userId) {
+            $isFollowing = DB::table('library_follows')
+                ->where('library_id', $id)
+                ->where('user_id', $userId)
+                ->exists();
+        }
+        
+        // Get votes and comments for URLs
+        $votesData = [];
+        $commentsCounts = [];
+        $userVotes = [];
+        
+        if (!empty($urlIds)) {
+            // Batch load all votes
+            $allVotes = DB::table('votes')
+                ->where('voteable_type', LibraryUrl::class)
+                ->whereIn('voteable_id', $urlIds)
+                ->select('voteable_id', 'vote_type', DB::raw('count(*) as count'))
+                ->groupBy('voteable_id', 'vote_type')
+                ->get();
+            
+            foreach ($allVotes as $vote) {
+                if (!isset($votesData[$vote->voteable_id])) {
+                    $votesData[$vote->voteable_id] = ['up' => 0, 'down' => 0];
+                }
+                $votesData[$vote->voteable_id][$vote->vote_type] = $vote->count;
+            }
+            
+            // Batch load all comments
+            $allComments = DB::table('comments')
+                ->where('commentable_type', LibraryUrl::class)
+                ->whereIn('commentable_id', $urlIds)
+                ->select('commentable_id', DB::raw('count(*) as count'))
+                ->groupBy('commentable_id')
+                ->get();
+            
+            foreach ($allComments as $comment) {
+                $commentsCounts[$comment->commentable_id] = $comment->count;
+            }
+            
+            // Get user's votes
+            if ($userId) {
+                $userVoteRecords = DB::table('votes')
+                    ->where('user_id', $userId)
+                    ->where('voteable_type', LibraryUrl::class)
+                    ->whereIn('voteable_id', $urlIds)
+                    ->get();
+                
+                foreach ($userVoteRecords as $vote) {
+                    $userVotes[$vote->voteable_id] = $vote->vote_type;
+                }
+            }
+        }
+        
+        // Merge vote/comment data into contents
+        $contents = $libraryStructure['contents'];
+        foreach ($contents as &$content) {
+            if ($content['type'] === 'url') {
+                $urlId = $content['id'];
+                $content['upvotes_count'] = $votesData[$urlId]['up'] ?? 0;
+                $content['downvotes_count'] = $votesData[$urlId]['down'] ?? 0;
+                $content['comments_count'] = $commentsCounts[$urlId] ?? 0;
+                $content['user_vote'] = $userVotes[$urlId] ?? null;
+            }
+        }
+        
+        return [
+            'library' => [
+                'is_following' => $isFollowing
+            ],
+            'contents' => $contents
+        ];
     }
     
     /**
