@@ -183,79 +183,83 @@ class OpenLibraryController extends Controller
                 ], 401);
             }
             
-            // Get libraries viewed in the last 8 hours
-            $eightHoursAgo = now()->subHours(8);
+            // OPTIMIZATION: Cache recently viewed libraries for 2 minutes
+            $cacheKey = "recently_viewed_{$userId}";
+            $libraries = Cache::remember($cacheKey, 120, function () use ($userId) {
+                // Get libraries viewed in the last 8 hours
+                $eightHoursAgo = now()->subHours(8);
             
-            $recentViews = DB::table('library_views')
-                ->where('user_id', $userId)
-                ->where('viewed_at', '>=', $eightHoursAgo)
-                ->orderBy('viewed_at', 'desc')
-                ->limit(10) // Limit to 10 most recent
-                ->get();
-            
-            if ($recentViews->isEmpty()) {
-                return response()->json([
-                    'libraries' => []
-                ]);
-            }
-            
-            $libraryIds = $recentViews->pluck('library_id')->toArray();
-            
-            // Fetch the libraries with their details
-            $libraries = OpenLibrary::whereIn('id', $libraryIds)
-                ->whereNull('deleted_at')
-                ->get()
-                ->keyBy('id');
-            
-            // Get follower counts for all libraries in one query
-            $followerCounts = DB::table('library_follows')
-                ->whereIn('library_id', $libraryIds)
-                ->select('library_id', DB::raw('count(*) as count'))
-                ->groupBy('library_id')
-                ->pluck('count', 'library_id')
-                ->toArray();
-            
-            // Get content counts for all libraries in one query
-            $contentCounts = DB::table('library_content')
-                ->whereIn('library_id', $libraryIds)
-                ->select('library_id', DB::raw('count(*) as count'))
-                ->groupBy('library_id')
-                ->pluck('count', 'library_id')
-                ->toArray();
-            
-            // Check follow status for all libraries in one query
-            $followedLibraryIds = DB::table('library_follows')
-                ->where('user_id', $userId)
-                ->whereIn('library_id', $libraryIds)
-                ->pluck('library_id')
-                ->toArray();
-            
-            // Format libraries maintaining the view order
-            $formattedLibraries = $recentViews->map(function ($view) use ($libraries, $userId, $followerCounts, $contentCounts, $followedLibraryIds) {
-                $library = $libraries->get($view->library_id);
+                $recentViews = DB::table('library_views')
+                    ->where('user_id', $userId)
+                    ->where('viewed_at', '>=', $eightHoursAgo)
+                    ->orderBy('viewed_at', 'desc')
+                    ->limit(10) // Limit to 10 most recent
+                    ->get();
                 
-                if (!$library) {
-                    return null;
+                if ($recentViews->isEmpty()) {
+                    return [];
                 }
                 
-                return [
-                    'id' => $library->id,
-                    'name' => $library->name,
-                    'description' => $library->description,
-                    'type' => $library->type,
-                    'thumbnail_url' => $library->thumbnail_url,
-                    'cover_image_url' => $library->cover_image_url,
-                    'thumbnailUrl' => $library->thumbnail_url,
-                    'coverImageUrl' => $library->cover_image_url,
-                    'followers_count' => $followerCounts[$library->id] ?? 0,
-                    'content_count' => $contentCounts[$library->id] ?? 0,
-                    'is_following' => in_array($library->id, $followedLibraryIds),
-                    'viewed_at' => $view->viewed_at,
-                ];
-            })->filter()->values();
+                $libraryIds = $recentViews->pluck('library_id')->toArray();
+                
+                // Fetch the libraries with their details
+                $libraries = OpenLibrary::whereIn('id', $libraryIds)
+                    ->whereNull('deleted_at')
+                    ->get()
+                    ->keyBy('id');
+                
+                // Get follower counts for all libraries in one query
+                $followerCounts = DB::table('library_follows')
+                    ->whereIn('library_id', $libraryIds)
+                    ->select('library_id', DB::raw('count(*) as count'))
+                    ->groupBy('library_id')
+                    ->pluck('count', 'library_id')
+                    ->toArray();
+                
+                // Get content counts for all libraries in one query
+                $contentCounts = DB::table('library_content')
+                    ->whereIn('library_id', $libraryIds)
+                    ->select('library_id', DB::raw('count(*) as count'))
+                    ->groupBy('library_id')
+                    ->pluck('count', 'library_id')
+                    ->toArray();
+                
+                // Check follow status for all libraries in one query
+                $followedLibraryIds = DB::table('library_follows')
+                    ->where('user_id', $userId)
+                    ->whereIn('library_id', $libraryIds)
+                    ->pluck('library_id')
+                    ->toArray();
+                
+                // Format libraries maintaining the view order
+                $formattedLibraries = $recentViews->map(function ($view) use ($libraries, $userId, $followerCounts, $contentCounts, $followedLibraryIds) {
+                    $library = $libraries->get($view->library_id);
+                    
+                    if (!$library) {
+                        return null;
+                    }
+                    
+                    return [
+                        'id' => $library->id,
+                        'name' => $library->name,
+                        'description' => $library->description,
+                        'type' => $library->type,
+                        'thumbnail_url' => $library->thumbnail_url,
+                        'cover_image_url' => $library->cover_image_url,
+                        'thumbnailUrl' => $library->thumbnail_url,
+                        'coverImageUrl' => $library->cover_image_url,
+                        'followers_count' => $followerCounts[$library->id] ?? 0,
+                        'content_count' => $contentCounts[$library->id] ?? 0,
+                        'is_following' => in_array($library->id, $followedLibraryIds),
+                        'viewed_at' => $view->viewed_at,
+                    ];
+                })->filter()->values();
+                
+                return $formattedLibraries;
+            });
             
             return response()->json([
-                'libraries' => $formattedLibraries
+                'libraries' => $libraries
             ]);
             
         } catch (\Exception $e) {
