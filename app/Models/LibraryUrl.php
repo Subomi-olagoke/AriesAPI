@@ -40,6 +40,14 @@ class LibraryUrl extends Model
     }
 
     /**
+     * Alias for creator() to maintain consistency with other content models.
+     */
+    public function user()
+    {
+        return $this->creator();
+    }
+
+    /**
      * Get all comments for this library URL.
      */
     public function comments(): MorphMany
