@@ -86,6 +86,14 @@ class OpenLibrary extends Model
     }
     
     /**
+     * Get the user who created this library
+     */
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'creator_id');
+    }
+    
+    /**
      * Get the user who approved this library
      */
     public function approver()
