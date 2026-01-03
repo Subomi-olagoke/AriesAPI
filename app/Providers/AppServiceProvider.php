@@ -30,5 +30,18 @@ class AppServiceProvider extends ServiceProvider
         ini_set('post_max_size', '100M');
         ini_set('max_execution_time', '300');
         ini_set('memory_limit', '512M');
+
+        // Log Redis connection status on boot (to verify connection for debugging)
+        // We do this inside a try-catch to ensure app doesn't crash if Redis is down
+        try {
+            // Only check occasionally or on debug to avoid ping overhead on every single request
+            // For now, we'll check it to reassure deployment status
+            if (!app()->runningInConsole()) {
+                \Illuminate\Support\Facades\Cache::getRedis()->ping();
+                // Log::info("✅ App Boot: Redis connection established.");
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("❌ App Boot: Redis connection failed: " . $e->getMessage());
+        }
     }
 }
