@@ -37,16 +37,20 @@ class OpenLibraryController extends Controller
     {
         Log::info("🗑️ Clearing cache for library {$libraryId}");
         
-        // Clear ALL user-specific library sections caches
-        // Pattern: library_sections_v2_*
         try {
-            $redis = Cache::getRedis();
+            // Get Redis connection from cache store (uses database 1)
+            $redis = Cache::store('redis')->getRedis();
+            $prefix = config('cache.prefix');
             
             // Clear all user-specific sections caches
-            $sectionKeys = $redis->keys('*library_sections_v2_*');
+            // Pattern: {prefix}library_sections_v2_*
+            $sectionPattern = $prefix . 'library_sections_v2_*';
+            $sectionKeys = $redis->keys($sectionPattern);
             if (!empty($sectionKeys)) {
                 $redis->del($sectionKeys);
-                Log::info("🗑️ Cleared " . count($sectionKeys) . " section cache keys");
+                Log::info("🗑️ Cleared " . count($sectionKeys) . " section cache keys (pattern: {$sectionPattern})");
+            } else {
+                Log::info("ℹ️ No section cache keys found (pattern: {$sectionPattern})");
             }
             
             // Clear library structure cache (6hr shared cache)
@@ -54,11 +58,14 @@ class OpenLibraryController extends Controller
             Log::info("🗑️ Cleared lib_struct:{$libraryId}");
             
             // Clear all user-specific caches for this library
-            // Pattern: lib_user:{libraryId}:*
-            $userKeys = $redis->keys("*lib_user:{$libraryId}:*");
+            // Pattern: {prefix}lib_user:{libraryId}:*
+            $userPattern = $prefix . "lib_user:{$libraryId}:*";
+            $userKeys = $redis->keys($userPattern);
             if (!empty($userKeys)) {
                 $redis->del($userKeys);
-                Log::info("🗑️ Cleared " . count($userKeys) . " user-specific cache keys");
+                Log::info("🗑️ Cleared " . count($userKeys) . " user-specific cache keys (pattern: {$userPattern})");
+            } else {
+                Log::info("ℹ️ No user-specific cache keys found (pattern: {$userPattern})");
             }
             
             Log::info("✅ Cache clearing complete for library {$libraryId}");
