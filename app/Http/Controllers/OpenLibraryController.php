@@ -35,6 +35,8 @@ class OpenLibraryController extends Controller
      */
     private function clearLibraryCache($libraryId)
     {
+        Log::info("🗑️ Clearing cache for library {$libraryId}");
+        
         // Clear ALL user-specific library sections caches
         // Pattern: library_sections_v2_*
         try {
@@ -44,19 +46,24 @@ class OpenLibraryController extends Controller
             $sectionKeys = $redis->keys('*library_sections_v2_*');
             if (!empty($sectionKeys)) {
                 $redis->del($sectionKeys);
+                Log::info("🗑️ Cleared " . count($sectionKeys) . " section cache keys");
             }
             
             // Clear library structure cache (6hr shared cache)
             Cache::forget("lib_struct:{$libraryId}");
+            Log::info("🗑️ Cleared lib_struct:{$libraryId}");
             
             // Clear all user-specific caches for this library
             // Pattern: lib_user:{libraryId}:*
             $userKeys = $redis->keys("*lib_user:{$libraryId}:*");
             if (!empty($userKeys)) {
                 $redis->del($userKeys);
+                Log::info("🗑️ Cleared " . count($userKeys) . " user-specific cache keys");
             }
+            
+            Log::info("✅ Cache clearing complete for library {$libraryId}");
         } catch (\Exception $e) {
-            Log::warning("Failed to clear library cache: " . $e->getMessage());
+            Log::warning("⚠️ Failed to clear library cache: " . $e->getMessage());
             
             // Fallback: Clear what we can with Laravel's Cache facade
             Cache::forget("lib_struct:{$libraryId}");
