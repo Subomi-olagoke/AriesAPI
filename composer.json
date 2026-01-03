@@ -13,6 +13,7 @@
         "aws/aws-sdk-php": "^3.294",
         "cloudinary/cloudinary_php": "^3.1",
         "doctrine/dbal": "^3.5.1",
+        "embed/embed": "^4.4",
         "firebase/php-jwt": "^6.11",
         "google/apiclient": "^2.12",
         "guzzlehttp/guzzle": "^7.2",
