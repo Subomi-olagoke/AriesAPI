@@ -1909,18 +1909,14 @@ class OpenLibraryController extends Controller
             $relevanceScore = $request->input('relevance_score', 0.8);
             $thumbnailUrl = null;
             
-            // If title/summary missing, fetch rich metadata
-            if (empty($title) || empty($summary)) {
+            // PERFORMANCE: Only fetch metadata if title AND summary are both missing
+            // Otherwise, use provided data and fetch metadata async in background
+            if (empty($title) && empty($summary)) {
+                // Blocking fetch only when we have NO data at all
                 $metadata = $metadataService->fetchMetadata($url);
                 
-                if (empty($title)) {
-                    $title = $metadata['title'] ?? null;
-                }
-                
-                if (empty($summary)) {
-                    $summary = $metadata['description'] ?? null;
-                }
-                
+                $title = $metadata['title'] ?? null;
+                $summary = $metadata['description'] ?? null;
                 $thumbnailUrl = $metadata['thumbnail_url'] ?? null;
             }
             
