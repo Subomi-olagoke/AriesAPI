@@ -1392,7 +1392,11 @@ class OpenLibraryController extends Controller
             }
             
             // STEP 3: Merge structure + user data
-            $responseData = array_merge($libraryStructure, $userData);
+            // Manual merge to ensure 'library' metadata isn't overwritten by 'library' user data (array_merge doesn't deep merge)
+            $responseData = [
+                'library' => array_merge($libraryStructure['library'], $userData['library']),
+                'contents' => $userData['contents']
+            ];
             
             // Increment view count (async, doesn't block response)
             dispatch(function () use ($id, $userId) {
