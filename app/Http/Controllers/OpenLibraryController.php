@@ -49,7 +49,8 @@ class OpenLibraryController extends Controller
             Log::info("🔍 Using prefix: '{$fullPrefix}' (redis: '{$redisPrefix}', cache: '{$cachePrefix}')");
             
             // Clear all user-specific sections caches
-            $sectionPattern = $fullPrefix . 'library_sections_v2_*';
+            // Note: Keys have format {prefix}:key_name (colon separator)
+            $sectionPattern = $fullPrefix . ':library_sections_v2_*';
             $sectionKeys = $redis->keys($sectionPattern);
             if (!empty($sectionKeys)) {
                 $redis->del($sectionKeys);
@@ -63,7 +64,7 @@ class OpenLibraryController extends Controller
             Log::info("🗑️ Cleared lib_struct:{$libraryId}");
             
             // Clear all user-specific caches for this library
-            $userPattern = $fullPrefix . "lib_user:{$libraryId}:*";
+            $userPattern = $fullPrefix . ":lib_user:{$libraryId}:*";
             $userKeys = $redis->keys($userPattern);
             if (!empty($userKeys)) {
                 $redis->del($userKeys);
