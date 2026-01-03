@@ -31,13 +31,29 @@ class OpenLibraryController extends Controller
     /**
      * Clear cache for a library
      * Note: This clears cache for the library data itself
-     * User-specific cache will expire naturally (5 min TTL)
+     * User-specific cache will expire naturally (1 hour TTL)
      */
-    protected function clearLibraryCache($libraryId)
+    private function clearLibraryCache($libraryId)
     {
-        // For now, we rely on TTL expiration since we can't easily clear all user variations
-        // In production with Redis, you could use cache tags: Cache::tags(["library_{$libraryId}"])->flush();
-        // For now, the 5-minute TTL ensures fresh data after updates
+        // Clear library sections cache (affects all users)
+        Cache::forget('library_sections_v2');
+        
+        // Clear library detail cache for all users
+        // We use a wildcard pattern to clear all user-specific caches
+        // Format: library_{id}_user_{userId}
+        $pattern = "library_{$libraryId}_user_*";
+        
+        // Get all cache keys matching the pattern and delete them
+        // This ensures all users get fresh data after library update
+        try {
+            $redis = Cache::getRedis();
+            $keys = $redis->keys($pattern);
+            if (!empty($keys)) {
+                $redis->del($keys);
+            }
+        } catch (\Exception $e) {
+            Log::warning("Failed to clear cache pattern {$pattern}: " . $e->getMessage());
+        }
     }
     
     /**
@@ -596,6 +612,18 @@ class OpenLibraryController extends Controller
      * - More to Explore: Discovery of other approved libraries
      */
     public function getSections()
+    {
+        // PERFORMANCE: Cache library sections for 30 minutes
+        // This makes the feed load instantly for all users
+        return Cache::remember('library_sections_v2', 1800, function () {
+            return $this->fetchLibrarySections();
+        });
+    }
+
+    /**
+     * Internal method to fetch library sections (called by cache or directly)
+     */
+    private function fetchLibrarySections()
     {
         try {
             $user = Auth::user();
@@ -1305,6 +1333,30 @@ class OpenLibraryController extends Controller
         try {
             $user = Auth::user();
             $userId = $user ? $user->id : null;
+            
+            // PERFORMANCE: Cache library details for 1 hour per user
+            // Cache key includes user ID to handle personalized data (follow status, votes)
+            $cacheKey = "library_{$id}_user_" . ($userId ?? 'guest');
+            
+            return Cache::remember($cacheKey, 3600, function () use ($id, $userId) {
+                return $this->fetchLibraryDetails($id, $userId);
+            });
+            
+        } catch (\Exception $e) {
+            Log::error('Show library failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Library not found',
+                'error' => $e->getMessage()
+            ], 404);
+        }
+    }
+
+    /**
+     * Internal method to fetch library details (called by cache or directly)
+     */
+    private function fetchLibraryDetails($id, $userId)
+    {
+        try {
             
             // Caching removed to ensure real-time updates for votes and comments
             // attempts to cache caused stale data when returning from content detail view
