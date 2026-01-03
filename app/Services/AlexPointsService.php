@@ -283,10 +283,10 @@ class AlexPointsService
             'leaderboard' => $leaderboard->values(),
             'current_user' => $currentUserData,
             'pagination' => [
-                'current_page' => $page,
-                'per_page' => $perPage,
-                'total_users' => $totalUsers,
-                'total_pages' => ceil($totalUsers / $perPage),
+                'current_page' => (int) $page,
+                'per_page' => (int) $perPage,
+                'total_users' => (int) $totalUsers,
+                'total_pages' => (int) ceil($totalUsers / $perPage),
                 'has_more' => ($offset + $perPage) < $totalUsers
             ]
         ];
