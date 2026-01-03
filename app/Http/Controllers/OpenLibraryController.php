@@ -2556,6 +2556,7 @@ class OpenLibraryController extends Controller
                     $libraryUrl = \App\Models\LibraryUrl::find($urlRelation->content_id);
                     
                     if (!$libraryUrl) {
+                        Log::warning("Library {$library->id} references missing LibraryUrl {$urlRelation->content_id}");
                         $failed++;
                         continue;
                     }
@@ -2594,5 +2595,48 @@ class OpenLibraryController extends Controller
             ], 500);
         }
     }
-    
+
+    /**
+     * Debug library content structure
+     */
+    public function debugLibrary($id)
+    {
+        try {
+            $library = OpenLibrary::findOrFail($id);
+            
+            $content = DB::table('library_content')
+                ->where('library_id', $id)
+                ->get();
+                
+            $urlContent = $content->where('content_type', \App\Models\LibraryUrl::class);
+            $urlIds = $urlContent->pluck('content_id')->toArray();
+            
+            $foundUrls = \App\Models\LibraryUrl::whereIn('id', $urlIds)->get();
+            $foundIds = $foundUrls->pluck('id')->toArray();
+            
+            $missingIds = array_diff($urlIds, $foundIds);
+            
+            // Check for potential ID type mismatches or other issues
+            $rawCheck = [];
+            foreach ($missingIds as $missingId) {
+                // Check if it exists with different type or raw query
+                $rawParams = DB::select("SELECT * FROM library_urls WHERE id = ?", [$missingId]);
+                $rawCheck[$missingId] = empty($rawParams) ? 'Not Found in DB' : 'Found in DB (Eloquent scope issue?)';
+            }
+            
+            return response()->json([
+                'library_id' => $id,
+                'library_name' => $library->name,
+                'total_content_rows' => $content->count(),
+                'url_content_rows' => $urlContent->count(),
+                'found_url_models' => $foundUrls->count(),
+                'missing_url_ids' => array_values($missingIds),
+                'missing_debug' => $rawCheck,
+                'content_sample' => $urlContent->take(5)->values()->toArray(),
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 }

@@ -353,3 +353,6 @@ Route::get('/redis-test', function() {
         ], 500);
     }
 });
+
+// Debug Library Route
+Route::get('/debug-library/{id}', [\App\Http\Controllers\OpenLibraryController::class, 'debugLibrary']);
