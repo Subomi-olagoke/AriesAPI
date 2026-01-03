@@ -38,7 +38,7 @@ class AppServiceProvider extends ServiceProvider
             // For now, we'll check it to reassure deployment status
             if (!app()->runningInConsole()) {
                 \Illuminate\Support\Facades\Cache::getRedis()->ping();
-                // Log::info("✅ App Boot: Redis connection established.");
+                \Illuminate\Support\Facades\Log::info("✅ App Boot: Redis ping successful (Request: " . request()->path() . ")");
             }
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error("❌ App Boot: Redis connection failed: " . $e->getMessage());

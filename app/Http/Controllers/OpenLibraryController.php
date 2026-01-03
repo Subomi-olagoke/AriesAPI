@@ -1358,6 +1358,8 @@ class OpenLibraryController extends Controller
     private function fetchLibraryDetails($id, $userId)
     {
         try {
+            Log::info("🚀 START fetchLibraryDetails for library {$id} (User: {$userId})");
+            
             // STEP 1: Get library structure (cached 6 hours, shared across all users)
             $libraryStructure = Cache::remember("lib_struct:{$id}", 21600, function () use ($id) {
                 Log::info("📚 Redis MISS: Structure for library {$id} - fetching from DB");
