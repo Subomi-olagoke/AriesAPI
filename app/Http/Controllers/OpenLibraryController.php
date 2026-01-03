@@ -1881,7 +1881,7 @@ class OpenLibraryController extends Controller
      * Add a URL to a library with automatic content fetching and summarization.
      * Stores URLs inline with other content types.
      */
-    public function addUrl(Request $request, $id, UrlMetadataService $metadataService)
+    public function addUrl(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
             'url' => 'required|url|max:2048',
@@ -1909,16 +1909,8 @@ class OpenLibraryController extends Controller
             $relevanceScore = $request->input('relevance_score', 0.8);
             $thumbnailUrl = null;
             
-            // PERFORMANCE: Only fetch metadata if title AND summary are both missing
-            // Otherwise, use provided data and fetch metadata async in background
-            if (empty($title) && empty($summary)) {
-                // Blocking fetch only when we have NO data at all
-                $metadata = $metadataService->fetchMetadata($url);
-                
-                $title = $metadata['title'] ?? null;
-                $summary = $metadata['description'] ?? null;
-                $thumbnailUrl = $metadata['thumbnail_url'] ?? null;
-            }
+            // iOS app provides title/summary, so we don't need external metadata fetching
+            // Fallbacks are handled below if data is missing
             
             // Fallbacks if metadata fetch failed or returned empty
             if (empty($title)) {
