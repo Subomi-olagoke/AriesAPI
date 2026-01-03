@@ -314,3 +314,42 @@ Route::get('/premium/failed', [App\Http\Controllers\PremiumStorefrontController:
 // Enrollment success/failure pages
 Route::view('/enrollment/success', 'enrollment.success')->name('enrollment.success');
 Route::view('/enrollment/failed', 'enrollment.failed')->name('enrollment.failed');
+
+// Redis Connection Test Route
+Route::get('/redis-test', function() {
+    try {
+        $redis = Illuminate\Support\Facades\Cache::getRedis();
+        $isConnected = $redis->ping();
+        
+        $key = 'redis_test_key_' . time();
+        $value = 'Hello from Redis! ' . now();
+        
+        // Test Put
+        Illuminate\Support\Facades\Cache::put($key, $value, 60);
+        
+        // Test Get
+        $retrieved = Illuminate\Support\Facades\Cache::get($key);
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Redis connection successful!',
+            'ping' => $isConnected,
+            'test_key' => $key,
+            'test_value' => $value,
+            'retrieved_value' => $retrieved,
+            'match' => $value === $retrieved,
+            'config' => [
+                'host' => config('database.redis.default.host'),
+                'port' => config('database.redis.default.port'),
+                'client' => config('database.redis.client'),
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Redis connection failed: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});

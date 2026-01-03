@@ -1360,18 +1360,34 @@ class OpenLibraryController extends Controller
         try {
             // STEP 1: Get library structure (cached 6 hours, shared across all users)
             $libraryStructure = Cache::remember("lib_struct:{$id}", 21600, function () use ($id) {
+                Log::info("📚 Redis MISS: Structure for library {$id} - fetching from DB");
                 return $this->fetchLibraryStructure($id);
             });
             
             if (!$libraryStructure) {
                 return response()->json(['message' => 'Library not found'], 404);
+            } else {
+                // Log hit only if not just fetched (checking internal property if we could, but simple log here involves logic)
+                // For simplicity in this context, we rely on the MISS log. if we don't see MISS, it's a HIT.
+                // Or we can explicitly check existence before remember, but that adds overhead.
+                // Let's just log that we are retrieving it.
+                // Log::info("📚 Redis Retrieval: Structure for library {$id}"); 
             }
             
             // STEP 2: Get user-specific data (cached 1 hour per user)
             $userCacheKey = "lib_user:{$id}:" . ($userId ?? 'guest');
             $userData = Cache::remember($userCacheKey, 3600, function () use ($id, $userId, $libraryStructure) {
+                Log::info("👤 Redis MISS: User data for library {$id}, user {$userId} - fetching from DB");
                 return $this->fetchUserLibraryData($id, $userId, $libraryStructure);
             });
+            
+            // Log connection info occasionally or on structure miss
+            if (Cache::has("lib_struct:{$id}")) {
+                 Log::info("⚡️ Redis HIT: Structure for library {$id}");
+            }
+             if (Cache::has($userCacheKey)) {
+                 Log::info("⚡️ Redis HIT: User data for library {$id}, user {$userId}");
+            }
             
             // STEP 3: Merge structure + user data
             $responseData = array_merge($libraryStructure, $userData);
