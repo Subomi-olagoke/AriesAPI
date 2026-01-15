@@ -1,0 +1,44 @@
+// Add these routes to support the DocumentView functionality
+// These will be merged with your existing api.php routes
+
+// Document Routes for Channel Integration
+Route::middleware('auth:sanctum')->group(function () {
+    // Get documents in a channel
+    Route::get('/channels/{channelId}/documents', [CollaborationController::class, 'getDocuments']);
+    
+    // Create a new document in a channel
+    Route::post('/channels/{channelId}/documents', [CollaborationController::class, 'createDocument']);
+    
+    // Get a specific document with content and collaborators
+    Route::get('/channels/{channelId}/documents/{documentId}', [CollaborationController::class, 'getDocument']);
+    
+    // Update document content
+    Route::put('/channels/{channelId}/documents/{documentId}/content', [CollaborationController::class, 'updateDocumentContent']);
+    
+    // Update document title
+    Route::put('/channels/{channelId}/documents/{documentId}/title', [CollaborationController::class, 'updateDocumentTitle']);
+    
+    // Get document collaborators
+    Route::get('/channels/{channelId}/documents/{documentId}/collaborators', [CollaborationController::class, 'getDocumentCollaborators']);
+    
+    // Get document version history
+    Route::get('/channels/{channelId}/documents/{documentId}/history', [CollaborationController::class, 'getDocumentHistory']);
+    
+    // Restore document to a previous version
+    Route::post('/channels/{channelId}/documents/{documentId}/restore/{versionId}', [CollaborationController::class, 'restoreDocumentVersion']);
+    
+    // Process document operations for real-time editing
+    Route::post('/channels/{channelId}/documents/{documentId}/operations', [CollaborationController::class, 'processDocumentOperation']);
+    
+    // Update cursor position in a document
+    Route::post('/channels/{channelId}/documents/{documentId}/cursor', [CollaborationController::class, 'updateDocumentCursor']);
+    
+    // Get cursor positions from all collaborators
+    Route::get('/channels/{channelId}/documents/{documentId}/cursors', [CollaborationController::class, 'getDocumentCursors']);
+    
+    // Add a comment to a document
+    Route::post('/channels/{channelId}/documents/{documentId}/comments', [CollaborationController::class, 'addDocumentComment']);
+    
+    // Update document permissions
+    Route::put('/channels/{channelId}/documents/{documentId}/permissions', [CollaborationController::class, 'updateDocumentPermissions']);
+});
