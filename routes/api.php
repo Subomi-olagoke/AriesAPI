@@ -13,6 +13,7 @@ use App\Http\Controllers\LibraryFollowController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\LikeController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\HighlightController;
 
 /*
 |--------------------------------------------------------------------------
@@ -282,6 +283,17 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Additional points route for compatibility
     Route::get('/users/points', [\App\Http\Controllers\AlexPointsPaymentController::class, 'getPointsBalance']);
+    
+    // Highlights API routes (v1)
+    Route::prefix('v1')->group(function () {
+        // Note: More specific routes must come before parameterized routes
+        Route::get('/highlights/stats', [\App\Http\Controllers\HighlightController::class, 'getHighlightStats']);
+        Route::get('/highlights', [\App\Http\Controllers\HighlightController::class, 'getAllUserHighlights']);
+        Route::get('/highlights/{urlId}', [\App\Http\Controllers\HighlightController::class, 'fetchHighlights']);
+        Route::post('/highlights', [\App\Http\Controllers\HighlightController::class, 'createHighlight']);
+        Route::put('/highlights/{highlightId}', [\App\Http\Controllers\HighlightController::class, 'updateHighlightNote']);
+        Route::delete('/highlights/{highlightId}', [\App\Http\Controllers\HighlightController::class, 'deleteHighlight']);
+    });
     
     // Admin routes for library management (now accessible to all authenticated users)
     Route::prefix('admin')->group([], function() {

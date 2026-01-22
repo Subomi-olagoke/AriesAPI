@@ -167,6 +167,8 @@ class OpenLibrary extends Model
         if (!$this->share_key) {
             return null;
         }
-        return url("/library/shared/{$this->share_key}");
+        // Use the web app URL for sharing, not the API URL
+        $webAppUrl = env('WEB_APP_URL', 'https://alexandria.app');
+        return "{$webAppUrl}/libraries/shared/{$this->share_key}";
     }
 }
