@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Report;
 use App\Models\User;
 use App\Models\Post;
+use App\Models\Comment;
 use App\Models\Educators;
 use App\Models\LibraryUrl;
 use App\Notifications\ReportSubmittedNotification;
@@ -52,6 +53,10 @@ class ReportController extends Controller
             case 'library_url':
                 $reportableType = LibraryUrl::class;
                 $reportable = LibraryUrl::findOrFail($id);
+                break;
+            case 'comment':
+                $reportableType = Comment::class;
+                $reportable = Comment::findOrFail($id);
                 break;
             default:
                 return response()->json([
@@ -156,6 +161,18 @@ class ReportController extends Controller
     public function reportLibraryUrl(Request $request, $urlId)
     {
         return $this->storeReport($request, 'library-url', $urlId);
+    }
+
+    /**
+     * Report a comment
+     *
+     * @param Request $request
+     * @param int $commentId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function reportComment(Request $request, $commentId)
+    {
+        return $this->storeReport($request, 'comment', $commentId);
     }
 
     /**

@@ -202,6 +202,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/users/following', [\App\Http\Controllers\UserFollowController::class, 'following']);
     Route::get('/users/followers', [\App\Http\Controllers\UserFollowController::class, 'followers']);
     
+    // User Block routes
+    Route::post('/users/{userId}/block', [\App\Http\Controllers\UserBlockController::class, 'blockUser']);
+    Route::post('/users/{userId}/unblock', [\App\Http\Controllers\UserBlockController::class, 'unblockUser']);
+    Route::post('/users/{userId}/block-toggle', [\App\Http\Controllers\UserBlockController::class, 'toggleBlock']);
+    Route::get('/users/{userId}/block-status', [\App\Http\Controllers\UserBlockController::class, 'checkBlockStatus']);
+    Route::get('/users/blocked', [\App\Http\Controllers\UserBlockController::class, 'getBlockedUsers']);
+    
     // Library listing with follow state
     Route::get('/libraries', [LibraryFollowController::class, 'listLibraries']);
     Route::get('/library', [LibraryFollowController::class, 'listLibraries']);
@@ -241,6 +248,9 @@ Route::middleware('auth:sanctum')->group(function () {
         ->where('type', 'library[-_]url');
 
     Route::delete('/comments/{id}', [\App\Http\Controllers\CommentController::class, 'destroy']);
+    
+    // Comment Report routes
+    Route::post('/comments/{id}/report', [ReportController::class, 'reportComment']);
 
     // Add library URL to readlist
     Route::post('/readlists/{readlistId}/library-url', [ReadlistController::class, 'addLibraryUrlToReadlist']);
