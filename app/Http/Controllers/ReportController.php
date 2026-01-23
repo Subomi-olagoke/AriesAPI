@@ -8,10 +8,8 @@ use App\Models\Post;
 use App\Models\Comment;
 use App\Models\Educators;
 use App\Models\LibraryUrl;
-use App\Notifications\ReportSubmittedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Notification;
 
 class ReportController extends Controller
 {
@@ -97,22 +95,8 @@ class ReportController extends Controller
         $report->status = 'pending';
         
         if ($report->save()) {
-            // Eager load relationships before sending notification
+            // Load relationships for response
             $report->load(['reporter', 'reportable']);
-            
-            // Notify admins about the report
-            // Get all admin users
-            $admins = User::where('isAdmin', true)->get();
-            
-            // Only send notifications if there are admins
-            if ($admins->count() > 0) {
-                try {
-                    Notification::send($admins, new ReportSubmittedNotification($report));
-                } catch (\Exception $e) {
-                    // Log notification failure but don't block the report submission
-                    \Log::error('Failed to send report notification: ' . $e->getMessage());
-                }
-            }
             
             return response()->json([
                 'message' => 'Report submitted successfully',
