@@ -17,11 +17,16 @@ class ReportSubmittedNotification extends BaseNotification implements ShouldQueu
         $this->report = $report;
     }
 
-    public function toArray()
+    public function toArray($notifiable = null)
     {
-        $reportable = $this->report->reportable;
+        // Safely get reportable type
         $reportableType = class_basename($this->report->reportable_type);
-        $reporterName = $this->report->reporter->name;
+        
+        // Safely get reporter name with fallback
+        $reporterName = 'A user';
+        if ($this->report->reporter) {
+            $reporterName = $this->report->reporter->name ?? $reporterName;
+        }
 
         return [
             'title' => "New {$reportableType} Report",

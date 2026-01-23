@@ -97,12 +97,22 @@ class ReportController extends Controller
         $report->status = 'pending';
         
         if ($report->save()) {
+            // Eager load relationships before sending notification
+            $report->load(['reporter', 'reportable']);
+            
             // Notify admins about the report
             // Get all admin users
             $admins = User::where('isAdmin', true)->get();
             
-            // Send notification to all admins
-            Notification::send($admins, new ReportSubmittedNotification($report));
+            // Only send notifications if there are admins
+            if ($admins->count() > 0) {
+                try {
+                    Notification::send($admins, new ReportSubmittedNotification($report));
+                } catch (\Exception $e) {
+                    // Log notification failure but don't block the report submission
+                    \Log::error('Failed to send report notification: ' . $e->getMessage());
+                }
+            }
             
             return response()->json([
                 'message' => 'Report submitted successfully',
