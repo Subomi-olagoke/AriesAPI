@@ -299,4 +299,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/users', [\App\Http\Controllers\DashboardController::class, 'getUsers']);
         Route::get('/readlists', [\App\Http\Controllers\DashboardController::class, 'getReadlists']);
     });
+
+    // Article AI routes - GPT-powered features
+    Route::prefix('articles')->group(function() {
+        Route::post('/summarize', [\App\Http\Controllers\ArticleAIController::class, 'summarize']);
+        Route::post('/ask', [\App\Http\Controllers\ArticleAIController::class, 'ask']);
+        Route::post('/suggested-questions', [\App\Http\Controllers\ArticleAIController::class, 'suggestedQuestions']);
+        Route::get('/ai-stats', [\App\Http\Controllers\ArticleAIController::class, 'getStats']);
+    });
 });
