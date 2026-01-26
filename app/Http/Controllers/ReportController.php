@@ -8,8 +8,10 @@ use App\Models\Post;
 use App\Models\Comment;
 use App\Models\Educators;
 use App\Models\LibraryUrl;
+use App\Notifications\ContentFlaggedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class ReportController extends Controller
 {
@@ -97,6 +99,38 @@ class ReportController extends Controller
         if ($report->save()) {
             // Load relationships for response
             $report->load(['reporter', 'reportable']);
+            
+            // Send notification to content owner (if not self-reporting)
+            try {
+                $contentOwner = null;
+                
+                // Determine content owner based on reportable type
+                if ($type === 'post' && $reportable instanceof Post) {
+                    $contentOwner = $reportable->user;
+                } elseif ($type === 'comment' && $reportable instanceof Comment) {
+                    $contentOwner = $reportable->user;
+                } elseif ($type === 'library-url' || $type === 'library_url') {
+                    if ($reportable instanceof LibraryUrl && $reportable->created_by) {
+                        $contentOwner = User::find($reportable->created_by);
+                    }
+                } elseif ($type === 'user' || $type === 'educator') {
+                    // For user reports, the reported user is the content owner
+                    $contentOwner = $reportable;
+                }
+                
+                // Only notify if content owner exists and is different from reporter
+                if ($contentOwner && $contentOwner->id !== $reporter->id) {
+                    $contentOwner->notify(new ContentFlaggedNotification(
+                        $reporter,
+                        $report,
+                        $reportable,
+                        $reportableType
+                    ));
+                    Log::info("Sent content flagged notification to user: {$contentOwner->id}");
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to send content flagged notification: ' . $e->getMessage());
+            }
             
             return response()->json([
                 'message' => 'Report submitted successfully',

@@ -8,11 +8,13 @@ use App\Models\Vote;
 use App\Models\Post;
 use App\Models\Course;
 use App\Models\Comment;
+use App\Models\User;
 use App\Services\OpenLibraryService;
 use App\Services\UrlFetchService;
 use App\Services\AlexPointsService;
 use App\Services\AiLibraryCategorizer;
 use App\Services\UrlMetadataService;
+use App\Notifications\LibraryContentAddedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -2033,6 +2035,31 @@ class OpenLibraryController extends Controller
                 'updated_at' => now()
             ]);
             
+            // Send notifications to library followers (except the user who added it)
+            $adder = Auth::user();
+            try {
+                $followers = DB::table('library_follows')
+                    ->where('library_id', $library->id)
+                    ->where('user_id', '!=', $adder->id) // Don't notify the adder
+                    ->pluck('user_id')
+                    ->toArray();
+                
+                if (!empty($followers)) {
+                    $followerUsers = User::whereIn('id', $followers)->get();
+                    foreach ($followerUsers as $follower) {
+                        $follower->notify(new LibraryContentAddedNotification(
+                            $adder,
+                            $library,
+                            $content,
+                            $contentType
+                        ));
+                    }
+                    Log::info("Sent library content notifications to " . count($followerUsers) . " followers");
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to send library content notifications: ' . $e->getMessage());
+            }
+            
             // OPTIMIZATION: Update library views asynchronously (don't block response)
             $libraryId = $library->id;
             dispatch(function() use ($libraryId) {
@@ -2196,6 +2223,31 @@ class OpenLibraryController extends Controller
             } catch (\Exception $e) {
                 DB::rollBack();
                 throw $e;
+            }
+            
+            // Send notifications to library followers (except the user who added it)
+            $adder = Auth::user();
+            try {
+                $followers = DB::table('library_follows')
+                    ->where('library_id', $library->id)
+                    ->where('user_id', '!=', $adder->id) // Don't notify the adder
+                    ->pluck('user_id')
+                    ->toArray();
+                
+                if (!empty($followers)) {
+                    $followerUsers = User::whereIn('id', $followers)->get();
+                    foreach ($followerUsers as $follower) {
+                        $follower->notify(new LibraryContentAddedNotification(
+                            $adder,
+                            $library,
+                            $existingUrl,
+                            'url'
+                        ));
+                    }
+                    Log::info("Sent library URL notifications to " . count($followerUsers) . " followers");
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to send library URL notifications: ' . $e->getMessage());
             }
             
             // Prepare response data FIRST (before any async operations)

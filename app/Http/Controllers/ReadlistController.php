@@ -5,9 +5,11 @@ use App\Models\Post;
 use App\Models\Course;
 use App\Models\ReadlistItem;
 use App\Models\Readlist;
+use App\Models\User;
 use App\Helpers\SimpleIdGenerator;
 use App\Services\FileUploadService;
 use App\Services\UrlFetchService;
+use App\Notifications\ReadlistNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -579,6 +581,12 @@ class ReadlistController extends Controller
                     ->increment('order');
             }
             
+            // Check if item already existed (to avoid duplicate notifications)
+            $itemExisted = $readlist->items()
+                ->where('item_id', $itemId)
+                ->where('item_type', $itemType)
+                ->exists();
+            
             // Create the readlist item
             $readlistItem = $readlist->items()->updateOrCreate(
                 [
@@ -592,6 +600,32 @@ class ReadlistController extends Controller
             );
             
             DB::commit();
+            
+            // Send notification to content owner if this is a new addition
+            if (!$itemExisted) {
+                try {
+                    $adder = $user;
+                    $contentOwner = $item->user ?? null;
+                    
+                    // Only notify if:
+                    // 1. Content has an owner
+                    // 2. Owner is different from the person adding to readlist
+                    // 3. Readlist owner is different from content owner (don't notify if adding own content to own readlist)
+                    if ($contentOwner && 
+                        $contentOwner->id !== $adder->id && 
+                        $readlist->user_id !== $contentOwner->id) {
+                        $contentOwner->notify(new ReadlistNotification(
+                            $adder,
+                            $readlist,
+                            $item,
+                            $request->item_type
+                        ));
+                        Log::info("Sent readlist notification to content owner: {$contentOwner->id}");
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Failed to send readlist notification: ' . $e->getMessage());
+                }
+            }
             
             return response()->json([
                 'message' => ucfirst($request->item_type) . ' added to readlist',
@@ -969,6 +1003,35 @@ class ReadlistController extends Controller
             $libraryUrl->increment('readlist_count');
 
             DB::commit();
+            
+            // Send notification to library URL creator if they exist and are different from adder
+            try {
+                $adder = $user;
+                $contentOwner = null;
+                
+                // Get the creator of the library URL if it exists
+                if ($libraryUrl->created_by) {
+                    $contentOwner = User::find($libraryUrl->created_by);
+                }
+                
+                // Only notify if:
+                // 1. Content has an owner
+                // 2. Owner is different from the person adding to readlist
+                // 3. Readlist owner is different from content owner
+                if ($contentOwner && 
+                    $contentOwner->id !== $adder->id && 
+                    $readlist->user_id !== $contentOwner->id) {
+                    $contentOwner->notify(new ReadlistNotification(
+                        $adder,
+                        $readlist,
+                        $libraryUrl,
+                        'url'
+                    ));
+                    Log::info("Sent readlist notification to library URL owner: {$contentOwner->id}");
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to send readlist notification for library URL: ' . $e->getMessage());
+            }
 
             return response()->json([
                 'message' => 'Library URL added to readlist successfully',

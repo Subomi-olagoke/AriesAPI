@@ -54,12 +54,12 @@ return [
     ],
 
     'apn' => [
-        'key_id' => env('APNS_KEY_ID'),
-        'team_id' => env('APNS_TEAM_ID'),
-        'app_bundle_id' => env('APNS_APP_BUNDLE_ID'),
-        'private_key_content' => env('APNS_PRIVATE_KEY_CONTENT'),
-        'private_key_path' => env('APNS_PRIVATE_KEY_PATH'),
-        'production' => env('APNS_PRODUCTION', false),
+        'key_id' => '88BWD8CCX2',
+        'team_id' => 'BMBR5BDGDM',
+        'app_bundle_id' => 'com.Oubomi.Ariess',
+        'private_key_content' => 'LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JR1RBZ0VBTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEJIa3dkd0lCQVFRZ1Q0Qm44bytzamRUMzZuMG8KZm04Vy9UamZpVURkek1WbXFKLzkwMEZMNldTZ0NnWUlLb1pJemowREFRZWhSQU5DQUFSZ1J5OWZWdzFBWmxlaQptYUdSNFVvcEFZWFUrcWYrT0g5S3g5Szk3bktOaTFiRVI1TEJSUXdlSEdoSlBoZTM1dXMzcCt3eUxpUG0wTy9yCjEydHVOVTU1Ci0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K',
+        'private_key_path' => null,
+        'production' => true,
     ],
 
     'heroku_api' => [

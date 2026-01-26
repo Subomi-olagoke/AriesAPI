@@ -53,6 +53,8 @@ class User extends Authenticatable {
         'point_level',
         'points_to_next_level',
         'setup_completed',
+        'device_token',
+        'device_type',
     ];
 
     protected $hidden = [
