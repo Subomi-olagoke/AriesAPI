@@ -13,6 +13,7 @@ use App\Http\Controllers\LibraryFollowController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\LikeController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\AppController;
 
 /*
 |--------------------------------------------------------------------------
@@ -66,6 +67,9 @@ Route::get('/readlist/shared/{shareKey}', [ReadlistController::class, 'showBySha
 // Public library share route
 Route::get('/libraries/shared/{shareKey}', [OpenLibraryController::class, 'showByShareKey']);
 Route::get('/library/shared/{shareKey}', [OpenLibraryController::class, 'showByShareKey']);
+
+// App update check route (public - no authentication required)
+Route::post('/app/check-update', [AppController::class, 'checkUpdate']);
 
 // Protected routes that require authentication
 Route::middleware('auth:sanctum')->group(function () {
