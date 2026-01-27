@@ -169,4 +169,13 @@ class OpenLibrary extends Model
         }
         return url("/library/shared/{$this->share_key}");
     }
+
+    /**
+     * Get the users who follow this library
+     */
+    public function followers()
+    {
+        return $this->belongsToMany(User::class, 'library_follows', 'library_id', 'user_id')
+            ->withTimestamps();
+    }
 }

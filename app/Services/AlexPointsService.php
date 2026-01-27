@@ -119,6 +119,8 @@ class AlexPointsService
         $levels = AlexPointsLevel::orderBy('points_required', 'asc')->get();
         $currentLevel = $this->getUserLevel($user);
         
+        $previousLevel = null;
+
         foreach ($levels as $level) {
             $level->is_current = ($currentLevel && $level->id == $currentLevel->id);
             $level->is_achieved = ($level->points_required <= $user->alex_points);
@@ -127,10 +129,6 @@ class AlexPointsService
                 $level->progress_percentage = 0;
                 
                 // Calculate progress to this level from the previous level
-                $previousLevel = AlexPointsLevel::where('points_required', '<', $level->points_required)
-                    ->orderBy('points_required', 'desc')
-                    ->first();
-                    
                 $startingPoints = $previousLevel ? $previousLevel->points_required : 0;
                 $pointsNeeded = $level->points_required - $startingPoints;
                 $userProgress = $user->alex_points - $startingPoints;
@@ -141,6 +139,8 @@ class AlexPointsService
             } else {
                 $level->progress_percentage = 100;
             }
+
+            $previousLevel = $level;
         }
         
         return $levels;
@@ -225,11 +225,21 @@ class AlexPointsService
             ->limit($perPage)
             ->get(['id', 'first_name', 'last_name', 'username', 'avatar', 'alex_points', 'point_level', 'created_at']);
         
+        // Pre-fetch level names to avoid N+1
+        $levels = AlexPointsLevel::all()->pluck('name', 'level');
+
+        // Pre-fetch contributions if requested
+        $contributions = [];
+        if ($includeContributions && $users->isNotEmpty()) {
+            $userIds = $users->pluck('id')->toArray();
+            $contributions = $this->getBulkUserContributions($userIds);
+        }
+
         // Calculate ranks (accounting for ties)
         $previousPoints = null;
         $actualRank = $offset + 1;
         
-        $leaderboard = $users->map(function ($user, $index) use (&$actualRank, &$previousPoints, $offset, $includeContributions) {
+        $leaderboard = $users->map(function ($user, $index) use (&$actualRank, &$previousPoints, $offset, $includeContributions, $levels, $contributions) {
             // If points are different from previous user, update rank to current position
             if ($previousPoints !== null && $user->alex_points < $previousPoints) {
                 $actualRank = $offset + $index + 1;
@@ -241,6 +251,8 @@ class AlexPointsService
             
             $previousPoints = $user->alex_points;
             
+            $levelName = $levels->get($user->point_level ?? 1) ?? 'Basic';
+
             $userData = [
                 'rank' => $actualRank,
                 'user' => [
@@ -250,13 +262,19 @@ class AlexPointsService
                     'avatar' => $user->avatar,
                     'alex_points' => $user->alex_points,
                     'alex_level' => $user->point_level ?? 1,
-                    'level_name' => $this->getLevelName($user->point_level ?? 1)
+                    'level_name' => $levelName
                 ]
             ];
             
             // Include contribution metrics if requested
             if ($includeContributions) {
-                $userData['contributions'] = $this->getUserContributions($user->id);
+                $userContribs = $contributions[$user->id] ?? [
+                    'posts_created' => 0,
+                    'libraries_created' => 0,
+                    'urls_added' => 0,
+                    'comments_made' => 0
+                ];
+                $userData['contributions'] = $userContribs;
             }
             
             return $userData;
@@ -269,6 +287,8 @@ class AlexPointsService
             $currentUserRank = $this->getUserRank($currentUser->id);
             
             if ($currentUserRank) {
+                $currentLevelName = $levels->get($currentUser->point_level ?? 1) ?? 'Basic';
+                
                 $currentUserData = [
                     'rank' => $currentUserRank['rank'],
                     'user' => [
@@ -278,7 +298,7 @@ class AlexPointsService
                         'avatar' => $currentUser->avatar,
                         'alex_points' => $currentUser->alex_points,
                         'alex_level' => $currentUser->point_level ?? 1,
-                        'level_name' => $this->getLevelName($currentUser->point_level ?? 1)
+                        'level_name' => $currentLevelName
                     ],
                     'context' => [
                         'users_above' => max(0, $currentUserRank['rank'] - 1),
@@ -287,7 +307,13 @@ class AlexPointsService
                 ];
                 
                 if ($includeContributions) {
-                    $currentUserData['contributions'] = $this->getUserContributions($currentUser->id);
+                    // For current user, we might not have fetched contributions in the bulk query if they aren't in top N
+                    // So we fetch individually or check if they are in the bulk array
+                    if (isset($contributions[$currentUser->id])) {
+                        $currentUserData['contributions'] = $contributions[$currentUser->id];
+                    } else {
+                        $currentUserData['contributions'] = $this->getUserContributions($currentUser->id);
+                    }
                 }
             }
         }
@@ -305,6 +331,65 @@ class AlexPointsService
         ];
     }
     
+    /**
+     * Get bulk user contribution metrics
+     */
+    private function getBulkUserContributions(array $userIds)
+    {
+        if (empty($userIds)) {
+            return [];
+        }
+
+        $postsCounts = [];
+        $commentsCounts = [];
+        $librariesCounts = [];
+        $urlsCounts = [];
+        
+        if (Schema::hasTable('posts')) {
+            $postsCounts = DB::table('posts')
+                ->whereIn('user_id', $userIds)
+                ->selectRaw('user_id, count(*) as count')
+                ->groupBy('user_id')
+                ->pluck('count', 'user_id')
+                ->toArray();
+        }
+        
+        if (Schema::hasTable('comments')) {
+            $commentsCounts = DB::table('comments')
+                ->whereIn('user_id', $userIds)
+                ->selectRaw('user_id, count(*) as count')
+                ->groupBy('user_id')
+                ->pluck('count', 'user_id')
+                ->toArray();
+        }
+
+        $librariesCounts = DB::table('open_libraries')
+            ->whereIn('creator_id', $userIds)
+            ->selectRaw('creator_id as user_id, count(*) as count')
+            ->groupBy('creator_id')
+            ->pluck('count', 'user_id')
+            ->toArray();
+
+        $urlsCounts = DB::table('library_urls')
+            ->whereIn('created_by', $userIds)
+            ->selectRaw('created_by as user_id, count(*) as count')
+            ->groupBy('created_by')
+            ->pluck('count', 'user_id')
+            ->toArray();
+            
+        $results = [];
+        foreach ($userIds as $userId) {
+            $results[$userId] = [
+                'posts_created' => $postsCounts[$userId] ?? 0,
+                'libraries_created' => $librariesCounts[$userId] ?? 0,
+                'urls_added' => $urlsCounts[$userId] ?? 0,
+                'comments_made' => $commentsCounts[$userId] ?? 0
+            ];
+        }
+        
+        return $results;
+    }
+
     /**
      * Get user's rank in the leaderboard
      */

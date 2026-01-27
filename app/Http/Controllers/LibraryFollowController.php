@@ -36,6 +36,7 @@ class LibraryFollowController extends Controller
             }
             
             $libraries = $query
+                ->withCount('followers')
                 ->orderByDesc('created_at')
                 ->paginate($perPage);
             
@@ -54,7 +55,7 @@ class LibraryFollowController extends Controller
                     'description' => $library->description,
                     'thumbnail_url' => $library->thumbnail_url ?? $library->cover_image_url,
                     'cover_image_url' => $library->cover_image_url,
-                    'followers_count' => DB::table('library_follows')->where('library_id', $library->id)->count(),
+                    'followers_count' => $library->followers_count,
                     'is_following' => in_array($library->id, $followed),
                 ];
             });

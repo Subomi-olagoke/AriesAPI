@@ -54,7 +54,7 @@ class OnboardingController extends Controller
     public function followLibraries(Request $request)
     {
         $request->validate([
-            'library_ids' => 'required|array',
+            'library_ids' => 'required|array|min:10',
             'library_ids.*' => 'exists:open_libraries,id'
         ]);
         
