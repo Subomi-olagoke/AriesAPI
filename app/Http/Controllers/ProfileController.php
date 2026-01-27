@@ -179,6 +179,7 @@ class ProfileController extends Controller
             ->where(function($q) {
                 $q->whereNull('is_system')->orWhere('is_system', false);
             })
+            ->withCount('items')
             ->get()
             ->map(function($readlist) {
                 return [
@@ -187,7 +188,7 @@ class ProfileController extends Controller
                     'description' => $readlist->description,
                     'image_url' => $readlist->image_url,
                     'is_public' => $readlist->is_public,
-                    'items_count' => $readlist->items()->count()
+                    'items_count' => $readlist->items_count
                 ];
             });
         

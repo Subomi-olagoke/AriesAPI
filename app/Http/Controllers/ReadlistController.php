@@ -136,12 +136,9 @@ class ReadlistController extends Controller
                 ->where(function($q) {
                     $q->whereNull('is_system')->orWhere('is_system', false);
                 })
+                ->withCount('items')
                 ->orderBy('created_at', 'desc')
-                ->get()
-                ->map(function($readlist) {
-                    $readlist->items_count = $readlist->items()->count();
-                    return $readlist;
-                });
+                ->get();
 
             // Return user readlists
             $response = [
