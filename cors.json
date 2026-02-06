@@ -1,0 +1,11 @@
+{
+    "Host": "localhost:8000",
+    "Date": "Fri, 27 Dec 2024 08:43:40 GMT",
+    "Connection": "close",
+    "X-Powered-By": "PHP/8.1.2-1ubuntu2.19",
+    "Cache-Control": "no-cache, private",
+    "Content-Type": "application/json",
+    "X-RateLimit-Limit": "60",
+    "X-RateLimit-Remaining": "59",
+    "Access-Control-Allow-Origin": "*"
+  }
