@@ -33,9 +33,12 @@ class AlexPointsController extends Controller
         // If user_id is provided, fetch that user's summary
         // Otherwise, fetch the authenticated user's summary
         if ($targetUserId) {
-            $targetUser = User::where('username', $targetUserId)
-                ->orWhere('id', $targetUserId)
-                ->first();
+            // Only check ID if it looks like a valid UUID to avoid PostgreSQL errors
+            $query = User::where('username', $targetUserId);
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $targetUserId)) {
+                $query->orWhere('id', $targetUserId);
+            }
+            $targetUser = $query->first();
             
             if (!$targetUser) {
                 return response()->json([

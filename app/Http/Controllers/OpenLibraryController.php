@@ -457,9 +457,12 @@ class OpenLibraryController extends Controller
             // Otherwise, fetch the authenticated user's entries
             if ($targetUserId) {
                 // Find the target user by username or ID
-                $targetUser = \App\Models\User::where('username', $targetUserId)
-                    ->orWhere('id', $targetUserId)
-                    ->first();
+                // Only check ID if it looks like a valid UUID to avoid PostgreSQL errors
+                $query = \App\Models\User::where('username', $targetUserId);
+                if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $targetUserId)) {
+                    $query->orWhere('id', $targetUserId);
+                }
+                $targetUser = $query->first();
                 
                 if (!$targetUser) {
                     return response()->json([
