@@ -5,10 +5,14 @@
       {
         "appID": "BMBR5BDGDM.com.Oubomi.Ariess",
         "paths": [
+          "/libraries/*",
+          "/library/shared/*",
+          "/readlists/*",
+          "/readlist/shared/*",
           "/channel/*",
           "/post/*",
           "/profile/*",
-          "/readlist/*"
+          "/profile/shared/*"
         ]
       }
     ]

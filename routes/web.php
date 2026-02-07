@@ -135,26 +135,49 @@ Route::get('/profile/{username}', function($username) {
 
 // Library deep linking route (by share key)
 Route::get('/library/shared/{shareKey}', function($shareKey) {
-    // Find library by share key
-    $library = \App\Models\OpenLibrary::with(['creator'])->where('share_key', $shareKey)->first();
+    try {
+        // Find library by share key
+        $library = \App\Models\OpenLibrary::with(['creator'])->where('share_key', $shareKey)->first();
 
-    if (!$library) {
-        abort(404, 'Library not found');
+        if (!$library) {
+            \Log::warning("Library not found for share key: {$shareKey}");
+            abort(404, 'Library not found');
+        }
+
+        // Get followers and content count with safe table checks
+        $followersCount = 0;
+        $contentsCount = 0;
+        
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('library_follows')) {
+                $followersCount = \DB::table('library_follows')->where('library_id', $library->id)->count();
+            }
+        } catch (\Exception $e) {
+            \Log::error("Error counting followers: " . $e->getMessage());
+        }
+        
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('library_content')) {
+                $contentsCount = \DB::table('library_content')->where('library_id', $library->id)->count();
+            }
+        } catch (\Exception $e) {
+            \Log::error("Error counting contents: " . $e->getMessage());
+        }
+
+        // Add counts to library object
+        $library->followers_count = $followersCount;
+        $library->contents_count = $contentsCount;
+
+        // Show a landing page with deep link, app store buttons
+        return view('library.deep-link', [
+            'shareKey' => $shareKey,
+            'library' => $library
+        ]);
+    } catch (\Exception $e) {
+        \Log::error("Error in library shared route: " . $e->getMessage());
+        \Log::error($e->getTraceAsString());
+        return response()->json(['message' => 'Server Error', 'error' => $e->getMessage()], 500);
     }
-
-    // Get followers and content count
-    $followersCount = \DB::table('library_follows')->where('library_id', $library->id)->count();
-    $contentsCount = \DB::table('library_content')->where('library_id', $library->id)->count();
-
-    // Add counts to library object
-    $library->followers_count = $followersCount;
-    $library->contents_count = $contentsCount;
-
-    // Show a landing page with deep link, app store buttons
-    return view('library.deep-link', [
-        'shareKey' => $shareKey,
-        'library' => $library
-    ]);
 })->name('library.shared.deep-link');
 
 // Library deep linking route (alternate path)

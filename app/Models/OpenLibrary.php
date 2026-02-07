@@ -169,11 +169,27 @@ class OpenLibrary extends Model
      */
     public function getShareUrlAttribute()
     {
+        // Auto-generate share_key if missing
         if (!$this->share_key) {
-            return null;
+            $this->share_key = \Illuminate\Support\Str::random(12);
+            $this->save();
         }
         // Return web-friendly URL (without /api prefix) for sharing
         // The API route is at /api/library/shared/{key} but share URLs should be clean
         return url("/library/shared/{$this->share_key}");
+    }
+    
+    /**
+     * Get the share key attribute.
+     * Auto-generates if missing.
+     */
+    public function getShareKeyAttribute($value)
+    {
+        if (empty($value) && $this->exists) {
+            $this->share_key = \Illuminate\Support\Str::random(12);
+            $this->save();
+            return $this->share_key;
+        }
+        return $value;
     }
 }

@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $library->name ?? 'Library' }} - Alexandria</title>
-    <meta property="og:title" content="{{ $library->name ?? 'Library' }} - Alexandria">
-    <meta property="og:description" content="{{ $library->description ?? 'Explore this library on Alexandria' }}">
-    <meta property="og:image" content="{{ $library->cover_image_url ?? $library->thumbnail_url ?? '/img/Pompeyy.jpeg' }}">
+    <title>{{ isset($library) && $library->name ? $library->name : 'Library' }} - Alexandria</title>
+    <meta property="og:title" content="{{ isset($library) && $library->name ? $library->name : 'Library' }} - Alexandria">
+    <meta property="og:description" content="{{ isset($library) && $library->description ? $library->description : 'Explore this library on Alexandria' }}">
+    <meta property="og:image" content="{{ isset($library) && ($library->cover_image_url || $library->thumbnail_url) ? ($library->cover_image_url ?? $library->thumbnail_url) : '/img/Pompeyy.jpeg' }}">
+    <meta name="apple-itunes-app" content="app-id=6474744109, app-argument=ariesapp://library/shared/{{ $shareKey }}">
     <meta property="og:type" content="website">
     <style>
         body {
@@ -149,21 +150,21 @@
 </head>
 <body>
     <div class="container">
-        <img src="/img/Pompeyy.jpeg" alt="Alexandria Logo" class="logo">
+        <img src="/img/Pompeyy.jpeg" alt="Alexandria Logo" class="logo" onerror="this.style.display='none'">
         <h1>View Library in Alexandria</h1>
 
         <div class="library-preview">
-            @if($library->cover_image_url || $library->thumbnail_url)
-                <img src="{{ $library->cover_image_url ?? $library->thumbnail_url }}" alt="{{ $library->name }}" class="library-cover">
+            @if(isset($library) && ($library->cover_image_url || $library->thumbnail_url))
+                <img src="{{ $library->cover_image_url ?? $library->thumbnail_url }}" alt="{{ $library->name ?? 'Library' }}" class="library-cover" onerror="this.style.display='none'">
             @endif
 
-            @if($library->type)
+            @if(isset($library) && $library->type)
                 <span class="library-type">{{ $library->type }}</span>
             @endif
 
             <div class="library-title">{{ $library->name ?? 'Library' }}</div>
 
-            @if($library->creator)
+            @if(isset($library) && $library->creator)
                 <div class="library-creator">
                     <div class="creator-avatar">
                         {{ substr($library->creator->username ?? $library->creator->name ?? 'U', 0, 1) }}
