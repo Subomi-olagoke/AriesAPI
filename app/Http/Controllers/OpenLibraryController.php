@@ -1669,6 +1669,9 @@ class OpenLibraryController extends Controller
                 if (isset($contentRelationships[Course::class][$course->id])) {
                     $formattedContents[] = [
                         'id' => $course->id,
+                        'library_id' => $id,
+                        'content_id' => $course->id,
+                        'content_type' => Course::class,
                         'title' => $course->title,
                         'description' => $course->description,
                         'thumbnail_url' => $course->thumbnail_url,
@@ -1681,15 +1684,20 @@ class OpenLibraryController extends Controller
                             'name' => $course->topic->name
                         ] : null,
                         'type' => 'course',
-                        'relevance_score' => $contentRelationships[Course::class][$course->id]['relevance_score']
+                        'relevance_score' => $contentRelationships[Course::class][$course->id]['relevance_score'],
+                        'created_at' => $course->created_at ? $course->created_at->toIso8601String() : now()->toIso8601String(),
+                        'updated_at' => $course->updated_at ? $course->updated_at->toIso8601String() : now()->toIso8601String()
                     ];
                 }
             }
-            
+
             foreach ($posts as $post) {
                 if (isset($contentRelationships[Post::class][$post->id])) {
                     $formattedContents[] = [
                         'id' => $post->id,
+                        'library_id' => $id,
+                        'content_id' => $post->id,
+                        'content_type' => Post::class,
                         'title' => $post->title,
                         'body' => substr($post->body, 0, 200) . '...',
                         'media_link' => $post->media_link,
@@ -1699,15 +1707,20 @@ class OpenLibraryController extends Controller
                             'username' => $post->user->username
                         ] : null,
                         'type' => 'post',
-                        'relevance_score' => $contentRelationships[Post::class][$post->id]['relevance_score']
+                        'relevance_score' => $contentRelationships[Post::class][$post->id]['relevance_score'],
+                        'created_at' => $post->created_at ? $post->created_at->toIso8601String() : now()->toIso8601String(),
+                        'updated_at' => $post->updated_at ? $post->updated_at->toIso8601String() : now()->toIso8601String()
                     ];
                 }
             }
-            
+
             foreach ($urls as $urlItem) {
                 if (isset($contentRelationships[LibraryUrl::class][$urlItem->id])) {
                     $formattedContents[] = [
                         'id' => $urlItem->id,
+                        'library_id' => $id,
+                        'content_id' => $urlItem->id,
+                        'content_type' => LibraryUrl::class,
                         'title' => $urlItem->title,
                         'url' => $urlItem->url,
                         'description' => $urlItem->summary,
@@ -1715,6 +1728,7 @@ class OpenLibraryController extends Controller
                         'type' => 'url',
                         'relevance_score' => $contentRelationships[LibraryUrl::class][$urlItem->id]['relevance_score'],
                         'created_at' => $urlItem->created_at ? $urlItem->created_at->toIso8601String() : now()->toIso8601String(),
+                        'updated_at' => $urlItem->updated_at ? $urlItem->updated_at->toIso8601String() : now()->toIso8601String(),
                         'added_by' => $urlItem->creator ? [
                             'id' => $urlItem->creator->id,
                             'username' => $urlItem->creator->username
