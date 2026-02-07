@@ -5,9 +5,16 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use App\Services\WebSearchService;
 
 class SearchController extends Controller
 {
+    protected $webSearchService;
+
+    public function __construct(WebSearchService $webSearchService)
+    {
+        $this->webSearchService = $webSearchService;
+    }
     /**
      * Search across users, libraries, and readlists
      */
@@ -15,7 +22,7 @@ class SearchController extends Controller
     {
         $request->validate([
             'query' => 'required|string|min:2',
-            'type' => 'sometimes|string', // comma separated list: user,library,readlist
+            'type' => 'sometimes|string', // comma separated list: user,library,readlist,web
             'limit' => 'sometimes|integer|min:3|max:20',
         ]);
 
@@ -26,15 +33,34 @@ class SearchController extends Controller
         $requestedTypes = collect(explode(',', (string)$request->input('type', '')))
             ->filter()
             ->map(fn($t) => strtolower(trim($t)))
-            ->intersect(['user', 'library', 'readlist']);
+            ->intersect(['user', 'library', 'readlist', 'web']);
         if ($requestedTypes->isEmpty()) {
-            $requestedTypes = collect(['user', 'library', 'readlist']);
+            $requestedTypes = collect(['user', 'library', 'readlist', 'web']);
         }
 
         // OPTIMIZATION: Cache search results for 10 minutes
         $cacheKey = "search_" . md5($query . '_' . $requestedTypes->sort()->implode(',') . '_' . $perTypeLimit);
         $results = \Illuminate\Support\Facades\Cache::remember($cacheKey, 600, function() use ($query, $perTypeLimit, $requestedTypes) {
             $results = [];
+
+        // --- Web Results (from Serper.dev) ---
+        if ($requestedTypes->contains('web')) {
+            $webResults = $this->webSearchService->search($query, $perTypeLimit);
+            
+            foreach ($webResults as $webResult) {
+                $results[] = [
+                    'id' => $webResult['id'],
+                    'title' => $webResult['title'],
+                    'body' => $webResult['snippet'],
+                    'url' => $webResult['url'],
+                    'thumbnail_url' => $webResult['thumbnail'],
+                    'source' => $webResult['source'],
+                    'type' => 'web',
+                    'score' => max(0, 10 - ($webResult['position'] ?? 0)), // Higher rank = higher score
+                    'date' => $webResult['date'],
+                ];
+            }
+        }
 
         // --- Users (relevance ranked with fuzzy matching) ---
         if ($requestedTypes->contains('user')) {
