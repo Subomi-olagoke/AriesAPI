@@ -133,6 +133,35 @@ Route::get('/profile/{username}', function($username) {
     ]);
 })->name('profile.deep-link');
 
+// Library deep linking route (by share key)
+Route::get('/library/shared/{shareKey}', function($shareKey) {
+    // Find library by share key
+    $library = \App\Models\OpenLibrary::with(['creator'])->where('share_key', $shareKey)->first();
+
+    if (!$library) {
+        abort(404, 'Library not found');
+    }
+
+    // Get followers and content count
+    $followersCount = \DB::table('library_follows')->where('library_id', $library->id)->count();
+    $contentsCount = \DB::table('library_content')->where('library_id', $library->id)->count();
+
+    // Add counts to library object
+    $library->followers_count = $followersCount;
+    $library->contents_count = $contentsCount;
+
+    // Show a landing page with deep link, app store buttons
+    return view('library.deep-link', [
+        'shareKey' => $shareKey,
+        'library' => $library
+    ]);
+})->name('library.shared.deep-link');
+
+// Library deep linking route (alternate path)
+Route::get('/libraries/shared/{shareKey}', function($shareKey) {
+    return redirect()->route('library.shared.deep-link', ['shareKey' => $shareKey]);
+})->name('libraries.shared.deep-link');
+
 // Readlist deep linking route
 Route::get('/readlist/{id}', function($id) {
     // Try to find by share key first
