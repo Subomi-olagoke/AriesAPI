@@ -298,10 +298,20 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Dashboard stats
         Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index']);
-        
+
         // Admin Lists
         Route::get('/users', [\App\Http\Controllers\DashboardController::class, 'getUsers']);
         Route::get('/readlists', [\App\Http\Controllers\DashboardController::class, 'getReadlists']);
+    });
+
+    // Admin Analytics routes - protected by AdminOnly middleware
+    Route::prefix('admin/analytics')->middleware(\App\Http\Middleware\AdminOnly::class)->group(function() {
+        Route::get('/overview', [\App\Http\Controllers\AdminAnalyticsController::class, 'overview']);
+        Route::get('/users', [\App\Http\Controllers\AdminAnalyticsController::class, 'users']);
+        Route::get('/content', [\App\Http\Controllers\AdminAnalyticsController::class, 'content']);
+        Route::get('/engagement', [\App\Http\Controllers\AdminAnalyticsController::class, 'engagement']);
+        Route::get('/growth', [\App\Http\Controllers\AdminAnalyticsController::class, 'growth']);
+        Route::get('/active-users', [\App\Http\Controllers\AdminAnalyticsController::class, 'activeUsers']);
     });
 
     // Article AI routes - GPT-powered features
