@@ -167,6 +167,8 @@ class OpenLibraryController extends Controller
                         'courseId' => $library->course_id,
                         'createdAt' => $library->created_at,
                         'updatedAt' => $library->updated_at,
+                        'shareKey' => $library->share_key,
+                        'shareUrl' => $library->share_url,
                         'contents' => $library->contents ? $library->contents->map(function ($content) {
                             return [
                                 'id' => $content->content ? $content->content->id : null,
@@ -818,6 +820,8 @@ class OpenLibraryController extends Controller
                     'hasAiCover' => $library->has_ai_cover,
                     'createdAt' => $library->created_at,
                     'updatedAt' => $library->updated_at,
+                    'shareKey' => $library->share_key,
+                    'shareUrl' => $library->share_url,
                     'contents' => [],
                     'user' => null,
                     'userId' => null
@@ -1425,6 +1429,39 @@ class OpenLibraryController extends Controller
     }
 
     /**
+     * Show a library by its share key (public access)
+     * This allows viewing shared libraries without authentication
+     */
+    public function showByShareKey($shareKey)
+    {
+        try {
+            // Find library by share key
+            $library = OpenLibrary::where('share_key', $shareKey)->first();
+
+            if (!$library) {
+                return response()->json([
+                    'message' => 'Shared library not found'
+                ], 404);
+            }
+
+            // Get user if authenticated (for personalized data like follow status)
+            $user = Auth::user();
+            $userId = $user ? $user->id : null;
+
+            Log::info("🔗 Accessing shared library via share_key: {$shareKey}, library_id: {$library->id}");
+
+            // Use the existing method to fetch library details
+            return $this->fetchLibraryDetailsDirectly($library->id, $userId);
+        } catch (\Exception $e) {
+            Log::error('Show shared library failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to retrieve shared library',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Fetch library details directly from DB (no cache)
      * Used for library detail view to ensure real-time accuracy
      */
@@ -1718,6 +1755,8 @@ class OpenLibraryController extends Controller
                     'approval_status' => $library->approval_status,
                     'created_at' => $library->created_at,
                     'updated_at' => $library->updated_at,
+                    'share_key' => $library->share_key,
+                    'share_url' => $library->share_url,
                     'creator' => $library->creator ? [
                         'id' => $library->creator->id,
                         'username' => $library->creator->username,

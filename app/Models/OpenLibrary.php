@@ -9,6 +9,20 @@ class OpenLibrary extends Model
 {
     use HasFactory;
 
+    /**
+     * Boot method - auto-generate share_key on creation
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($library) {
+            if (empty($library->share_key)) {
+                $library->share_key = \Illuminate\Support\Str::random(12);
+            }
+        });
+    }
+
     protected $fillable = [
         'name',
         'description',
@@ -28,8 +42,14 @@ class OpenLibrary extends Model
         'ai_generated',
         'ai_generation_date',
         'ai_model_used',
-        'has_ai_cover'
+        'has_ai_cover',
+        'share_key'
     ];
+
+    /**
+     * The accessors to append to the model's array form.
+     */
+    protected $appends = ['share_url'];
 
     protected $casts = [
         'criteria' => 'array',
@@ -140,5 +160,20 @@ class OpenLibrary extends Model
     public function likes()
     {
         return $this->morphMany(\App\Models\Like::class, 'likeable');
+    }
+
+    /**
+     * Get the share URL attribute.
+     * This generates the public share URL for the library.
+     * Uses the web app URL format for universal link support.
+     */
+    public function getShareUrlAttribute()
+    {
+        if (!$this->share_key) {
+            return null;
+        }
+        // Return web-friendly URL (without /api prefix) for sharing
+        // The API route is at /api/library/shared/{key} but share URLs should be clean
+        return url("/library/shared/{$this->share_key}");
     }
 }
